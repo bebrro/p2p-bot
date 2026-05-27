@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>P2P Анализатор</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+
+/* ── Theme variables (Telegram injects --tg-theme-* at runtime) ── */
+:root {
+  --bg:   var(--tg-theme-bg-color,           #17212b);
+  --bg2:  var(--tg-theme-secondary-bg-color, #232e3c);
+  --text: var(--tg-theme-text-color,         #f5f5f5);
+  --hint: var(--tg-theme-hint-color,         #708499);
+  --link: var(--tg-theme-link-color,         #2ca5e0);
+  --btn:  var(--tg-theme-button-color,       #2ca5e0);
+  --btnt: var(--tg-theme-button-text-color,  #fff);
+  --green:  #43b581;
+  --red:    #f04747;
+  --yellow: #faa61a;
+  --r: 10px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.header {
+  background: var(--bg2);
+  padding: 10px 12px 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.header-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-row { display: flex; gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.pill-row::-webkit-scrollbar { display: none; }
+
+.pill {
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--hint);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.pill.active {
+  background: var(--btn);
+  color: var(--btnt);
+  border-color: var(--btn);
+  font-weight: 600;
+}
+
+/* ── Spread bar ──────────────────────────────────────── */
+.spread-bar {
+  background: var(--bg2);
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+  min-height: 40px;
+}
+.price-big { font-size: 14px; font-weight: 700; }
+.price-big.green { color: var(--green); }
+.price-big.red   { color: var(--red);   }
+.spread-chip {
+  background: rgba(255,255,255,0.07);
+  border-radius: 16px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.spread-chip.good { background: rgba(67,181,129,.2); color: var(--green); }
+.spread-chip.mid  { background: rgba(250,166,26,.2);  color: var(--yellow);}
+
+/* ── Scrollable content ──────────────────────────────── */
+.tab-panel {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 8px 4px;
+}
+.tab-panel.hidden { display: none; }
+
+/* ── Refresh timestamp ───────────────────────────────── */
+.refresh-ts {
+  font-size: 10px;
+  color: var(--hint);
+  text-align: right;
+  margin-bottom: 5px;
+  height: 14px;
+}
+
+/* ── Orderbook grid ──────────────────────────────────── */
+.book-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.col-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-bottom: 5px;
+}
+.buy-col  .col-title { color: var(--green); }
+.sell-col .col-title { color: var(--red);   }
+
+/* ── Ad card ─────────────────────────────────────────── */
+.ad-card {
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 7px 8px;
+  margin-bottom: 5px;
+  border-left: 2px solid transparent;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+.buy-col  .ad-card { border-left-color: var(--green); }
+.sell-col .ad-card { border-left-color: var(--red);   }
+
+.ad-price {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+.buy-col  .ad-price { color: var(--green); }
+.sell-col .ad-price { color: var(--red);   }
+
+.ad-nick {
+  font-size: 11px;
+  color: var(--text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  margin-bottom: 2px;
+}
+.ad-meta {
+  font-size: 10px;
+  color: var(--hint);
+  line-height: 1.45;
+}
+.pay-pill {
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 1px 1px 0 0;
+}
+.risk { font-size: 10px; }
+
+/* ── Chart tab ───────────────────────────────────────── */
+.chart-card {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 10px 10px 8px;
+  margin-bottom: 8px;
+}
+.chart-box { position: relative; height: 200px; }
+.chart-empty {
+  font-size: 13px;
+  color: var(--hint);
+  text-align: center;
+  padding: 60px 20px;
+  line-height: 1.6;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.stat-card {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 10px 12px;
+}
+.stat-lbl { font-size: 10px; color: var(--hint); margin-bottom: 3px; }
+.stat-val { font-size: 18px; font-weight: 700; }
+.stat-sub { font-size: 10px; color: var(--hint); margin-top: 1px; }
+
+/* ── AI tab ──────────────────────────────────────────── */
+.ai-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--btn);
+  color: var(--btnt);
+  border: none;
+  border-radius: var(--r);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: opacity .15s, transform .1s;
+}
+.ai-btn:active:not(:disabled) { transform: scale(0.98); }
+.ai-btn:disabled { opacity: .45; cursor: default; }
+
+.ai-response-box {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  min-height: 90px;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.ai-hint {
+  color: var(--hint);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 10px 0;
+}
+
+.ai-line       { margin: 2px 0; }
+.ai-price-line { font-size: 15px; font-weight: 700; color: var(--green); margin-bottom: 6px; }
+.ai-warn-line  { color: var(--yellow); }
+.ai-meta-line  { margin-top: 5px; }
+
+/* ── Spinner ─────────────────────────────────────────── */
+.spinner {
+  width: 24px; height: 24px;
+  border: 3px solid rgba(255,255,255,0.08);
+  border-top-color: var(--btn);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin: 20px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Error box ───────────────────────────────────────── */
+.err-box {
+  background: rgba(240,71,71,.12);
+  border: 1px solid var(--red);
+  border-radius: var(--r);
+  padding: 10px;
+  color: var(--red);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── Bottom tabs ─────────────────────────────────────── */
+.bottom-nav {
+  display: flex;
+  background: var(--bg2);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+.nav-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--hint);
+  font-size: 10px;
+  padding: 8px 0 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: color .15s;
+}
+.nav-icon { font-size: 20px; line-height: 1; }
+.nav-btn.active { color: var(--btn); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────── -->
+<div class="header">
+  <div class="header-title">📊 P2P Анализатор</div>
+  <div class="pill-row" id="exRow">
+    <button class="pill active" data-val="binance">🟡 Binance</button>
+    <button class="pill"        data-val="bybit">🟠 Bybit</button>
+  </div>
+  <div class="pill-row" style="margin-top:6px;" id="fiatRow">
+    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
+    <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
+    <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
+    <button class="pill"        data-val="USD">🇺🇸 USD</button>
+  </div>
+</div>
+
+<!-- ── Spread bar ──────────────────────────────────── -->
+<div class="spread-bar">
+  <span class="price-big green" id="buyPrice">—</span>
+  <span class="spread-chip"     id="spreadChip">Загрузка...</span>
+  <span class="price-big red"   id="sellPrice">—</span>
+</div>
+
+<!-- ── Tab: Стакан ────────────────────────────────── -->
+<div class="tab-panel" id="tab-book">
+  <div class="refresh-ts" id="refreshTs"></div>
+  <div class="book-grid">
+    <div class="book-col buy-col">
+      <div class="col-title">📗 Покупают</div>
+      <div id="buyList"><div class="spinner"></div></div>
+    </div>
+    <div class="book-col sell-col">
+      <div class="col-title">📕 Продают</div>
+      <div id="sellList"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tab: График ────────────────────────────────── -->
+<div class="tab-panel hidden" id="tab-chart">
+  <div class="chart-card">
+    <div class="chart-box">
+      <canvas id="spreadChart"></canvas>
+      <div id="chartEmpty" class="chart-empty" style="display:none;">
+        ⏳ История ещё копится.<br>
+        Данные собираются каждые 30 мин.<br>
+        Зайди через несколько часов.
+      </div>
+    </div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-lbl">Средний спред</div>
+      <div class="stat-val" id="avgSpread">—</div>
+      <div class="stat-sub">за все время</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Текущий спред</div>
+      <div class="stat-val" id="curSpread">—</div>
+      <div class="stat-sub" id="curVsAvg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Макс. спред</div>
+      <div class="stat-val" id="maxSpread">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Точек данных</div>
+      <div class="stat-val" id="dataPoints">—</div>
+      <div class="stat-sub">× 30 мин</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tab: AI ─────────────────────────────────────── -->
+<div class="tab-panel hidden" id="tab-ai">
+  <button class="ai-btn" id="aiBtn" onclick="requestAI()">
+    🤖 Получить AI рекомендацию
+  </button>
+  <div class="ai-response-box">
+    <div id="aiContent" class="ai-hint">
+      Нажми кнопку — получишь анализ текущего рынка<br>и конкретную цену для выставления.
+    </div>
+  </div>
+</div>
+
+<!-- ── Bottom nav ──────────────────────────────────── -->
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('book', this)">
+    <span class="nav-icon">📊</span>Стакан
+  </button>
+  <button class="nav-btn" onclick="switchTab('chart', this)">
+    <span class="nav-icon">📈</span>График
+  </button>
+  <button class="nav-btn" onclick="switchTab('ai', this)">
+    <span class="nav-icon">🤖</span>AI
+  </button>
+</div>
+
+<script>
+/* ── Telegram WebApp init ──────────────────────────── */
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+/* ── State ─────────────────────────────────────────── */
+const S = { exchange: 'binance', fiat: 'KZT', asset: 'USDT', tab: 'book' };
+let refreshTimer = null;
+let chartInst    = null;
+let aiCooldown   = false;
+
+/* ── Selector wiring ───────────────────────────────── */
+function wireGroup(groupId, stateKey) {
+  document.querySelectorAll(`#${groupId} .pill`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${groupId} .pill`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      S[stateKey] = btn.dataset.val;
+      onStateChange();
+    });
+  });
+}
+wireGroup('exRow',   'exchange');
+wireGroup('fiatRow', 'fiat');
+
+function onStateChange() {
+  clearInterval(refreshTimer);
+  loadOrderbook();
+  if (S.tab === 'chart') loadChart();
+  refreshTimer = setInterval(loadOrderbook, 10_000);
+}
+
+/* ── Tab switching ─────────────────────────────────── */
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`tab-${tab}`).classList.remove('hidden');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.tab = tab;
+  if (tab === 'chart') loadChart();
+  if (tab === 'book')  loadOrderbook();
+}
+
+/* ── Formatting ────────────────────────────────────── */
+const FMT_NUM = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmt(n)  { return FMT_NUM.format(n); }
+function fmtK(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k';
+  return n.toFixed(0);
+}
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+/* ── Orderbook ─────────────────────────────────────── */
+async function loadOrderbook() {
+  const { exchange, fiat, asset } = S;
+  try {
+    const res  = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderOrderbook(data);
+
+    const now = new Date();
+    document.getElementById('refreshTs').textContent =
+      `Обновлено: ${now.toLocaleTimeString('ru-RU')}  · авто каждые 10 сек`;
+  } catch (e) {
+    const msg = `<div class="err-box">❌ ${esc(e.message)}</div>`;
+    document.getElementById('buyList').innerHTML  = msg;
+    document.getElementById('sellList').innerHTML = msg;
+    document.getElementById('spreadChip').textContent = 'Ошибка';
+  }
+}
+
+function renderOrderbook({ buy, sell, spread }) {
+  // Spread bar
+  if (buy.length)  document.getElementById('buyPrice').textContent  = fmt(buy[0].price);
+  if (sell.length) document.getElementById('sellPrice').textContent = fmt(sell[0].price);
+
+  const chip = document.getElementById('spreadChip');
+  if (spread && spread.spread_pct != null) {
+    const pct = spread.spread_pct;
+    chip.textContent = `⇔ ${pct}%`;
+    chip.className   = 'spread-chip' + (pct >= 0.5 ? ' good' : pct >= 0.2 ? ' mid' : '');
+  } else {
+    chip.textContent = '—';
+    chip.className   = 'spread-chip';
+  }
+
+  document.getElementById('buyList').innerHTML  = adList(buy);
+  document.getElementById('sellList').innerHTML = adList(sell);
+}
+
+function adList(ads) {
+  if (!ads || !ads.length) return '<div class="ad-meta" style="text-align:center;padding:12px 0;">Нет данных</div>';
+  return ads.map(ad => {
+    const pay  = (ad.pay_types || []).slice(0, 2).map(p => `<span class="pay-pill">${esc(p)}</span>`).join('') || '—';
+    const vol  = fmtK(ad.available  || 0);
+    const min  = fmtK(ad.min_amount || 0);
+    const max  = fmtK(ad.max_amount || 0);
+    const comp = ad.completion || 0;
+    const ord  = ad.orders || 0;
+    return `
+      <div class="ad-card">
+        <div class="ad-price">${fmt(ad.price)}</div>
+        <div class="ad-nick">${esc(ad.nickname || '—')}</div>
+        <div class="ad-meta">
+          ${vol} · ${min}–${max}<br>
+          ${ord} сд · ${comp}%<br>
+          ${pay}
+          <span class="risk">${esc(ad.risk_badge || '')} ${esc(ad.risk_tooltip || '')}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ── Chart ─────────────────────────────────────────── */
+async function loadChart() {
+  const { exchange, fiat, asset } = S;
+  const canvas = document.getElementById('spreadChart');
+  const empty  = document.getElementById('chartEmpty');
+
+  canvas.style.display = 'none';
+  empty.style.display  = 'block';
+  empty.textContent    = '⏳ Загружаю историю...';
+
+  try {
+    const res  = await fetch(`/api/history/${exchange}/${fiat}/${asset}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderChart(data.points || []);
+  } catch (e) {
+    empty.textContent = `❌ ${e.message}`;
+  }
+}
+
+function renderChart(points) {
+  const canvas = document.getElementById('spreadChart');
+  const empty  = document.getElementById('chartEmpty');
+
+  if (points.length < 2) {
+    empty.style.display  = 'block';
+    canvas.style.display = 'none';
+    if (chartInst) { chartInst.destroy(); chartInst = null; }
+    return;
+  }
+
+  empty.style.display  = 'none';
+  canvas.style.display = 'block';
+
+  const labels = points.map(p => p.ts);
+  const vals   = points.map(p => p.spread_pct);
+  const avg    = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const maxV   = Math.max(...vals);
+  const curV   = vals[vals.length - 1];
+
+  // Stats
+  document.getElementById('avgSpread').textContent  = avg.toFixed(3) + '%';
+  document.getElementById('maxSpread').textContent  = maxV.toFixed(3) + '%';
+  document.getElementById('dataPoints').textContent = points.length;
+
+  const curEl = document.getElementById('curSpread');
+  curEl.textContent = curV.toFixed(3) + '%';
+  curEl.style.color = curV >= avg ? 'var(--green)' : 'var(--red)';
+
+  const diff = curV - avg;
+  document.getElementById('curVsAvg').textContent =
+    (diff >= 0 ? '+' : '') + diff.toFixed(3) + '% vs avg';
+  document.getElementById('curVsAvg').style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+
+  if (chartInst) chartInst.destroy();
+
+  const ctx  = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 190);
+  grad.addColorStop(0, 'rgba(44,165,224,.35)');
+  grad.addColorStop(1, 'rgba(44,165,224,0)');
+
+  chartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data:            vals,
+        borderColor:     '#2ca5e0',
+        backgroundColor: grad,
+        borderWidth:     2,
+        pointRadius:     points.length > 24 ? 0 : 3,
+        pointBackgroundColor: '#2ca5e0',
+        fill:            true,
+        tension:         0.4,
+      }, {
+        // Average line
+        data:        Array(vals.length).fill(avg),
+        borderColor: 'rgba(250,166,26,.5)',
+        borderWidth: 1,
+        borderDash:  [5, 4],
+        pointRadius: 0,
+        fill:        false,
+        tension:     0,
+      }]
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           false,
+      interaction:         { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.datasetIndex === 0
+              ? `Спред: ${ctx.parsed.y.toFixed(4)}%`
+              : `Avg: ${ctx.parsed.y.toFixed(4)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#708499', maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } },
+          grid:  { color: 'rgba(255,255,255,0.04)' }
+        },
+        y: {
+          ticks: {
+            color: '#708499',
+            font:  { size: 9 },
+            callback: v => v.toFixed(2) + '%'
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        }
+      }
+    }
+  });
+}
+
+/* ── AI Advisor ────────────────────────────────────── */
+async function requestAI() {
+  if (aiCooldown) return;
+  aiCooldown = true;
+
+  const btn     = document.getElementById('aiBtn');
+  const content = document.getElementById('aiContent');
+
+  btn.disabled      = true;
+  btn.textContent   = '⏳ Анализирую рынок...';
+  content.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    const res  = await fetch('/api/ai', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ exchange: S.exchange, fiat: S.fiat, asset: S.asset }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderAI(data.response);
+  } catch (e) {
+    content.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '🔄 Обновить анализ';
+    // 20-sec cooldown
+    setTimeout(() => {
+      aiCooldown = false;
+      btn.textContent = '🤖 Получить AI рекомендацию';
+    }, 20_000);
+  }
+}
+
+function renderAI(text) {
+  const content = document.getElementById('aiContent');
+  if (!text) { content.innerHTML = '<div class="ai-hint">Пустой ответ от AI</div>'; return; }
+
+  const lines = text.split('\n');
+  let html = '';
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) { html += '<br>'; continue; }
+    if (t.startsWith('💡')) {
+      html += `<div class="ai-price-line">${esc(t)}</div>`;
+    } else if (t.startsWith('⚠️')) {
+      html += `<div class="ai-warn-line ai-line">${esc(t)}</div>`;
+    } else if (t.startsWith('📊') || t.startsWith('⏱') || t.startsWith('🔮')) {
+      html += `<div class="ai-meta-line ai-line">${esc(t)}</div>`;
+    } else {
+      html += `<div class="ai-line">${esc(t)}</div>`;
+    }
+  }
+  content.innerHTML = html;
+}
+
+/* ── Boot ──────────────────────────────────────────── */
+loadOrderbook();
+refreshTimer = setInterval(loadOrderbook, 10_000);
+</script>
+</body>
+</html>
