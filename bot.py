@@ -71,7 +71,8 @@ async def main():
         BotCommand(command="calc",   description="🧮 Калькулятор прибыли"),
         BotCommand(command="whale",  description="🐋 Whale Tracker"),
         BotCommand(command="ai",     description="🤖 AI Советник"),
-        BotCommand(command="alerts", description="🔔 Алерты на спред"),
+        BotCommand(command="alerts",    description="🔔 Алерты на спред"),
+        BotCommand(command="stopwhale", description="🛑 Экстренно остановить Whale Tracker"),
     ])
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 

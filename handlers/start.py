@@ -60,3 +60,30 @@ async def cmd_alerts(message: Message):
         [InlineKeyboardButton(text="🔔 Алерты", callback_data="alert:list")]
     ])
     await message.answer("🔔 <b>Алерты на спред</b>", reply_markup=kb, parse_mode="HTML")
+
+
+@router.message(Command("stopwhale"))
+async def cmd_stopwhale(message: Message):
+    """Аварийная остановка кит-трекера."""
+    from handlers.whale_tracker import _user_settings, _initialized, _active_pairs
+    uid = message.from_user.id
+    cfg = _user_settings.get(uid)
+    if cfg:
+        cfg["enabled"] = False
+        # Сбрасываем инициализацию чтобы следующий запуск был тихим
+        for pair in _active_pairs(uid):
+            _initialized.discard(pair)
+        await message.answer(
+            "🛑 <b>Whale Tracker остановлен.</b>\n\n"
+            "Уведомления о китах выключены.\n\n"
+            "⚠️ <b>Если уведомления всё ещё приходят</b> — значит на твоём компьютере "
+            "запущен бот локально (python bot.py в CMD окне). Закрой то окно.",
+            parse_mode="HTML",
+        )
+    else:
+        await message.answer(
+            "✅ Whale Tracker уже выключен (настроек нет).\n\n"
+            "⚠️ <b>Если уведомления всё ещё приходят</b> — на твоём компьютере запущен "
+            "бот локально. Найди CMD/терминал с python bot.py и закрой его.",
+            parse_mode="HTML",
+        )
