@@ -210,43 +210,116 @@ body {
 .stat-val { font-size: 18px; font-weight: 700; }
 .stat-sub { font-size: 10px; color: var(--hint); margin-top: 1px; }
 
-/* ── AI tab ──────────────────────────────────────────── */
-.ai-btn {
-  width: 100%;
-  padding: 12px;
+/* ── AI Chat tab ─────────────────────────────────────── */
+#tab-ai {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-msg {
+  max-width: 84%;
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+  white-space: pre-wrap;
+  animation: fadeIn .2s ease;
+}
+.chat-msg.user {
+  align-self: flex-end;
+  background: var(--btn);
+  color: var(--btnt);
+  border-bottom-right-radius: 4px;
+}
+.chat-msg.ai {
+  align-self: flex-start;
+  background: var(--bg2);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.chat-msg.error {
+  align-self: flex-start;
+  background: rgba(240,71,71,.12);
+  color: var(--red);
+  border-bottom-left-radius: 4px;
+}
+.typing-indicator {
+  align-self: flex-start;
+  background: var(--bg2);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  padding: 11px 15px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  animation: fadeIn .2s ease;
+}
+.typing-dot {
+  width: 7px; height: 7px;
+  background: var(--hint);
+  border-radius: 50%;
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+.typing-dot:nth-child(1) { animation-delay: 0s;   }
+.typing-dot:nth-child(2) { animation-delay: .2s;  }
+.typing-dot:nth-child(3) { animation-delay: .4s;  }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: .4; }
+  30%           { transform: translateY(-5px); opacity: 1;  }
+}
+.chat-input-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 8px 10px;
+  background: var(--bg2);
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+#chatInput {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  max-height: 100px;
+  overflow-y: auto;
+  line-height: 1.45;
+}
+#chatInput::placeholder { color: var(--hint); }
+.chat-send-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
   background: var(--btn);
   color: var(--btnt);
   border: none;
-  border-radius: var(--r);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 18px;
   cursor: pointer;
-  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   transition: opacity .15s, transform .1s;
 }
-.ai-btn:active:not(:disabled) { transform: scale(0.98); }
-.ai-btn:disabled { opacity: .45; cursor: default; }
-
-.ai-response-box {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 12px 14px;
-  min-height: 90px;
-  line-height: 1.6;
-  font-size: 13px;
-}
-.ai-hint {
-  color: var(--hint);
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.6;
-  padding: 10px 0;
-}
-
-.ai-line       { margin: 2px 0; }
-.ai-price-line { font-size: 15px; font-weight: 700; color: var(--green); margin-bottom: 6px; }
-.ai-warn-line  { color: var(--yellow); }
-.ai-meta-line  { margin-top: 5px; }
+.chat-send-btn:active:not(:disabled) { transform: scale(0.92); }
+.chat-send-btn:disabled { opacity: .4; cursor: default; }
 
 /* ── Spinner ─────────────────────────────────────────── */
 .spinner {
@@ -369,15 +442,12 @@ body {
   </div>
 </div>
 
-<!-- ── Tab: AI ─────────────────────────────────────── -->
+<!-- ── Tab: AI Chat ────────────────────────────────── -->
 <div class="tab-panel hidden" id="tab-ai">
-  <button class="ai-btn" id="aiBtn" onclick="requestAI()">
-    🤖 Получить AI рекомендацию
-  </button>
-  <div class="ai-response-box">
-    <div id="aiContent" class="ai-hint">
-      Нажми кнопку — получишь анализ текущего рынка<br>и конкретную цену для выставления.
-    </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input-bar">
+    <textarea id="chatInput" placeholder="Спроси про цену, стратегию, риски..." rows="1"></textarea>
+    <button class="chat-send-btn" id="chatSend" onclick="sendChat()">↑</button>
   </div>
 </div>
 
@@ -403,7 +473,9 @@ if (tg) { tg.ready(); tg.expand(); }
 const S = { exchange: 'binance', fiat: 'KZT', asset: 'USDT', tab: 'book' };
 let refreshTimer = null;
 let chartInst    = null;
-let aiCooldown   = false;
+let chatHistory     = [];
+let chatLoading     = false;
+let chatInitialized = false;
 
 /* ── Selector wiring ───────────────────────────────── */
 function wireGroup(groupId, stateKey) {
@@ -423,6 +495,7 @@ function onStateChange() {
   clearInterval(refreshTimer);
   loadOrderbook();
   if (S.tab === 'chart') loadChart();
+  resetChat();   // сброс чата при смене биржи / фиата
   refreshTimer = setInterval(loadOrderbook, 10_000);
 }
 
@@ -435,6 +508,7 @@ function switchTab(tab, btn) {
   S.tab = tab;
   if (tab === 'chart') loadChart();
   if (tab === 'book')  loadOrderbook();
+  if (tab === 'ai')    initChat();
 }
 
 /* ── Formatting ────────────────────────────────────── */
@@ -631,61 +705,108 @@ function renderChart(points) {
   });
 }
 
-/* ── AI Advisor ────────────────────────────────────── */
-async function requestAI() {
-  if (aiCooldown) return;
-  aiCooldown = true;
+/* ── AI Chat ───────────────────────────────────────── */
+function appendBubble(role, text) {
+  const box = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className   = `chat-msg ${role}`;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
 
-  const btn     = document.getElementById('aiBtn');
-  const content = document.getElementById('aiContent');
+function showTyping() {
+  const box = document.getElementById('chatMessages');
+  const el  = document.createElement('div');
+  el.className = 'typing-indicator';
+  el.id        = 'typingEl';
+  el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
 
-  btn.disabled      = true;
-  btn.textContent   = '⏳ Анализирую рынок...';
-  content.innerHTML = '<div class="spinner"></div>';
+function hideTyping() {
+  const el = document.getElementById('typingEl');
+  if (el) el.remove();
+}
+
+async function sendChat(autoMsg) {
+  if (chatLoading) return;
+
+  const input   = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('chatSend');
+  const text    = autoMsg || input.value.trim();
+  if (!text) return;
+
+  if (!autoMsg) {
+    input.value        = '';
+    input.style.height = '';
+    appendBubble('user', text);
+  }
+
+  chatLoading      = true;
+  sendBtn.disabled = true;
+  showTyping();
 
   try {
-    const res  = await fetch('/api/ai', {
+    const res  = await fetch('/api/chat', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ exchange: S.exchange, fiat: S.fiat, asset: S.asset }),
+      body:    JSON.stringify({
+        exchange: S.exchange,
+        fiat:     S.fiat,
+        asset:    S.asset,
+        history:  chatHistory,
+        message:  text,
+      }),
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    renderAI(data.response);
-  } catch (e) {
-    content.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = '🔄 Обновить анализ';
-    // 20-sec cooldown
-    setTimeout(() => {
-      aiCooldown = false;
-      btn.textContent = '🤖 Получить AI рекомендацию';
-    }, 20_000);
-  }
-}
+    hideTyping();
 
-function renderAI(text) {
-  const content = document.getElementById('aiContent');
-  if (!text) { content.innerHTML = '<div class="ai-hint">Пустой ответ от AI</div>'; return; }
-
-  const lines = text.split('\n');
-  let html = '';
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) { html += '<br>'; continue; }
-    if (t.startsWith('💡')) {
-      html += `<div class="ai-price-line">${esc(t)}</div>`;
-    } else if (t.startsWith('⚠️')) {
-      html += `<div class="ai-warn-line ai-line">${esc(t)}</div>`;
-    } else if (t.startsWith('📊') || t.startsWith('⏱') || t.startsWith('🔮')) {
-      html += `<div class="ai-meta-line ai-line">${esc(t)}</div>`;
+    if (data.error) {
+      appendBubble('error', '❌ ' + data.error);
     } else {
-      html += `<div class="ai-line">${esc(t)}</div>`;
+      chatHistory = data.history || [];
+      appendBubble('ai', data.response);
     }
+  } catch (e) {
+    hideTyping();
+    appendBubble('error', '❌ Ошибка связи: ' + e.message);
+  } finally {
+    chatLoading      = false;
+    sendBtn.disabled = false;
   }
-  content.innerHTML = html;
 }
+
+function initChat() {
+  if (chatInitialized) return;
+  chatInitialized = true;
+  // Авто-приветствие: AI сам загружает рынок и даёт краткий обзор
+  sendChat('Привет! Загрузи текущий стакан и скажи: какая оптимальная цена для выставления и стоит ли сейчас торговать?');
+}
+
+function resetChat() {
+  chatHistory     = [];
+  chatInitialized = false;
+  const box       = document.getElementById('chatMessages');
+  if (box) box.innerHTML = '';
+  if (S.tab === 'ai') initChat();
+}
+
+// Авто-растягивание textarea
+document.getElementById('chatInput').addEventListener('input', function () {
+  this.style.height = '';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+// Enter = отправить, Shift+Enter = перенос строки
+document.getElementById('chatInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
 
 /* ── Boot ──────────────────────────────────────────── */
 loadOrderbook();

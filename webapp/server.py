@@ -97,6 +97,64 @@ async def api_history(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+def _build_chat_system(
+    ex: str, fiat: str, asset: str,
+    buy_ads: list, sell_ads: list,
+    patterns,
+) -> str:
+    """Строит системный контекст для чата — вставляется перед первым вопросом."""
+    from datetime import datetime
+    ex_name = "Binance" if ex == "binance" else "Bybit"
+    now     = datetime.now()
+
+    def fmt_ad(ad: dict) -> str:
+        pay  = ", ".join(ad.get("pay_types", [])[:2]) or "—"
+        comp = ad.get("completion", 0)
+        return (
+            f"  {ad.get('price','?'):,} | {ad.get('nickname','?')} | "
+            f"{ad.get('orders',0)} сд | {comp}% | {pay}"
+        )
+
+    lines = [
+        f"Ты опытный P2P-трейдер и советник. Биржа: {ex_name}. Пара: {asset}/{fiat}.",
+        f"Время: {now.strftime('%H:%M')} {now.strftime('%d.%m.%Y')}.",
+        "Отвечай по-русски, конкретно, с числами из стакана. Без воды.",
+        "Можешь задавать уточняющие вопросы если нужно.",
+        "",
+        "=== ТЕКУЩИЙ СТАКАН ===",
+    ]
+
+    if buy_ads:
+        lines.append(f"Покупают (BUY) — топ {min(5, len(buy_ads))}:")
+        for ad in buy_ads[:5]:
+            lines.append(fmt_ad(ad))
+
+    if sell_ads:
+        lines.append(f"Продают (SELL) — топ {min(5, len(sell_ads))}:")
+        for ad in sell_ads[:5]:
+            lines.append(fmt_ad(ad))
+
+    if buy_ads and sell_ads:
+        try:
+            sp = calc_spread(buy_ads[0]["price"], sell_ads[0]["price"])
+            lines.append(
+                f"\nСпред: {sp['spread_pct']}%  |  "
+                f"BUY best: {buy_ads[0]['price']:,}  |  SELL best: {sell_ads[0]['price']:,}"
+            )
+        except Exception:
+            pass
+
+    if patterns and patterns.get("points", 0) >= 5:
+        lines.append("\n=== ИСТОРИЯ СПРЕДА ===")
+        lines.append(f"  Средний: {patterns.get('avg_all','?')}%  |  Текущий: {patterns.get('current','?')}%")
+        if patterns.get("trend"):
+            tr    = patterns["trend"]
+            direc = "↑ растёт" if tr["direction"] == "up" else "↓ падает"
+            lines.append(f"  Тренд 3ч: {direc} ({tr['delta']}%)")
+
+    return "\n".join(lines)
+
+
 async def api_ai(request: web.Request) -> web.Response:
     try:
         body  = await request.json()
@@ -118,6 +176,49 @@ async def api_ai(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_chat(request: web.Request) -> web.Response:
+    """
+    POST /api/chat
+    Body: {exchange, fiat, asset, history: [...Gemini turns...], message: str}
+    Returns: {response: str, history: [...updated turns...]}
+    """
+    try:
+        body     = await request.json()
+        ex       = body.get("exchange", "binance")
+        fiat     = body.get("fiat",     "KZT")
+        asset    = body.get("asset",    "USDT")
+        history  = body.get("history",  [])   # [{role, parts:[{text}]}, ...]
+        user_msg = body.get("message",  "").strip()
+
+        if not user_msg:
+            return web.json_response({"error": "empty message"}, status=400)
+
+        # Первое сообщение: грузим стакан и прячем контекст внутри user-turn
+        if not history:
+            buy_ads, sell_ads = await asyncio.gather(
+                _fetch(ex, fiat, asset, "buy",  8),
+                _fetch(ex, fiat, asset, "sell", 8),
+            )
+            _enrich(buy_ads)
+            _enrich(sell_ads)
+            hist     = list(get_history(ex, fiat, asset))
+            patterns = _compute_patterns(hist) if len(hist) >= 10 else None
+            context  = _build_chat_system(ex, fiat, asset, buy_ads, sell_ads, patterns)
+            first_text = context + "\n\n— Вопрос пользователя:\n" + user_msg
+            messages = [{"role": "user", "parts": [{"text": first_text}]}]
+        else:
+            messages = history + [{"role": "user", "parts": [{"text": user_msg}]}]
+
+        response     = await gemini.chat(messages)
+        full_history = messages + [{"role": "model", "parts": [{"text": response}]}]
+
+        return web.json_response({"response": response, "history": full_history})
+
+    except Exception as e:
+        logger.error(f"api_chat: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -135,6 +236,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/orderbook/{exchange}/{fiat}/{asset}", api_orderbook)
     app.router.add_get("/api/history/{exchange}/{fiat}/{asset}",  api_history)
     app.router.add_post("/api/ai",                                api_ai)
+    app.router.add_post("/api/chat",                              api_chat)
 
     # Root → index.html
     app.router.add_get("/",           index_handler)
