@@ -2,6 +2,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, MenuButtonCommands
 from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT
 from webapp.server import start_webapp
 from handlers import (
@@ -62,6 +63,17 @@ async def main():
 
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=MemoryStorage())
+
+    # ── Команды (кнопка ☰ рядом с полем ввода) ────────────────────────────
+    await bot.set_my_commands([
+        BotCommand(command="start",  description="📱 Главное меню"),
+        BotCommand(command="p2p",    description="📊 P2P курсы"),
+        BotCommand(command="calc",   description="🧮 Калькулятор прибыли"),
+        BotCommand(command="whale",  description="🐋 Whale Tracker"),
+        BotCommand(command="ai",     description="🤖 AI Советник"),
+        BotCommand(command="alerts", description="🔔 Алерты на спред"),
+    ])
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     for r in [
         start.router, maker.router, tracker.router,
