@@ -11,6 +11,7 @@ from handlers import (
     account_manager, auto_reprice, arbitrage, stats,
     blacklist, ad_schedule, export,
     whale_tracker, pattern_engine, ai_advisor,
+    price_signal,
 )
 from api import binance_p2p, bybit_p2p
 from utils.spread import calc_spread
@@ -108,6 +109,7 @@ async def main():
         arbitrage.router, stats.router,
         blacklist.router, ad_schedule.router, export.router,
         whale_tracker.router, pattern_engine.router, ai_advisor.router,
+        price_signal.router,
         p2p.router, alerts.router,   # p2p последним (широкие фильтры)
     ]:
         dp.include_router(r)

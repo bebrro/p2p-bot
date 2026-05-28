@@ -36,12 +36,13 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📡 Позиция",  callback_data="mon:list"),
         ],
         [
-            InlineKeyboardButton(text="📈 История",     callback_data="hist:binance:KZT:USDT"),
+            InlineKeyboardButton(text="📍 Сигнал цены", callback_data="sig:start"),
             InlineKeyboardButton(text="🧮 Калькулятор", callback_data="calc:start"),
         ],
         [
-            InlineKeyboardButton(text="📊 Спред",  callback_data="spread:compare"),
-            InlineKeyboardButton(text="🔔 Алерты", callback_data="alerts:list"),
+            InlineKeyboardButton(text="📊 Спред",   callback_data="spread:compare"),
+            InlineKeyboardButton(text="🔔 Алерты",  callback_data="alerts:list"),
+            InlineKeyboardButton(text="📈 История", callback_data="hist:binance:KZT:USDT"),
         ],
         [
             InlineKeyboardButton(text="🔑 Аккаунты",   callback_data="acc:list"),
