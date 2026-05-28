@@ -383,6 +383,7 @@ body {
     <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
     <button class="pill"        data-val="USD">🇺🇸 USD</button>
   </div>
+  <div class="pill-row" style="margin-top:6px;" id="payRow"></div>
 </div>
 
 <!-- ── Spread bar ──────────────────────────────────── -->
@@ -470,12 +471,54 @@ const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
 /* ── State ─────────────────────────────────────────── */
-const S = { exchange: 'binance', fiat: 'KZT', asset: 'USDT', tab: 'book' };
+const S = { exchange: 'binance', fiat: 'KZT', asset: 'USDT', tab: 'book', pay: '' };
 let refreshTimer = null;
 let chartInst    = null;
 let chatHistory     = [];
 let chatLoading     = false;
 let chatInitialized = false;
+
+/* ── Pay methods map ───────────────────────────────── */
+const PAY_METHODS = {
+  binance: {
+    KZT: [{val:'', lbl:'Все банки'}, {val:'KaspiBank', lbl:'Kaspi'}, {val:'HalykBank', lbl:'Halyk'},
+          {val:'Jusan', lbl:'Jusan'}, {val:'ForteBank', lbl:'Forte'}, {val:'FreedomBank', lbl:'Freedom'}],
+    RUB: [{val:'', lbl:'Все банки'}, {val:'TinkoffNew', lbl:'Tinkoff'}, {val:'Sberbank', lbl:'Сбер'},
+          {val:'RaiffeisenBank', lbl:'Raiffeisen'}, {val:'FPSBANK', lbl:'СБП'}],
+    TRY: [{val:'', lbl:'Все банки'}, {val:'ZiraatBank', lbl:'Ziraat'}, {val:'Garanti', lbl:'Garanti'},
+          {val:'Akbank', lbl:'Akbank'}, {val:'VakifBank', lbl:'Vakif'}, {val:'Papara', lbl:'Papara'}],
+    USD: [{val:'', lbl:'Все банки'}, {val:'BankTransfer', lbl:'Bank Transfer'}],
+  },
+  bybit: {
+    KZT: [{val:'', lbl:'Все банки'}, {val:'KaspiBank', lbl:'Kaspi'}, {val:'HalykBank', lbl:'Halyk'},
+          {val:'FreedomBank', lbl:'Freedom'}, {val:'Jusan', lbl:'Jusan'}, {val:'ForteBank', lbl:'Forte'}],
+    RUB: [{val:'', lbl:'Все банки'}, {val:'Tinkoff', lbl:'Tinkoff'}, {val:'Sberbank', lbl:'Сбер'},
+          {val:'RaiffeisenBank', lbl:'Raiffeisen'}, {val:'SBP', lbl:'СБП'}],
+    TRY: [{val:'', lbl:'Все банки'}, {val:'ZiraatBank', lbl:'Ziraat'}, {val:'Garanti', lbl:'Garanti'},
+          {val:'Akbank', lbl:'Akbank'}, {val:'Papara', lbl:'Papara'}],
+    USD: [{val:'', lbl:'Все банки'}, {val:'BankTransfer', lbl:'Bank Transfer'}],
+  },
+};
+
+/* ── Pay row renderer ──────────────────────────────── */
+function updatePayRow() {
+  const row   = document.getElementById('payRow');
+  const banks = (PAY_METHODS[S.exchange] || {})[S.fiat] || [{val:'', lbl:'Все банки'}];
+  // Если текущий pay не входит в новый список — сбрасываем
+  if (!banks.find(b => b.val === S.pay)) S.pay = '';
+  row.innerHTML = banks.map(b =>
+    `<button class="pill${S.pay === b.val ? ' active' : ''}" data-val="${esc(b.val)}">${esc(b.lbl)}</button>`
+  ).join('');
+  row.querySelectorAll('.pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      S.pay = btn.dataset.val;
+      updatePayRow();
+      clearInterval(refreshTimer);
+      loadOrderbook();
+      refreshTimer = setInterval(loadOrderbook, 10_000);
+    });
+  });
+}
 
 /* ── Selector wiring ───────────────────────────────── */
 function wireGroup(groupId, stateKey) {
@@ -492,10 +535,12 @@ wireGroup('exRow',   'exchange');
 wireGroup('fiatRow', 'fiat');
 
 function onStateChange() {
+  S.pay = '';          // сброс фильтра банка при смене биржи / фиата
+  updatePayRow();
   clearInterval(refreshTimer);
   loadOrderbook();
   if (S.tab === 'chart') loadChart();
-  resetChat();   // сброс чата при смене биржи / фиата
+  resetChat();
   refreshTimer = setInterval(loadOrderbook, 10_000);
 }
 
@@ -527,9 +572,10 @@ function esc(s) {
 
 /* ── Orderbook ─────────────────────────────────────── */
 async function loadOrderbook() {
-  const { exchange, fiat, asset } = S;
+  const { exchange, fiat, asset, pay } = S;
+  const payQ = pay ? `?pay=${encodeURIComponent(pay)}` : '';
   try {
-    const res  = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}`);
+    const res  = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}${payQ}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     renderOrderbook(data);
@@ -809,6 +855,7 @@ document.getElementById('chatInput').addEventListener('keydown', function (e) {
 });
 
 /* ── Boot ──────────────────────────────────────────── */
+updatePayRow();
 loadOrderbook();
 refreshTimer = setInterval(loadOrderbook, 10_000);
 </script>

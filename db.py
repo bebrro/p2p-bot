@@ -46,6 +46,7 @@ async def _create_tables() -> None:
             asset      VARCHAR(10) NOT NULL,
             threshold  FLOAT   NOT NULL,
             direction  VARCHAR(10) DEFAULT 'above',
+            pay        VARCHAR(30) DEFAULT '',
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
@@ -69,6 +70,7 @@ async def _create_tables() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_ph
             ON price_history(exchange, fiat, asset, recorded_at DESC);
+
 
         CREATE TABLE IF NOT EXISTS blacklist (
             user_id   BIGINT NOT NULL,
@@ -97,6 +99,10 @@ async def _create_tables() -> None:
             UNIQUE(user_id, exchange, fiat, asset, nickname)
         );
         """)
+        # Migrations — idempotent, safe to run on every startup
+        await c.execute(
+            "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS pay VARCHAR(30) DEFAULT ''"
+        )
 
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
@@ -106,7 +112,7 @@ async def alerts_get(user_id: int) -> list[dict]:
         return []
     async with _pool.acquire() as c:
         rows = await c.fetch(
-            "SELECT exchange,fiat,asset,threshold,direction FROM alerts "
+            "SELECT exchange,fiat,asset,threshold,direction,pay FROM alerts "
             "WHERE user_id=$1 ORDER BY id",
             user_id,
         )
@@ -114,14 +120,14 @@ async def alerts_get(user_id: int) -> list[dict]:
 
 
 async def alerts_add(user_id: int, exchange: str, fiat: str, asset: str,
-                     threshold: float, direction: str = "above") -> None:
+                     threshold: float, direction: str = "above", pay: str = "") -> None:
     if not ok():
         return
     async with _pool.acquire() as c:
         await c.execute(
-            "INSERT INTO alerts(user_id,exchange,fiat,asset,threshold,direction) "
-            "VALUES($1,$2,$3,$4,$5,$6)",
-            user_id, exchange, fiat, asset, threshold, direction,
+            "INSERT INTO alerts(user_id,exchange,fiat,asset,threshold,direction,pay) "
+            "VALUES($1,$2,$3,$4,$5,$6,$7)",
+            user_id, exchange, fiat, asset, threshold, direction, pay,
         )
 
 
@@ -138,7 +144,7 @@ async def alerts_get_all() -> dict[int, list]:
         return {}
     async with _pool.acquire() as c:
         rows = await c.fetch(
-            "SELECT user_id,exchange,fiat,asset,threshold,direction FROM alerts ORDER BY user_id"
+            "SELECT user_id,exchange,fiat,asset,threshold,direction,pay FROM alerts ORDER BY user_id"
         )
     result: dict[int, list] = {}
     for r in rows:

@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, MenuButtonCommands
-from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT
+from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT, PAYMENT_LABELS
 from webapp.server import start_webapp
 from handlers import (
     start, p2p, alerts, maker, tracker, calculator,
@@ -36,20 +36,38 @@ async def check_alerts_task(bot: Bot):
         for alert in user_alerts:
             try:
                 fiat, asset, exchange = alert["fiat"], alert["asset"], alert["exchange"]
-                threshold = alert["threshold"]
+                threshold  = alert["threshold"]
+                pay        = alert.get("pay", "")
+                pay_types  = [pay] if pay else None
+
                 if exchange == "binance":
-                    buy  = await binance_p2p.get_best_price(asset, fiat, "BUY")
-                    sell = await binance_p2p.get_best_price(asset, fiat, "SELL")
+                    if pay_types:
+                        b_ads = await binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="BUY",  pay_types=pay_types, rows=1)
+                        s_ads = await binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="SELL", pay_types=pay_types, rows=1)
+                        buy  = b_ads[0]["price"] if b_ads else None
+                        sell = s_ads[0]["price"] if s_ads else None
+                    else:
+                        buy  = await binance_p2p.get_best_price(asset, fiat, "BUY")
+                        sell = await binance_p2p.get_best_price(asset, fiat, "SELL")
                 else:
-                    buy  = await bybit_p2p.get_best_price(asset, fiat, "1")
-                    sell = await bybit_p2p.get_best_price(asset, fiat, "0")
+                    if pay_types:
+                        b_ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side="1", pay_types=pay_types, size=1)
+                        s_ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side="0", pay_types=pay_types, size=1)
+                        buy  = b_ads[0]["price"] if b_ads else None
+                        sell = s_ads[0]["price"] if s_ads else None
+                    else:
+                        buy  = await bybit_p2p.get_best_price(asset, fiat, "1")
+                        sell = await bybit_p2p.get_best_price(asset, fiat, "0")
+
                 if buy and sell:
                     s = calc_spread(buy, sell)
                     if s["spread_pct"] >= threshold:
-                        ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+                        ex_name  = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+                        pay_disp = PAYMENT_LABELS.get(pay, pay) if pay else ""
+                        pay_str  = f" · {pay_disp}" if pay_disp else ""
                         await bot.send_message(
                             user_id,
-                            f"🔔 Алерт сработал!\n{ex} {asset}/{fiat}\n"
+                            f"🔔 Алерт сработал!\n{ex_name} {asset}/{fiat}{pay_str}\n"
                             f"Спред: {s['spread_pct']}% (порог {threshold}%)\n"
                             f"Купить: {buy:,.2f} | Продать: {sell:,.2f}",
                         )

@@ -40,13 +40,21 @@ def _enrich(ads: list) -> list:
     return ads
 
 
-async def _fetch(exchange: str, fiat: str, asset: str, side: str, rows: int = 10):
+async def _fetch(exchange: str, fiat: str, asset: str, side: str,
+                 rows: int = 10, pay: str = ""):
+    pay_types = [pay] if pay else None
     if exchange == "binance":
         trade_type = "BUY" if side == "buy" else "SELL"
-        return await binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type=trade_type, rows=rows)
+        return await binance_p2p.get_ads(
+            asset=asset, fiat=fiat, trade_type=trade_type,
+            rows=rows, pay_types=pay_types,
+        )
     else:
         bb_side = "1" if side == "buy" else "0"
-        return await bybit_p2p.get_ads(asset=asset, fiat=fiat, side=bb_side, size=rows)
+        return await bybit_p2p.get_ads(
+            asset=asset, fiat=fiat, side=bb_side,
+            size=rows, pay_types=pay_types,
+        )
 
 
 # ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -59,10 +67,11 @@ async def api_orderbook(request: web.Request) -> web.Response:
     ex    = request.match_info["exchange"]
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
+    pay   = request.rel_url.query.get("pay", "")
     try:
         buy_ads, sell_ads = await asyncio.gather(
-            _fetch(ex, fiat, asset, "buy",  10),
-            _fetch(ex, fiat, asset, "sell", 10),
+            _fetch(ex, fiat, asset, "buy",  10, pay),
+            _fetch(ex, fiat, asset, "sell", 10, pay),
         )
         _enrich(buy_ads)
         _enrich(sell_ads)
@@ -82,7 +91,7 @@ async def api_history(request: web.Request) -> web.Response:
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
     try:
-        hist   = list(get_history(ex, fiat, asset))
+        hist   = await get_history(ex, fiat, asset)
         points = []
         for ts, buy, sell in hist:
             sp = calc_spread(buy, sell)
@@ -166,7 +175,7 @@ async def api_ai(request: web.Request) -> web.Response:
             _fetch(ex, fiat, asset, "buy",  8),
             _fetch(ex, fiat, asset, "sell", 8),
         )
-        hist     = list(get_history(ex, fiat, asset))
+        hist     = await get_history(ex, fiat, asset)
         patterns = _compute_patterns(hist) if len(hist) >= 10 else None
         prompt   = _build_prompt(ex, fiat, asset, buy_ads, sell_ads, patterns)
         response = await gemini.ask(prompt)
@@ -201,7 +210,7 @@ async def api_chat(request: web.Request) -> web.Response:
             )
             _enrich(buy_ads)
             _enrich(sell_ads)
-            hist     = list(get_history(ex, fiat, asset))
+            hist     = await get_history(ex, fiat, asset)
             patterns = _compute_patterns(hist) if len(hist) >= 10 else None
             context  = _build_chat_system(ex, fiat, asset, buy_ads, sell_ads, patterns)
             first_text = context + "\n\n— Вопрос пользователя:\n" + user_msg
