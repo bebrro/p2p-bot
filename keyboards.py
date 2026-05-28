@@ -27,6 +27,10 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🟠 Bybit P2P",   callback_data="exchange:bybit"),
         ],
         [
+            InlineKeyboardButton(text="🔵 OKX P2P",    callback_data="exchange:okx"),
+            InlineKeyboardButton(text="💎 TG Wallet",  callback_data="exchange:wallet"),
+        ],
+        [
             InlineKeyboardButton(text="🔀 Мультипара", callback_data="mp:view"),
             InlineKeyboardButton(text="🔍 Арбитраж",   callback_data="arb:list"),
         ],

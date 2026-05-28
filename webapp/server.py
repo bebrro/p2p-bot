@@ -14,7 +14,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from api import binance_p2p, bybit_p2p, gemini
+from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p, gemini
 from handlers.price_history import get_history
 from handlers.pattern_engine import _compute_patterns
 from handlers.ai_advisor import _build_prompt
@@ -49,12 +49,23 @@ async def _fetch(exchange: str, fiat: str, asset: str, side: str,
             asset=asset, fiat=fiat, trade_type=trade_type,
             rows=rows, pay_types=pay_types,
         )
-    else:
+    elif exchange == "bybit":
         bb_side = "1" if side == "buy" else "0"
         return await bybit_p2p.get_ads(
             asset=asset, fiat=fiat, side=bb_side,
             size=rows, pay_types=pay_types,
         )
+    elif exchange == "okx":
+        return await okx_p2p.get_ads(
+            asset=asset, fiat=fiat, side=side,
+            pay_types=pay_types, rows=rows,
+        )
+    elif exchange == "wallet":
+        return await wallet_p2p.get_ads(
+            asset=asset, fiat=fiat, side=side,
+            pay_types=pay_types, rows=rows,
+        )
+    return []
 
 
 # ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -113,7 +124,7 @@ def _build_chat_system(
 ) -> str:
     """Строит системный контекст для чата — вставляется перед первым вопросом."""
     from datetime import datetime
-    ex_name = "Binance" if ex == "binance" else "Bybit"
+    ex_name = {"binance": "Binance", "bybit": "Bybit", "okx": "OKX", "wallet": "TG Wallet"}.get(ex, ex.title())
     now     = datetime.now()
 
     def fmt_ad(ad: dict) -> str:

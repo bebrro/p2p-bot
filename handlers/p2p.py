@@ -1,16 +1,30 @@
 import asyncio
 from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from api import binance_p2p, bybit_p2p
+from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread, format_ad
 from keyboards import fiat_menu, trade_type_menu, ads_list_menu, book_menu, spread_fiat_menu
 from handlers.filters import get_filter, set_filter, clear_filter, filter_summary
 from handlers.blacklist import is_blacklisted, add_to_blacklist
-from config import PAYMENT_METHODS_BINANCE, PAYMENT_METHODS_BYBIT, PAYMENT_LABELS
+from config import (
+    PAYMENT_METHODS_BINANCE, PAYMENT_METHODS_BYBIT,
+    PAYMENT_METHODS_OKX, PAYMENT_METHODS_WALLET,
+    PAYMENT_LABELS,
+)
 
 router = Router()
 
 _ads_cache: dict[str, list] = {}
+
+_EX_LABELS = {
+    "binance": "🟡 Binance",
+    "bybit":   "🟠 Bybit",
+    "okx":     "🔵 OKX",
+    "wallet":  "💎 TG Wallet",
+}
+
+def _ex_label(exchange: str) -> str:
+    return _EX_LABELS.get(exchange, exchange.title())
 
 AMOUNT_PRESETS = {
     "KZT": [5_000, 10_000, 30_000, 50_000, 100_000],
@@ -33,7 +47,7 @@ def format_orderbook(buy_ads: list, sell_ads: list, asset: str, fiat: str, excha
     buy_ads  — объявления где ТЫ ПОКУПАЕШЬ (мерчант продаёт) → цены ВЫШЕ
     sell_ads — объявления где ТЫ ПРОДАЁШЬ (мерчант покупает) → цены НИЖЕ
     """
-    ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+    ex = _ex_label(exchange)
     lines = [f"{ex} | {asset}/{fiat}\n"]
     lines.append("<code>")
     lines.append(f"{'📗 Купить':<14}│ 📕 Продать")
@@ -67,7 +81,7 @@ async def fetch_ads(exchange: str, asset: str, fiat: str, trade_type: str, rows:
         # Binance: клиентская фильтрация по сумме
         if min_amount:
             ads = [a for a in ads if a["min_amount"] <= min_amount <= a["max_amount"]]
-    else:
+    elif exchange == "bybit":
         # Bybit: серверная фильтрация по сумме и методу оплаты (через числовые ID)
         side   = "1" if trade_type == "buy" else "0"
         pay    = [pay_filter] if pay_filter else []
@@ -76,6 +90,18 @@ async def fetch_ads(exchange: str, asset: str, fiat: str, trade_type: str, rows:
             asset=asset, fiat=fiat, side=side,
             size=rows, pay_types=pay, amount=amount,
         )
+    elif exchange == "okx":
+        pay = [pay_filter] if pay_filter else None
+        ads = await okx_p2p.get_ads(asset=asset, fiat=fiat, side=trade_type, pay_types=pay, rows=rows)
+        if min_amount:
+            ads = [a for a in ads if a["min_amount"] <= min_amount <= a["max_amount"]]
+    elif exchange == "wallet":
+        pay = [pay_filter] if pay_filter else None
+        ads = await wallet_p2p.get_ads(asset=asset, fiat=fiat, side=trade_type, pay_types=pay, rows=rows)
+        if min_amount:
+            ads = [a for a in ads if a["min_amount"] <= min_amount <= a["max_amount"]]
+    else:
+        ads = []
 
     # Скрываем заблокированных мерчантов
     if user_id:
@@ -131,8 +157,16 @@ async def ban_from_list(callback: CallbackQuery):
 
 # ─── Фильтры: платёжный метод ─────────────────────────────────────────────────
 
+_PAY_METHODS_BY_EXCHANGE = {
+    "binance": PAYMENT_METHODS_BINANCE,
+    "bybit":   PAYMENT_METHODS_BYBIT,
+    "okx":     PAYMENT_METHODS_OKX,
+    "wallet":  PAYMENT_METHODS_WALLET,
+}
+
+
 def _pay_keyboard(exchange: str, fiat: str, back_cb: str) -> InlineKeyboardMarkup:
-    methods = PAYMENT_METHODS_BINANCE if exchange == "binance" else PAYMENT_METHODS_BYBIT
+    methods  = _PAY_METHODS_BY_EXCHANGE.get(exchange, PAYMENT_METHODS_BINANCE)
     pay_list = methods.get(fiat, [])
     buttons = []
     row = []
@@ -285,16 +319,15 @@ async def clear_all_filters(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data and c.data.startswith("exchange:"))
 async def choose_exchange(callback: CallbackQuery):
     exchange = callback.data.split(":")[1]
-    name = "🟡 Binance P2P" if exchange == "binance" else "🟠 Bybit P2P"
+    name = _ex_label(exchange) + " P2P"
     await callback.message.edit_text(f"{name}\n\nВыбери валюту:", reply_markup=fiat_menu(exchange))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("ads:") and len(c.data.split(":")) == 4)
 async def choose_trade_type(callback: CallbackQuery):
     _, exchange, fiat, asset = callback.data.split(":")
-    ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
     await callback.message.edit_text(
-        f"{ex} | {asset}/{fiat}\n\nВыбери режим:",
+        f"{_ex_label(exchange)} | {asset}/{fiat}\n\nВыбери режим:",
         reply_markup=trade_type_menu(exchange, fiat, asset),
     )
 
@@ -320,12 +353,11 @@ async def show_ads(callback: CallbackQuery):
     ads = sort_ads(ads, sort)
     _ads_cache[f"{callback.from_user.id}:{exchange}"] = ads
 
-    ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
     type_label = "📗 Покупка" if trade_type == "buy" else "📕 Продажа"
     fsum = filter_summary(callback.from_user.id)
     filter_line = f"\n🔍 {fsum}" if fsum else ""
 
-    text = f"{ex} | {asset}/{fiat} | {type_label}{filter_line}\n\n"
+    text = f"{_ex_label(exchange)} | {asset}/{fiat} | {type_label}{filter_line}\n\n"
     text += "\n\n─────────────────\n\n".join(
         format_ad(ad, i + 1, exchange) for i, ad in enumerate(ads)
     )
@@ -415,7 +447,7 @@ async def copy_description(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "spread:compare")
 async def spread_choose_fiat(callback: CallbackQuery):
     await callback.message.edit_text(
-        "📊 Сравнение спреда Binance vs Bybit\n\nВыбери валюту:",
+        "📊 Сравнение спреда по биржам\n\nВыбери валюту:",
         reply_markup=spread_fiat_menu(),
     )
 
@@ -425,30 +457,65 @@ async def show_spread(callback: CallbackQuery):
     _, fiat, asset = callback.data.split(":")
     await callback.message.edit_text("⏳ Считаю спред...")
     try:
-        bn_buy, bn_sell, bb_buy, bb_sell = await asyncio.gather(
+        results = await asyncio.gather(
             binance_p2p.get_best_price(asset, fiat, "BUY"),
             binance_p2p.get_best_price(asset, fiat, "SELL"),
             bybit_p2p.get_best_price(asset, fiat, "1"),
             bybit_p2p.get_best_price(asset, fiat, "0"),
+            okx_p2p.get_best_price(asset, fiat, "buy"),
+            okx_p2p.get_best_price(asset, fiat, "sell"),
+            wallet_p2p.get_best_price(asset, fiat, "buy"),
+            wallet_p2p.get_best_price(asset, fiat, "sell"),
+            return_exceptions=True,
         )
     except Exception as e:
         await callback.message.edit_text(f"❌ Ошибка: {e}")
         return
 
+    def _val(v):
+        return v if isinstance(v, float) else None
+
+    bn_buy,  bn_sell  = _val(results[0]), _val(results[1])
+    bb_buy,  bb_sell  = _val(results[2]), _val(results[3])
+    okx_buy, okx_sell = _val(results[4]), _val(results[5])
+    wt_buy,  wt_sell  = _val(results[6]), _val(results[7])
+
     lines = [f"📊 Спред {asset}/{fiat}\n"]
-    if bn_buy and bn_sell:
-        s = calc_spread(bn_buy, bn_sell)
-        lines.append(f"🟡 Binance\n  Покупка:  {bn_buy:,.2f}\n  Продажа: {bn_sell:,.2f}\n  Спред: {s['spread_abs']:,.2f} ({s['spread_pct']}%)")
-    if bb_buy and bb_sell:
-        s = calc_spread(bb_buy, bb_sell)
-        lines.append(f"🟠 Bybit\n  Покупка:  {bb_buy:,.2f}\n  Продажа: {bb_sell:,.2f}\n  Спред: {s['spread_abs']:,.2f} ({s['spread_pct']}%)")
-    if bn_buy and bb_sell:
-        arb = calc_spread(bn_buy, bb_sell)
-        if arb["spread_pct"] > 0:
-            lines.append(f"⚡️ Арбитраж Binance→Bybit: {arb['spread_pct']}%")
-    if bb_buy and bn_sell:
-        arb = calc_spread(bb_buy, bn_sell)
-        if arb["spread_pct"] > 0:
-            lines.append(f"⚡️ Арбитраж Bybit→Binance: {arb['spread_pct']}%")
+
+    exchanges = [
+        ("🟡 Binance", bn_buy,  bn_sell),
+        ("🟠 Bybit",   bb_buy,  bb_sell),
+        ("🔵 OKX",     okx_buy, okx_sell),
+        ("💎 Wallet",  wt_buy,  wt_sell),
+    ]
+    for name, buy, sell in exchanges:
+        if buy and sell:
+            s = calc_spread(buy, sell)
+            lines.append(
+                f"{name}\n"
+                f"  Покупка:  {buy:,.2f}\n"
+                f"  Продажа: {sell:,.2f}\n"
+                f"  Спред: {s['spread_abs']:,.2f} ({s['spread_pct']}%)"
+            )
+
+    # Арбитраж между биржами (best sell на одной vs best buy на другой)
+    arb_pairs = [
+        ("Binance→Bybit",  bn_buy,  bb_sell),
+        ("Bybit→Binance",  bb_buy,  bn_sell),
+        ("Binance→OKX",    bn_buy,  okx_sell),
+        ("OKX→Binance",    okx_buy, bn_sell),
+        ("Bybit→OKX",      bb_buy,  okx_sell),
+        ("OKX→Bybit",      okx_buy, bb_sell),
+        ("Binance→Wallet", bn_buy,  wt_sell),
+        ("Wallet→Binance", wt_buy,  bn_sell),
+    ]
+    arb_lines = []
+    for label, buy, sell in arb_pairs:
+        if buy and sell:
+            arb = calc_spread(buy, sell)
+            if arb["spread_pct"] > 0:
+                arb_lines.append(f"  ⚡️ {label}: {arb['spread_pct']}%")
+    if arb_lines:
+        lines.append("Арбитраж:\n" + "\n".join(arb_lines))
 
     await callback.message.edit_text("\n\n".join(lines), reply_markup=spread_fiat_menu())

@@ -13,7 +13,7 @@ from handlers import (
     whale_tracker, pattern_engine, ai_advisor,
     price_signal,
 )
-from api import binance_p2p, bybit_p2p
+from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
 import db
 
@@ -50,7 +50,7 @@ async def check_alerts_task(bot: Bot):
                     else:
                         buy  = await binance_p2p.get_best_price(asset, fiat, "BUY")
                         sell = await binance_p2p.get_best_price(asset, fiat, "SELL")
-                else:
+                elif exchange == "bybit":
                     if pay_types:
                         b_ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side="1", pay_types=pay_types, size=1)
                         s_ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side="0", pay_types=pay_types, size=1)
@@ -59,11 +59,37 @@ async def check_alerts_task(bot: Bot):
                     else:
                         buy  = await bybit_p2p.get_best_price(asset, fiat, "1")
                         sell = await bybit_p2p.get_best_price(asset, fiat, "0")
+                elif exchange == "okx":
+                    if pay_types:
+                        b_ads = await okx_p2p.get_ads(asset=asset, fiat=fiat, side="buy",  pay_types=pay_types, rows=1)
+                        s_ads = await okx_p2p.get_ads(asset=asset, fiat=fiat, side="sell", pay_types=pay_types, rows=1)
+                        buy  = b_ads[0]["price"] if b_ads else None
+                        sell = s_ads[0]["price"] if s_ads else None
+                    else:
+                        buy  = await okx_p2p.get_best_price(asset, fiat, "buy")
+                        sell = await okx_p2p.get_best_price(asset, fiat, "sell")
+                elif exchange == "wallet":
+                    if pay_types:
+                        b_ads = await wallet_p2p.get_ads(asset=asset, fiat=fiat, side="buy",  pay_types=pay_types, rows=1)
+                        s_ads = await wallet_p2p.get_ads(asset=asset, fiat=fiat, side="sell", pay_types=pay_types, rows=1)
+                        buy  = b_ads[0]["price"] if b_ads else None
+                        sell = s_ads[0]["price"] if s_ads else None
+                    else:
+                        buy  = await wallet_p2p.get_best_price(asset, fiat, "buy")
+                        sell = await wallet_p2p.get_best_price(asset, fiat, "sell")
+                else:
+                    buy, sell = None, None
 
+                _EX_NAMES = {
+                    "binance": "🟡 Binance",
+                    "bybit":   "🟠 Bybit",
+                    "okx":     "🔵 OKX",
+                    "wallet":  "💎 Wallet",
+                }
                 if buy and sell:
                     s = calc_spread(buy, sell)
                     if s["spread_pct"] >= threshold:
-                        ex_name  = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+                        ex_name  = _EX_NAMES.get(exchange, exchange.title())
                         pay_disp = PAYMENT_LABELS.get(pay, pay) if pay else ""
                         pay_str  = f" · {pay_disp}" if pay_disp else ""
                         await bot.send_message(

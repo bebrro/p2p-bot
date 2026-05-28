@@ -34,6 +34,19 @@ PAYMENT_METHODS_BYBIT = {
     "USD": ["BankTransfer"],
 }
 
+PAYMENT_METHODS_OKX = {
+    "KZT": ["KaspiBank", "HalykBank", "Jusan", "ForteBank", "FreedomBank"],
+    "RUB": ["TinkoffNew", "Sberbank", "RaiffeisenBank", "FPSBANK"],
+    "TRY": ["ZiraatBank", "Garanti", "Akbank", "VakifBank", "Papara"],
+    "USD": ["BankTransfer"],
+}
+
+PAYMENT_METHODS_WALLET = {
+    "RUB": ["TinkoffNew", "Sberbank", "FPSBANK"],
+    "KZT": ["KaspiBank"],
+    "USD": ["BankTransfer"],
+}
+
 # Красивые названия для отображения
 PAYMENT_LABELS = {
     "KaspiBank": "Kaspi",
