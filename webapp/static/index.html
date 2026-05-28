@@ -3,27 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>P2P Анализатор</title>
+<title>P2P Monitor</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-/* ── Reset ──────────────────────────────────────────── */
+/* ── Reset & base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { height: 100%; }
+html, body { height: 100%; overscroll-behavior: none; }
 
-/* ── Theme variables (Telegram injects --tg-theme-* at runtime) ── */
 :root {
-  --bg:   var(--tg-theme-bg-color,           #17212b);
-  --bg2:  var(--tg-theme-secondary-bg-color, #232e3c);
-  --text: var(--tg-theme-text-color,         #f5f5f5);
-  --hint: var(--tg-theme-hint-color,         #708499);
-  --link: var(--tg-theme-link-color,         #2ca5e0);
-  --btn:  var(--tg-theme-button-color,       #2ca5e0);
-  --btnt: var(--tg-theme-button-text-color,  #fff);
-  --green:  #43b581;
-  --red:    #f04747;
-  --yellow: #faa61a;
-  --r: 10px;
+  --bg:    var(--tg-theme-bg-color,           #17212b);
+  --bg2:   var(--tg-theme-secondary-bg-color, #232e3c);
+  --text:  var(--tg-theme-text-color,         #f5f5f5);
+  --hint:  var(--tg-theme-hint-color,         #708499);
+  --btn:   var(--tg-theme-button-color,       #2ca5e0);
+  --btnt:  var(--tg-theme-button-text-color,  #ffffff);
+  --green: #43b581;
+  --red:   #f04747;
+  --gold:  #faa61a;
+  --r:     10px;
+  --nav-h: 54px;
 }
 
 body {
@@ -35,30 +34,48 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── Header ─────────────────────────────────────────── */
+/* ── Header ───────────────────────────────────────────────── */
 .header {
   background: var(--bg2);
-  padding: 10px 12px 8px;
+  padding: 8px 10px 6px;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .header-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
-.pill-row { display: flex; gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.header-pair {
+  font-size: 11px;
+  color: var(--hint);
+  font-weight: 400;
+}
+
+/* ── Pill rows ────────────────────────────────────────────── */
+.pill-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 5px;
+}
+.pill-row:last-child { margin-bottom: 0; }
 .pill-row::-webkit-scrollbar { display: none; }
+.pill-row.hidden { display: none; }
 
 .pill {
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.1);
   background: transparent;
   color: var(--hint);
   cursor: pointer;
@@ -66,6 +83,7 @@ body {
   white-space: nowrap;
   transition: all .15s;
   flex-shrink: 0;
+  line-height: 1.5;
 }
 .pill.active {
   background: var(--btn);
@@ -73,43 +91,58 @@ body {
   border-color: var(--btn);
   font-weight: 600;
 }
+.pill:active { opacity: .75; }
 
-/* ── Spread bar ──────────────────────────────────────── */
+/* ── Spread bar ───────────────────────────────────────────── */
 .spread-bar {
   background: var(--bg2);
-  padding: 7px 14px;
+  padding: 6px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255,255,255,0.04);
   flex-shrink: 0;
-  min-height: 40px;
+  min-height: 38px;
 }
-.price-big { font-size: 14px; font-weight: 700; }
+.price-big { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .price-big.green { color: var(--green); }
 .price-big.red   { color: var(--red);   }
+.spread-center { text-align: center; }
 .spread-chip {
+  display: inline-block;
   background: rgba(255,255,255,0.07);
-  border-radius: 16px;
-  padding: 3px 10px;
+  border-radius: 14px;
+  padding: 2px 9px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 700;
 }
-.spread-chip.good { background: rgba(67,181,129,.2); color: var(--green); }
-.spread-chip.mid  { background: rgba(250,166,26,.2);  color: var(--yellow);}
+.spread-chip.good { background: rgba(67,181,129,.2);  color: var(--green); }
+.spread-chip.mid  { background: rgba(250,166,26,.2);  color: var(--gold);  }
+.spread-chip.bad  { background: rgba(240,71,71,.15);  color: var(--red);   }
+.spread-vol {
+  font-size: 9px;
+  color: var(--hint);
+  margin-top: 1px;
+}
 
-/* ── Scrollable content ──────────────────────────────── */
+/* ── Tab panels ───────────────────────────────────────────── */
 .tab-panel {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 8px 8px 4px;
+  padding: 8px 8px calc(var(--nav-h) + 4px);
 }
 .tab-panel.hidden { display: none; }
+#tab-ai {
+  padding: 0 0 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#tab-ai.hidden { display: none; }
 
-/* ── Refresh timestamp ───────────────────────────────── */
+/* ── Refresh timestamp ────────────────────────────────────── */
 .refresh-ts {
   font-size: 10px;
   color: var(--hint);
@@ -118,59 +151,52 @@ body {
   height: 14px;
 }
 
-/* ── Orderbook grid ──────────────────────────────────── */
+/* ── Orderbook ────────────────────────────────────────────── */
 .book-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 .col-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .4px;
+  letter-spacing: .5px;
   margin-bottom: 5px;
 }
 .buy-col  .col-title { color: var(--green); }
 .sell-col .col-title { color: var(--red);   }
 
-/* ── Ad card ─────────────────────────────────────────── */
 .ad-card {
   background: var(--bg2);
-  border-radius: 8px;
-  padding: 7px 8px;
-  margin-bottom: 5px;
+  border-radius: 7px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
   border-left: 2px solid transparent;
-  animation: fadeIn .2s ease;
+  animation: fadeIn .18s ease;
 }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 .buy-col  .ad-card { border-left-color: var(--green); }
 .sell-col .ad-card { border-left-color: var(--red);   }
 
 .ad-price {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
+  font-variant-numeric: tabular-nums;
 }
 .buy-col  .ad-price { color: var(--green); }
 .sell-col .ad-price { color: var(--red);   }
 
 .ad-nick {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
-  margin-bottom: 2px;
 }
-.ad-meta {
-  font-size: 10px;
-  color: var(--hint);
-  line-height: 1.45;
-}
+.ad-meta { font-size: 9px; color: var(--hint); line-height: 1.5; }
 .pay-pill {
   display: inline-block;
   background: rgba(255,255,255,0.06);
@@ -178,24 +204,33 @@ body {
   padding: 0 3px;
   margin: 1px 1px 0 0;
 }
-.risk { font-size: 10px; }
+.risk-badge { font-size: 9px; }
 
-/* ── Chart tab ───────────────────────────────────────── */
+/* ── Section title ────────────────────────────────────────── */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--hint);
+  margin: 10px 0 6px;
+}
+
+/* ── Chart tab ────────────────────────────────────────────── */
 .chart-card {
   background: var(--bg2);
   border-radius: var(--r);
   padding: 10px 10px 8px;
   margin-bottom: 8px;
 }
-.chart-box { position: relative; height: 200px; }
+.chart-box { position: relative; height: 180px; }
 .chart-empty {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--hint);
   text-align: center;
-  padding: 60px 20px;
-  line-height: 1.6;
+  padding: 50px 20px;
+  line-height: 1.7;
 }
-
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -204,19 +239,209 @@ body {
 .stat-card {
   background: var(--bg2);
   border-radius: var(--r);
-  padding: 10px 12px;
+  padding: 9px 11px;
 }
-.stat-lbl { font-size: 10px; color: var(--hint); margin-bottom: 3px; }
-.stat-val { font-size: 18px; font-weight: 700; }
-.stat-sub { font-size: 10px; color: var(--hint); margin-top: 1px; }
+.stat-lbl { font-size: 10px; color: var(--hint); margin-bottom: 2px; }
+.stat-val { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 9px;  color: var(--hint); margin-top: 1px; }
 
-/* ── AI Chat tab ─────────────────────────────────────── */
-#tab-ai {
-  padding: 0;
+/* ── Spread compare tab ───────────────────────────────────── */
+.compare-table {
+  background: var(--bg2);
+  border-radius: var(--r);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  margin-bottom: 8px;
 }
+.compare-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr 60px;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  align-items: center;
+  gap: 4px;
+  transition: background .1s;
+}
+.compare-row:last-child { border-bottom: none; }
+.compare-row.header-row {
+  font-size: 9px;
+  color: var(--hint);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.02);
+}
+.compare-ex   { font-size: 12px; font-weight: 600; }
+.compare-price { font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 500; }
+.compare-buy  { color: var(--green); }
+.compare-sell { color: var(--red);   }
+.compare-spread {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+.spread-badge {
+  display: inline-block;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.spread-badge.best { background: rgba(67,181,129,.2); color: var(--green); }
+.spread-badge.good { background: rgba(250,166,26,.15); color: var(--gold);  }
+.compare-row.best-row { background: rgba(67,181,129,.04); }
+
+.arb-card {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 9px 12px;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.arb-route { font-size: 12px; font-weight: 500; }
+.arb-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+}
+.arb-abs { font-size: 10px; color: var(--hint); }
+
+/* Local pickers inside tab ───────────────────────────────── */
+.tab-pickers {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 8px;
+}
+.tab-pickers::-webkit-scrollbar { display: none; }
+
+/* ── Maker tab ────────────────────────────────────────────── */
+.side-toggle {
+  display: flex;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 8px;
+  gap: 3px;
+}
+.side-btn {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--hint);
+  transition: all .15s;
+}
+.side-btn.active-buy  { background: rgba(67,181,129,.25);  color: var(--green); }
+.side-btn.active-sell { background: rgba(240,71,71,.25);   color: var(--red);   }
+
+.maker-load-btn {
+  width: 100%;
+  padding: 10px;
+  background: var(--btn);
+  color: var(--btnt);
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: opacity .15s, transform .1s;
+}
+.maker-load-btn:active { opacity: .85; transform: scale(.98); }
+.maker-load-btn:disabled { opacity: .45; cursor: default; }
+
+.rec-card {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 10px 13px;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: fadeIn .2s ease;
+  cursor: pointer;
+  transition: background .1s;
+}
+.rec-card:active { background: rgba(255,255,255,0.07); }
+.rec-medal { font-size: 20px; flex-shrink: 0; }
+.rec-body  { flex: 1; }
+.rec-price {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1px;
+}
+.rec-label { font-size: 11px; color: var(--hint); }
+.rec-pos   { font-size: 10px; color: var(--hint); opacity: .6; text-align: right; }
+
+/* Мини-стакан в мейкере */
+.mini-ad-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.mini-ad-row:last-child { border-bottom: none; }
+.mini-price { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mini-meta  { color: var(--hint); font-size: 10px; }
+
+/* Калькулятор ────────────────────────────────────────────── */
+.calc-box {
+  background: var(--bg2);
+  border-radius: var(--r);
+  padding: 12px;
+  margin-top: 10px;
+}
+.calc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.calc-label { font-size: 12px; color: var(--hint); white-space: nowrap; }
+.calc-input {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  font-family: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  max-width: 130px;
+}
+.calc-input:focus { border-color: var(--btn); }
+.calc-result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+.calc-result-card {
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: center;
+}
+.calc-result-lbl { font-size: 10px; color: var(--hint); margin-bottom: 3px; }
+.calc-result-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ── AI Chat ──────────────────────────────────────────────── */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -228,7 +453,7 @@ body {
   gap: 8px;
 }
 .chat-msg {
-  max-width: 84%;
+  max-width: 86%;
   padding: 9px 12px;
   border-radius: 14px;
   font-size: 13px;
@@ -237,24 +462,10 @@ body {
   white-space: pre-wrap;
   animation: fadeIn .2s ease;
 }
-.chat-msg.user {
-  align-self: flex-end;
-  background: var(--btn);
-  color: var(--btnt);
-  border-bottom-right-radius: 4px;
-}
-.chat-msg.ai {
-  align-self: flex-start;
-  background: var(--bg2);
-  color: var(--text);
-  border-bottom-left-radius: 4px;
-}
-.chat-msg.error {
-  align-self: flex-start;
-  background: rgba(240,71,71,.12);
-  color: var(--red);
-  border-bottom-left-radius: 4px;
-}
+.chat-msg.user  { align-self: flex-end;  background: var(--btn); color: var(--btnt); border-bottom-right-radius: 4px; }
+.chat-msg.ai    { align-self: flex-start; background: var(--bg2); color: var(--text); border-bottom-left-radius: 4px; }
+.chat-msg.error { align-self: flex-start; background: rgba(240,71,71,.12); color: var(--red); border-bottom-left-radius: 4px; }
+
 .typing-indicator {
   align-self: flex-start;
   background: var(--bg2);
@@ -264,7 +475,6 @@ body {
   display: flex;
   gap: 5px;
   align-items: center;
-  animation: fadeIn .2s ease;
 }
 .typing-dot {
   width: 7px; height: 7px;
@@ -272,13 +482,10 @@ body {
   border-radius: 50%;
   animation: typingBounce 1.4s ease-in-out infinite;
 }
-.typing-dot:nth-child(1) { animation-delay: 0s;   }
-.typing-dot:nth-child(2) { animation-delay: .2s;  }
-.typing-dot:nth-child(3) { animation-delay: .4s;  }
-@keyframes typingBounce {
-  0%, 60%, 100% { transform: translateY(0);    opacity: .4; }
-  30%           { transform: translateY(-5px); opacity: 1;  }
-}
+.typing-dot:nth-child(1) { animation-delay: 0s;  }
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+
 .chat-input-bar {
   flex-shrink: 0;
   display: flex;
@@ -287,6 +494,7 @@ body {
   padding: 8px 10px;
   background: var(--bg2);
   border-top: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
 }
 #chatInput {
   flex: 1;
@@ -318,82 +526,133 @@ body {
   flex-shrink: 0;
   transition: opacity .15s, transform .1s;
 }
-.chat-send-btn:active:not(:disabled) { transform: scale(0.92); }
+.chat-send-btn:active:not(:disabled) { transform: scale(.92); }
 .chat-send-btn:disabled { opacity: .4; cursor: default; }
 
-/* ── Spinner ─────────────────────────────────────────── */
-.spinner {
-  width: 24px; height: 24px;
-  border: 3px solid rgba(255,255,255,0.08);
-  border-top-color: var(--btn);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-  margin: 20px auto;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Error box ───────────────────────────────────────── */
-.err-box {
-  background: rgba(240,71,71,.12);
-  border: 1px solid var(--red);
-  border-radius: var(--r);
-  padding: 10px;
-  color: var(--red);
-  font-size: 12px;
-  text-align: center;
-}
-
-/* ── Bottom tabs ─────────────────────────────────────── */
+/* ── Bottom nav ───────────────────────────────────────────── */
 .bottom-nav {
   display: flex;
   background: var(--bg2);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
+  height: var(--nav-h);
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .nav-btn {
   flex: 1;
   background: none;
   border: none;
   color: var(--hint);
-  font-size: 10px;
-  padding: 8px 0 10px;
+  font-size: 9px;
+  padding: 7px 0;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   transition: color .15s;
+  letter-spacing: .2px;
 }
-.nav-icon { font-size: 20px; line-height: 1; }
+.nav-icon { font-size: 19px; line-height: 1; }
 .nav-btn.active { color: var(--btn); }
+.nav-btn:active { opacity: .7; }
+
+/* ── Shared UI ────────────────────────────────────────────── */
+.spinner {
+  width: 22px; height: 22px;
+  border: 3px solid rgba(255,255,255,0.07);
+  border-top-color: var(--btn);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin: 20px auto;
+}
+.err-box {
+  background: rgba(240,71,71,.1);
+  border: 1px solid rgba(240,71,71,.3);
+  border-radius: var(--r);
+  padding: 10px;
+  color: var(--red);
+  font-size: 12px;
+  text-align: center;
+  margin: 8px 0;
+}
+.empty-hint {
+  text-align: center;
+  color: var(--hint);
+  font-size: 12px;
+  padding: 30px 20px;
+  line-height: 1.7;
+}
+.divider {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  margin: 10px 0;
+}
+
+@keyframes fadeIn    { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes spin      { to   { transform: rotate(360deg); } }
+@keyframes typingBounce {
+  0%,60%,100% { transform: translateY(0);    opacity: .4; }
+  30%         { transform: translateY(-5px); opacity: 1;  }
+}
 </style>
 </head>
 <body>
 
-<!-- ── Header ──────────────────────────────────────── -->
+<!-- ═══════════════════════════════ HEADER ══════════════════ -->
 <div class="header">
-  <div class="header-title">📊 P2P Анализатор</div>
+  <div class="header-title">
+    <span>📊 P2P Monitor</span>
+    <span class="header-pair" id="headerPair">Binance · KZT · USDT</span>
+  </div>
+
+  <!-- Биржа -->
   <div class="pill-row" id="exRow">
     <button class="pill active" data-val="binance">🟡 Binance</button>
     <button class="pill"        data-val="bybit">🟠 Bybit</button>
+    <button class="pill"        data-val="okx">🔵 OKX</button>
+    <button class="pill"        data-val="wallet">💎 Wallet</button>
   </div>
-  <div class="pill-row" style="margin-top:6px;" id="fiatRow">
+
+  <!-- Фиат -->
+  <div class="pill-row" id="fiatRow">
     <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
     <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
     <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
     <button class="pill"        data-val="USD">🇺🇸 USD</button>
   </div>
-  <div class="pill-row" style="margin-top:6px;" id="payRow"></div>
+
+  <!-- Ассет: USDT / BTC / ETH -->
+  <div class="pill-row" id="assetRow">
+    <button class="pill active" data-val="USDT">USDT</button>
+    <button class="pill"        data-val="BTC">BTC</button>
+    <button class="pill"        data-val="ETH">ETH</button>
+  </div>
+
+  <!-- Банк (динамический) -->
+  <div class="pill-row" id="payRow"></div>
 </div>
 
-<!-- ── Spread bar ──────────────────────────────────── -->
+<!-- ═══════════════════════════ SPREAD BAR ══════════════════ -->
 <div class="spread-bar">
-  <span class="price-big green" id="buyPrice">—</span>
-  <span class="spread-chip"     id="spreadChip">Загрузка...</span>
-  <span class="price-big red"   id="sellPrice">—</span>
+  <div>
+    <div class="price-big green" id="buyPrice">—</div>
+    <div class="spread-vol"      id="buyVol"></div>
+  </div>
+  <div class="spread-center">
+    <div class="spread-chip" id="spreadChip">Загрузка...</div>
+  </div>
+  <div style="text-align:right">
+    <div class="price-big red" id="sellPrice">—</div>
+    <div class="spread-vol"    id="sellVol"></div>
+  </div>
 </div>
 
-<!-- ── Tab: Стакан ────────────────────────────────── -->
+<!-- ═══════════════════════════ TAB: СТАКАН ════════════════ -->
 <div class="tab-panel" id="tab-book">
   <div class="refresh-ts" id="refreshTs"></div>
   <div class="book-grid">
@@ -408,15 +667,13 @@ body {
   </div>
 </div>
 
-<!-- ── Tab: График ────────────────────────────────── -->
+<!-- ═══════════════════════════ TAB: ГРАФИК ════════════════ -->
 <div class="tab-panel hidden" id="tab-chart">
   <div class="chart-card">
     <div class="chart-box">
       <canvas id="spreadChart"></canvas>
       <div id="chartEmpty" class="chart-empty" style="display:none;">
-        ⏳ История ещё копится.<br>
-        Данные собираются каждые 30 мин.<br>
-        Зайди через несколько часов.
+        ⏳ История ещё копится.<br>Данные каждые 30 мин.<br>Зайди позже.
       </div>
     </div>
   </div>
@@ -424,7 +681,7 @@ body {
     <div class="stat-card">
       <div class="stat-lbl">Средний спред</div>
       <div class="stat-val" id="avgSpread">—</div>
-      <div class="stat-sub">за все время</div>
+      <div class="stat-sub">за всё время</div>
     </div>
     <div class="stat-card">
       <div class="stat-lbl">Текущий спред</div>
@@ -443,7 +700,43 @@ body {
   </div>
 </div>
 
-<!-- ── Tab: AI Chat ────────────────────────────────── -->
+<!-- ═══════════════════════════ TAB: СПРЕД ════════════════ -->
+<div class="tab-panel hidden" id="tab-spread">
+  <!-- Локальные пикеры для сравнения (фиат + ассет) -->
+  <div class="tab-pickers" id="cmpFiatRow">
+    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
+    <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
+    <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
+    <button class="pill"        data-val="USD">🇺🇸 USD</button>
+  </div>
+  <div class="tab-pickers" id="cmpAssetRow">
+    <button class="pill active" data-val="USDT">USDT</button>
+    <button class="pill"        data-val="BTC">BTC</button>
+    <button class="pill"        data-val="ETH">ETH</button>
+  </div>
+
+  <div id="cmpContent"><div class="spinner"></div></div>
+</div>
+
+<!-- ═══════════════════════════ TAB: МЕЙКЕР ════════════════ -->
+<div class="tab-panel hidden" id="tab-maker">
+  <!-- Переключатель BUY / SELL -->
+  <div class="side-toggle">
+    <button class="side-btn active-buy" id="makerBuyBtn"  onclick="setMakerSide('buy')">📗 Покупка</button>
+    <button class="side-btn"           id="makerSellBtn" onclick="setMakerSide('sell')">📕 Продажа</button>
+  </div>
+
+  <!-- Банк для мейкера -->
+  <div class="pill-row" id="makerPayRow"></div>
+
+  <button class="maker-load-btn" id="makerLoadBtn" onclick="loadMaker()">
+    🎯 Рассчитать оптимальную цену
+  </button>
+
+  <div id="makerContent"></div>
+</div>
+
+<!-- ═══════════════════════════ TAB: AI ════════════════════ -->
 <div class="tab-panel hidden" id="tab-ai">
   <div class="chat-messages" id="chatMessages"></div>
   <div class="chat-input-bar">
@@ -452,306 +745,526 @@ body {
   </div>
 </div>
 
-<!-- ── Bottom nav ──────────────────────────────────── -->
-<div class="bottom-nav">
-  <button class="nav-btn active" onclick="switchTab('book', this)">
+<!-- ═══════════════════════════ BOTTOM NAV ═════════════════ -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('book',this)">
     <span class="nav-icon">📊</span>Стакан
   </button>
-  <button class="nav-btn" onclick="switchTab('chart', this)">
+  <button class="nav-btn" onclick="switchTab('chart',this)">
     <span class="nav-icon">📈</span>График
   </button>
-  <button class="nav-btn" onclick="switchTab('ai', this)">
+  <button class="nav-btn" onclick="switchTab('spread',this)">
+    <span class="nav-icon">⚡</span>Спред
+  </button>
+  <button class="nav-btn" onclick="switchTab('maker',this)">
+    <span class="nav-icon">🎯</span>Мейкер
+  </button>
+  <button class="nav-btn" onclick="switchTab('ai',this)">
     <span class="nav-icon">🤖</span>AI
   </button>
-</div>
+</nav>
 
 <script>
-/* ── Telegram WebApp init ──────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════ */
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-/* ── State ─────────────────────────────────────────── */
-const S = { exchange: 'binance', fiat: 'KZT', asset: 'USDT', tab: 'book', pay: '' };
-let refreshTimer = null;
-let chartInst    = null;
-let chatHistory     = [];
-let chatLoading     = false;
-let chatInitialized = false;
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+const S = {
+  exchange: 'binance',
+  fiat:     'KZT',
+  asset:    'USDT',
+  tab:      'book',
+  pay:      '',
+};
+const CM = { fiat: 'KZT', asset: 'USDT' };   // compare-mode state
+const MK = { side: 'buy', pay: '' };          // maker state
 
-/* ── Pay methods map ───────────────────────────────── */
+let bookTimer    = null;
+let chartInst    = null;
+let chatHistory  = [];
+let chatLoading  = false;
+let chatInited   = false;
+
+/* ══════════════════════════════════════════════════════════
+   PAY METHODS MAP
+══════════════════════════════════════════════════════════ */
 const PAY_METHODS = {
   binance: {
-    KZT: [{val:'', lbl:'Все банки'}, {val:'KaspiBank', lbl:'Kaspi'}, {val:'HalykBank', lbl:'Halyk'},
-          {val:'Jusan', lbl:'Jusan'}, {val:'ForteBank', lbl:'Forte'}, {val:'FreedomBank', lbl:'Freedom'}],
-    RUB: [{val:'', lbl:'Все банки'}, {val:'TinkoffNew', lbl:'Tinkoff'}, {val:'Sberbank', lbl:'Сбер'},
-          {val:'RaiffeisenBank', lbl:'Raiffeisen'}, {val:'FPSBANK', lbl:'СБП'}],
-    TRY: [{val:'', lbl:'Все банки'}, {val:'ZiraatBank', lbl:'Ziraat'}, {val:'Garanti', lbl:'Garanti'},
-          {val:'Akbank', lbl:'Akbank'}, {val:'VakifBank', lbl:'Vakif'}, {val:'Papara', lbl:'Papara'}],
-    USD: [{val:'', lbl:'Все банки'}, {val:'BankTransfer', lbl:'Bank Transfer'}],
+    KZT: [{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},
+          {v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'},{v:'FreedomBank',lbl:'Freedom'}],
+    RUB: [{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},
+          {v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'FPSBANK',lbl:'СБП'}],
+    TRY: [{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},
+          {v:'Akbank',lbl:'Akbank'},{v:'VakifBank',lbl:'Vakif'},{v:'Papara',lbl:'Papara'}],
+    USD: [{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
   },
   bybit: {
-    KZT: [{val:'', lbl:'Все банки'}, {val:'KaspiBank', lbl:'Kaspi'}, {val:'HalykBank', lbl:'Halyk'},
-          {val:'FreedomBank', lbl:'Freedom'}, {val:'Jusan', lbl:'Jusan'}, {val:'ForteBank', lbl:'Forte'}],
-    RUB: [{val:'', lbl:'Все банки'}, {val:'Tinkoff', lbl:'Tinkoff'}, {val:'Sberbank', lbl:'Сбер'},
-          {val:'RaiffeisenBank', lbl:'Raiffeisen'}, {val:'SBP', lbl:'СБП'}],
-    TRY: [{val:'', lbl:'Все банки'}, {val:'ZiraatBank', lbl:'Ziraat'}, {val:'Garanti', lbl:'Garanti'},
-          {val:'Akbank', lbl:'Akbank'}, {val:'Papara', lbl:'Papara'}],
-    USD: [{val:'', lbl:'Все банки'}, {val:'BankTransfer', lbl:'Bank Transfer'}],
+    KZT: [{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},
+          {v:'FreedomBank',lbl:'Freedom'},{v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'}],
+    RUB: [{v:'',lbl:'Все'},{v:'Tinkoff',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},
+          {v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'SBP',lbl:'СБП'}],
+    TRY: [{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},
+          {v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
+    USD: [{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
+  },
+  okx: {
+    KZT: [{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},
+          {v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'},{v:'FreedomBank',lbl:'Freedom'}],
+    RUB: [{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},
+          {v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'FPSBANK',lbl:'СБП'}],
+    TRY: [{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},
+          {v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
+    USD: [{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
+  },
+  wallet: {
+    KZT: [{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'}],
+    RUB: [{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'FPSBANK',lbl:'СБП'}],
+    USD: [{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
   },
 };
 
-/* ── Pay row renderer ──────────────────────────────── */
-function updatePayRow() {
-  const row   = document.getElementById('payRow');
-  const banks = (PAY_METHODS[S.exchange] || {})[S.fiat] || [{val:'', lbl:'Все банки'}];
-  // Если текущий pay не входит в новый список — сбрасываем
-  if (!banks.find(b => b.val === S.pay)) S.pay = '';
+/* ══════════════════════════════════════════════════════════
+   FORMATTING
+══════════════════════════════════════════════════════════ */
+const FMT2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const FMT0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+
+function fmt(n)  { return FMT2.format(n); }
+function fmt0(n) { return FMT0.format(n); }
+function fmtK(n) {
+  if (!n) return '0';
+  if (n >= 1_000_000) return (n/1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n/1_000).toFixed(1) + 'k';
+  return n.toFixed(2);
+}
+function esc(s) {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ══════════════════════════════════════════════════════════
+   HEADER PILL WIRING
+══════════════════════════════════════════════════════════ */
+function wireGroup(id, key, onChange) {
+  document.querySelectorAll(`#${id} .pill`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${id} .pill`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      S[key] = btn.dataset.val;
+      onChange();
+    });
+  });
+}
+
+wireGroup('exRow',    'exchange', onMainStateChange);
+wireGroup('fiatRow',  'fiat',     onMainStateChange);
+wireGroup('assetRow', 'asset',    onMainStateChange);
+
+function onMainStateChange() {
+  // сброс банка при смене биржи/фиата
+  S.pay = '';
+  updatePayRow('payRow',   S.exchange, S.fiat, v => { S.pay = v; restartBookTimer(); });
+  updatePayRow('makerPayRow', S.exchange, S.fiat, v => { MK.pay = v; });
+  MK.pay = '';
+  updateHeaderPair();
+  restartBookTimer();
+  if (S.tab === 'chart') loadChart();
+  resetChat();
+}
+
+function updateHeaderPair() {
+  const EX_NAMES = {binance:'Binance', bybit:'Bybit', okx:'OKX', wallet:'Wallet'};
+  document.getElementById('headerPair').textContent =
+    `${EX_NAMES[S.exchange]||S.exchange} · ${S.fiat} · ${S.asset}`;
+}
+
+function updatePayRow(rowId, exchange, fiat, onSelect) {
+  const row   = document.getElementById(rowId);
+  if (!row) return;
+  const banks = (PAY_METHODS[exchange]||{})[fiat] || [{v:'',lbl:'Все'}];
   row.innerHTML = banks.map(b =>
-    `<button class="pill${S.pay === b.val ? ' active' : ''}" data-val="${esc(b.val)}">${esc(b.lbl)}</button>`
+    `<button class="pill${b.v===''?' active':''}" data-val="${esc(b.v)}">${esc(b.lbl)}</button>`
   ).join('');
   row.querySelectorAll('.pill').forEach(btn => {
     btn.addEventListener('click', () => {
-      S.pay = btn.dataset.val;
-      updatePayRow();
-      clearInterval(refreshTimer);
-      loadOrderbook();
-      refreshTimer = setInterval(loadOrderbook, 10_000);
-    });
-  });
-}
-
-/* ── Selector wiring ───────────────────────────────── */
-function wireGroup(groupId, stateKey) {
-  document.querySelectorAll(`#${groupId} .pill`).forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll(`#${groupId} .pill`).forEach(b => b.classList.remove('active'));
+      row.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      S[stateKey] = btn.dataset.val;
-      onStateChange();
+      onSelect(btn.dataset.val);
     });
   });
 }
-wireGroup('exRow',   'exchange');
-wireGroup('fiatRow', 'fiat');
 
-function onStateChange() {
-  S.pay = '';          // сброс фильтра банка при смене биржи / фиата
-  updatePayRow();
-  clearInterval(refreshTimer);
-  loadOrderbook();
-  if (S.tab === 'chart') loadChart();
-  resetChat();
-  refreshTimer = setInterval(loadOrderbook, 10_000);
+/* Wire compare-tab local pickers */
+function wireLocalGroup(id, stateObj, key, onChange) {
+  document.querySelectorAll(`#${id} .pill`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${id} .pill`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      stateObj[key] = btn.dataset.val;
+      onChange();
+    });
+  });
 }
+wireLocalGroup('cmpFiatRow',  CM, 'fiat',  loadCompare);
+wireLocalGroup('cmpAssetRow', CM, 'asset', loadCompare);
 
-/* ── Tab switching ─────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   TAB SWITCHING
+══════════════════════════════════════════════════════════ */
 function switchTab(tab, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   S.tab = tab;
-  if (tab === 'chart') loadChart();
-  if (tab === 'book')  loadOrderbook();
-  if (tab === 'ai')    initChat();
+
+  // Показываем/скрываем банк-пикер только для Стакана и Мейкера
+  const showPay = tab === 'book' || tab === 'maker';
+  document.getElementById('payRow').classList.toggle('hidden', !showPay || tab === 'maker');
+  document.getElementById('makerPayRow').classList.toggle('hidden', tab !== 'maker');
+
+  if (tab === 'book')   { restartBookTimer(); }
+  if (tab === 'chart')  { loadChart(); }
+  if (tab === 'spread') { loadCompare(); }
+  if (tab === 'ai')     { initChat(); }
 }
 
-/* ── Formatting ────────────────────────────────────── */
-const FMT_NUM = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-function fmt(n)  { return FMT_NUM.format(n); }
-function fmtK(n) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k';
-  return n.toFixed(0);
-}
-function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
+/* ══════════════════════════════════════════════════════════
+   ORDERBOOK
+══════════════════════════════════════════════════════════ */
+function restartBookTimer() {
+  clearInterval(bookTimer);
+  if (S.tab === 'book') {
+    loadOrderbook();
+    bookTimer = setInterval(loadOrderbook, 10_000);
+  }
 }
 
-/* ── Orderbook ─────────────────────────────────────── */
 async function loadOrderbook() {
   const { exchange, fiat, asset, pay } = S;
-  const payQ = pay ? `?pay=${encodeURIComponent(pay)}` : '';
+  const q = pay ? `?pay=${encodeURIComponent(pay)}` : '';
   try {
-    const res  = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}${payQ}`);
-    const data = await res.json();
+    const r    = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}${q}`);
+    const data = await r.json();
     if (data.error) throw new Error(data.error);
     renderOrderbook(data);
-
-    const now = new Date();
     document.getElementById('refreshTs').textContent =
-      `Обновлено: ${now.toLocaleTimeString('ru-RU')}  · авто каждые 10 сек`;
-  } catch (e) {
+      `Обновлено ${new Date().toLocaleTimeString('ru-RU')} · авто 10 сек`;
+  } catch(e) {
     const msg = `<div class="err-box">❌ ${esc(e.message)}</div>`;
     document.getElementById('buyList').innerHTML  = msg;
     document.getElementById('sellList').innerHTML = msg;
     document.getElementById('spreadChip').textContent = 'Ошибка';
+    document.getElementById('spreadChip').className   = 'spread-chip bad';
   }
 }
 
 function renderOrderbook({ buy, sell, spread }) {
   // Spread bar
-  if (buy.length)  document.getElementById('buyPrice').textContent  = fmt(buy[0].price);
-  if (sell.length) document.getElementById('sellPrice').textContent = fmt(sell[0].price);
+  if (buy.length) {
+    document.getElementById('buyPrice').textContent = fmt(buy[0].price);
+    const buyTotalVol = buy.reduce((s,a) => s + (a.available||0), 0);
+    document.getElementById('buyVol').textContent   = buyTotalVol ? `📦 ${fmtK(buyTotalVol)} ${S.asset}` : '';
+  }
+  if (sell.length) {
+    document.getElementById('sellPrice').textContent = fmt(sell[0].price);
+    const sellTotalVol = sell.reduce((s,a) => s + (a.available||0), 0);
+    document.getElementById('sellVol').textContent   = sellTotalVol ? `📦 ${fmtK(sellTotalVol)} ${S.asset}` : '';
+  }
 
   const chip = document.getElementById('spreadChip');
-  if (spread && spread.spread_pct != null) {
+  if (spread?.spread_pct != null) {
     const pct = spread.spread_pct;
     chip.textContent = `⇔ ${pct}%`;
     chip.className   = 'spread-chip' + (pct >= 0.5 ? ' good' : pct >= 0.2 ? ' mid' : '');
   } else {
-    chip.textContent = '—';
-    chip.className   = 'spread-chip';
+    chip.textContent = '—'; chip.className = 'spread-chip';
   }
 
-  document.getElementById('buyList').innerHTML  = adList(buy);
-  document.getElementById('sellList').innerHTML = adList(sell);
+  document.getElementById('buyList').innerHTML  = renderAdList(buy);
+  document.getElementById('sellList').innerHTML = renderAdList(sell);
 }
 
-function adList(ads) {
-  if (!ads || !ads.length) return '<div class="ad-meta" style="text-align:center;padding:12px 0;">Нет данных</div>';
+function renderAdList(ads) {
+  if (!ads?.length) return '<div class="empty-hint">Нет данных</div>';
   return ads.map(ad => {
-    const pay  = (ad.pay_types || []).slice(0, 2).map(p => `<span class="pay-pill">${esc(p)}</span>`).join('') || '—';
-    const vol  = fmtK(ad.available  || 0);
-    const min  = fmtK(ad.min_amount || 0);
-    const max  = fmtK(ad.max_amount || 0);
-    const comp = ad.completion || 0;
-    const ord  = ad.orders || 0;
-    return `
-      <div class="ad-card">
-        <div class="ad-price">${fmt(ad.price)}</div>
-        <div class="ad-nick">${esc(ad.nickname || '—')}</div>
-        <div class="ad-meta">
-          ${vol} · ${min}–${max}<br>
-          ${ord} сд · ${comp}%<br>
-          ${pay}
-          <span class="risk">${esc(ad.risk_badge || '')} ${esc(ad.risk_tooltip || '')}</span>
-        </div>
-      </div>`;
+    const pay  = (ad.pay_types||[]).slice(0,2).map(p=>`<span class="pay-pill">${esc(p)}</span>`).join('')||'—';
+    const vol  = fmtK(ad.available||0);
+    const comp = ad.completion||0;
+    const ord  = ad.orders||0;
+    const risk = ad.risk_badge ? `<span class="risk-badge">${esc(ad.risk_badge)}</span>` : '';
+    return `<div class="ad-card">
+      <div class="ad-price">${fmt(ad.price)}</div>
+      <div class="ad-nick">${esc(ad.nickname||'—')}</div>
+      <div class="ad-meta">${vol} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ord} сд · ${comp}% ${risk}<br>${pay}</div>
+    </div>`;
   }).join('');
 }
 
-/* ── Chart ─────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   CHART (ИСТОРИЯ СПРЕДА)
+══════════════════════════════════════════════════════════ */
 async function loadChart() {
-  const { exchange, fiat, asset } = S;
   const canvas = document.getElementById('spreadChart');
   const empty  = document.getElementById('chartEmpty');
-
   canvas.style.display = 'none';
   empty.style.display  = 'block';
-  empty.textContent    = '⏳ Загружаю историю...';
-
+  empty.innerHTML      = '<div class="spinner"></div>';
   try {
-    const res  = await fetch(`/api/history/${exchange}/${fiat}/${asset}`);
-    const data = await res.json();
+    const r    = await fetch(`/api/history/${S.exchange}/${S.fiat}/${S.asset}`);
+    const data = await r.json();
     if (data.error) throw new Error(data.error);
-    renderChart(data.points || []);
-  } catch (e) {
-    empty.textContent = `❌ ${e.message}`;
+    renderChart(data.points||[]);
+  } catch(e) {
+    empty.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
   }
 }
 
 function renderChart(points) {
   const canvas = document.getElementById('spreadChart');
   const empty  = document.getElementById('chartEmpty');
-
   if (points.length < 2) {
     empty.style.display  = 'block';
+    empty.innerHTML      = '⏳ История ещё копится.<br>Данные каждые 30 мин.<br>Зайди через несколько часов.';
     canvas.style.display = 'none';
     if (chartInst) { chartInst.destroy(); chartInst = null; }
     return;
   }
-
   empty.style.display  = 'none';
   canvas.style.display = 'block';
 
-  const labels = points.map(p => p.ts);
-  const vals   = points.map(p => p.spread_pct);
-  const avg    = vals.reduce((a, b) => a + b, 0) / vals.length;
-  const maxV   = Math.max(...vals);
-  const curV   = vals[vals.length - 1];
+  const vals = points.map(p => p.spread_pct);
+  const avg  = vals.reduce((a,b) => a+b, 0) / vals.length;
+  const maxV = Math.max(...vals);
+  const curV = vals[vals.length - 1];
 
-  // Stats
   document.getElementById('avgSpread').textContent  = avg.toFixed(3) + '%';
   document.getElementById('maxSpread').textContent  = maxV.toFixed(3) + '%';
   document.getElementById('dataPoints').textContent = points.length;
-
   const curEl = document.getElementById('curSpread');
-  curEl.textContent = curV.toFixed(3) + '%';
-  curEl.style.color = curV >= avg ? 'var(--green)' : 'var(--red)';
-
+  curEl.textContent  = curV.toFixed(3) + '%';
+  curEl.style.color  = curV >= avg ? 'var(--green)' : 'var(--red)';
   const diff = curV - avg;
-  document.getElementById('curVsAvg').textContent =
-    (diff >= 0 ? '+' : '') + diff.toFixed(3) + '% vs avg';
-  document.getElementById('curVsAvg').style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+  const vsEl = document.getElementById('curVsAvg');
+  vsEl.textContent  = (diff>=0?'+':'') + diff.toFixed(3) + '% vs avg';
+  vsEl.style.color  = diff >= 0 ? 'var(--green)' : 'var(--red)';
 
   if (chartInst) chartInst.destroy();
-
   const ctx  = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 190);
-  grad.addColorStop(0, 'rgba(44,165,224,.35)');
+  const grad = ctx.createLinearGradient(0, 0, 0, 170);
+  grad.addColorStop(0, 'rgba(44,165,224,.3)');
   grad.addColorStop(1, 'rgba(44,165,224,0)');
 
   chartInst = new Chart(ctx, {
     type: 'line',
     data: {
-      labels,
-      datasets: [{
-        data:            vals,
-        borderColor:     '#2ca5e0',
-        backgroundColor: grad,
-        borderWidth:     2,
-        pointRadius:     points.length > 24 ? 0 : 3,
-        pointBackgroundColor: '#2ca5e0',
-        fill:            true,
-        tension:         0.4,
-      }, {
-        // Average line
-        data:        Array(vals.length).fill(avg),
-        borderColor: 'rgba(250,166,26,.5)',
-        borderWidth: 1,
-        borderDash:  [5, 4],
-        pointRadius: 0,
-        fill:        false,
-        tension:     0,
-      }]
+      labels: points.map(p => p.ts),
+      datasets: [
+        { data: vals, borderColor: '#2ca5e0', backgroundColor: grad,
+          borderWidth: 2, pointRadius: points.length > 24 ? 0 : 3,
+          fill: true, tension: 0.4 },
+        { data: Array(vals.length).fill(avg), borderColor: 'rgba(250,166,26,.5)',
+          borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false },
+      ],
     },
     options: {
-      responsive:          true,
-      maintainAspectRatio: false,
-      animation:           false,
-      interaction:         { mode: 'index', intersect: false },
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => ctx.datasetIndex === 0
-              ? `Спред: ${ctx.parsed.y.toFixed(4)}%`
-              : `Avg: ${ctx.parsed.y.toFixed(4)}%`
-          }
-        }
+        tooltip: { callbacks: {
+          label: ctx => ctx.datasetIndex === 0
+            ? `Спред: ${ctx.parsed.y.toFixed(4)}%`
+            : `Avg: ${ctx.parsed.y.toFixed(4)}%`
+        }},
       },
       scales: {
-        x: {
-          ticks: { color: '#708499', maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } },
-          grid:  { color: 'rgba(255,255,255,0.04)' }
-        },
-        y: {
-          ticks: {
-            color: '#708499',
-            font:  { size: 9 },
-            callback: v => v.toFixed(2) + '%'
-          },
-          grid: { color: 'rgba(255,255,255,0.04)' }
-        }
-      }
-    }
+        x: { ticks: { color:'#708499', maxTicksLimit:5, maxRotation:0, font:{size:9} },
+             grid:  { color:'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color:'#708499', font:{size:9}, callback: v => v.toFixed(2)+'%' },
+             grid:  { color:'rgba(255,255,255,0.04)' } },
+      },
+    },
   });
 }
 
-/* ── AI Chat ───────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   СРАВНЕНИЕ СПРЕДА ПО БИРЖАМ
+══════════════════════════════════════════════════════════ */
+async function loadCompare() {
+  const box = document.getElementById('cmpContent');
+  box.innerHTML = '<div class="spinner"></div>';
+  try {
+    const r    = await fetch(`/api/spread_compare/${CM.fiat}/${CM.asset}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderCompare(data);
+  } catch(e) {
+    box.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderCompare({ exchanges, arbitrage }) {
+  // Найти лучший спред
+  const valid  = exchanges.filter(e => e.spread_pct != null);
+  const bestPct = valid.length ? Math.max(...valid.map(e => e.spread_pct)) : null;
+
+  // Таблица
+  let html = `<div class="compare-table">
+    <div class="compare-row header-row">
+      <span>Биржа</span><span>📗 Покупка</span><span>📕 Продажа</span><span style="text-align:right">Спред</span>
+    </div>`;
+
+  exchanges.forEach(ex => {
+    const isBest = ex.spread_pct != null && ex.spread_pct === bestPct && bestPct > 0;
+    html += `<div class="compare-row${isBest?' best-row':''}">
+      <span class="compare-ex">${esc(ex.icon)} ${esc(ex.name)}</span>
+      <span class="compare-price compare-buy">${ex.buy ? fmt(ex.buy) : '—'}</span>
+      <span class="compare-price compare-sell">${ex.sell ? fmt(ex.sell) : '—'}</span>
+      <span class="compare-spread">
+        ${ex.spread_pct != null
+          ? `<span class="spread-badge${isBest?' best':ex.spread_pct>=0.3?' good':''}">${ex.spread_pct}%</span>`
+          : '—'}
+      </span>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Арбитраж
+  if (arbitrage?.length) {
+    html += `<div class="section-title">⚡ Арбитраж</div>`;
+    arbitrage.forEach(a => {
+      html += `<div class="arb-card">
+        <div>
+          <div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div>
+          <div class="arb-abs">${fmt(a.abs)} ${CM.fiat}</div>
+        </div>
+        <div class="arb-pct">+${a.pct}%</div>
+      </div>`;
+    });
+  } else {
+    html += `<div class="empty-hint">⚡ Арбитражных возможностей нет</div>`;
+  }
+
+  document.getElementById('cmpContent').innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════════════
+   МЕЙКЕР
+══════════════════════════════════════════════════════════ */
+function setMakerSide(side) {
+  MK.side = side;
+  document.getElementById('makerBuyBtn').className  = 'side-btn' + (side==='buy'  ? ' active-buy'  : '');
+  document.getElementById('makerSellBtn').className = 'side-btn' + (side==='sell' ? ' active-sell' : '');
+}
+
+async function loadMaker() {
+  const btn = document.getElementById('makerLoadBtn');
+  const box = document.getElementById('makerContent');
+  btn.disabled = true;
+  btn.textContent = '⏳ Загружаю...';
+  box.innerHTML   = '<div class="spinner"></div>';
+
+  const { exchange, fiat, asset } = S;
+  const { side, pay }             = MK;
+  const q = pay ? `?pay=${encodeURIComponent(pay)}` : '';
+
+  try {
+    const r    = await fetch(`/api/maker/${exchange}/${fiat}/${asset}/${side}${q}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderMaker(data, fiat, asset, side);
+  } catch(e) {
+    box.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '🎯 Рассчитать оптимальную цену';
+  }
+}
+
+function renderMaker({ ads, recommendations, step }, fiat, asset, side) {
+  if (!ads.length) {
+    document.getElementById('makerContent').innerHTML =
+      '<div class="empty-hint">😔 Объявления не найдены.<br>Попробуй другой банк или биржу.</div>';
+    return;
+  }
+
+  // Рекомендации
+  let html = `<div class="section-title">🎯 Рекомендуемые цены</div>`;
+  recommendations.forEach(r => {
+    html += `<div class="rec-card" onclick="setCalcPrice(${r.price})">
+      <div class="rec-medal">${esc(r.medal)}</div>
+      <div class="rec-body">
+        <div class="rec-price">${fmt(r.price)} ${esc(fiat)}</div>
+        <div class="rec-label">Позиция #${r.pos} — ${esc(r.label)}</div>
+      </div>
+      <div class="rec-pos">Тап = выбрать</div>
+    </div>`;
+  });
+
+  // Мини-стакан
+  html += `<div class="section-title">${side==='buy'?'📗':'📕'} Текущий топ-5</div>
+  <div style="background:var(--bg2);border-radius:var(--r);padding:8px 10px;margin-bottom:10px;">`;
+  ads.forEach((ad, i) => {
+    const sideColor = side==='buy' ? 'var(--green)' : 'var(--red)';
+    html += `<div class="mini-ad-row">
+      <span class="mini-price" style="color:${sideColor}">${i+1}. ${fmt(ad.price)}</span>
+      <span class="mini-meta">${fmtK(ad.available)} · ${ad.orders}сд · ${ad.completion}%</span>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Калькулятор
+  const defaultPrice = recommendations[0]?.price || ads[0]?.price || 0;
+  html += `<div class="section-title">🧮 Калькулятор</div>
+  <div class="calc-box">
+    <div class="calc-row">
+      <span class="calc-label">Цена (${esc(fiat)})</span>
+      <input class="calc-input" id="calcPrice" type="number" value="${defaultPrice}"
+             step="${step}" oninput="updateCalc()">
+    </div>
+    <div class="calc-row">
+      <span class="calc-label">Объём (${esc(asset)})</span>
+      <input class="calc-input" id="calcVolume" type="number" value="100"
+             min="1" oninput="updateCalc()">
+    </div>
+    <div class="calc-result-grid" id="calcResult"></div>
+  </div>`;
+
+  document.getElementById('makerContent').innerHTML = html;
+  updateCalc();
+}
+
+function setCalcPrice(price) {
+  const inp = document.getElementById('calcPrice');
+  if (inp) { inp.value = price; updateCalc(); }
+}
+
+function updateCalc() {
+  const price  = parseFloat(document.getElementById('calcPrice')?.value)  || 0;
+  const volume = parseFloat(document.getElementById('calcVolume')?.value) || 0;
+  const total  = price * volume;
+  const result = document.getElementById('calcResult');
+  if (!result || !price || !volume) return;
+  result.innerHTML = `
+    <div class="calc-result-card">
+      <div class="calc-result-lbl">Объём ${S.fiat}</div>
+      <div class="calc-result-val">${fmt0(total)}</div>
+    </div>
+    <div class="calc-result-card">
+      <div class="calc-result-lbl">Объём ${S.asset}</div>
+      <div class="calc-result-val">${volume.toFixed(2)}</div>
+    </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   AI CHAT
+══════════════════════════════════════════════════════════ */
 function appendBubble(role, text) {
   const box = document.getElementById('chatMessages');
   const div = document.createElement('div');
@@ -761,103 +1274,66 @@ function appendBubble(role, text) {
   box.scrollTop = box.scrollHeight;
   return div;
 }
-
 function showTyping() {
   const box = document.getElementById('chatMessages');
   const el  = document.createElement('div');
-  el.className = 'typing-indicator';
-  el.id        = 'typingEl';
-  el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  el.className = 'typing-indicator'; el.id = 'typingEl';
+  el.innerHTML  = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
 }
-
 function hideTyping() {
-  const el = document.getElementById('typingEl');
-  if (el) el.remove();
+  document.getElementById('typingEl')?.remove();
 }
-
 async function sendChat(autoMsg) {
   if (chatLoading) return;
-
   const input   = document.getElementById('chatInput');
   const sendBtn = document.getElementById('chatSend');
   const text    = autoMsg || input.value.trim();
   if (!text) return;
-
-  if (!autoMsg) {
-    input.value        = '';
-    input.style.height = '';
-    appendBubble('user', text);
-  }
-
-  chatLoading      = true;
-  sendBtn.disabled = true;
-  showTyping();
-
+  if (!autoMsg) { input.value = ''; input.style.height = ''; appendBubble('user', text); }
+  chatLoading = true; sendBtn.disabled = true; showTyping();
   try {
-    const res  = await fetch('/api/chat', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        exchange: S.exchange,
-        fiat:     S.fiat,
-        asset:    S.asset,
-        history:  chatHistory,
-        message:  text,
-      }),
+    const r    = await fetch('/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ exchange:S.exchange, fiat:S.fiat, asset:S.asset,
+                             history:chatHistory, message:text }),
     });
-    const data = await res.json();
+    const data = await r.json();
     hideTyping();
-
-    if (data.error) {
-      appendBubble('error', '❌ ' + data.error);
-    } else {
-      chatHistory = data.history || [];
-      appendBubble('ai', data.response);
-    }
-  } catch (e) {
-    hideTyping();
-    appendBubble('error', '❌ Ошибка связи: ' + e.message);
-  } finally {
-    chatLoading      = false;
-    sendBtn.disabled = false;
-  }
+    if (data.error) { appendBubble('error','❌ '+data.error); }
+    else { chatHistory = data.history||[]; appendBubble('ai', data.response); }
+  } catch(e) { hideTyping(); appendBubble('error','❌ Ошибка: '+e.message); }
+  finally { chatLoading = false; sendBtn.disabled = false; }
 }
-
 function initChat() {
-  if (chatInitialized) return;
-  chatInitialized = true;
-  // Авто-приветствие: AI сам загружает рынок и даёт краткий обзор
-  sendChat('Привет! Загрузи текущий стакан и скажи: какая оптимальная цена для выставления и стоит ли сейчас торговать?');
+  if (chatInited) return;
+  chatInited = true;
+  sendChat('Привет! Загрузи стакан и дай краткий обзор: оптимальная цена, стоит ли торговать сейчас?');
 }
-
 function resetChat() {
-  chatHistory     = [];
-  chatInitialized = false;
-  const box       = document.getElementById('chatMessages');
+  chatHistory = []; chatInited = false;
+  const box = document.getElementById('chatMessages');
   if (box) box.innerHTML = '';
   if (S.tab === 'ai') initChat();
 }
-
-// Авто-растягивание textarea
-document.getElementById('chatInput').addEventListener('input', function () {
-  this.style.height = '';
-  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+document.getElementById('chatInput').addEventListener('input', function() {
+  this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 100)+'px';
+});
+document.getElementById('chatInput').addEventListener('keydown', function(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
 
-// Enter = отправить, Shift+Enter = перенос строки
-document.getElementById('chatInput').addEventListener('keydown', function (e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendChat();
-  }
-});
-
-/* ── Boot ──────────────────────────────────────────── */
-updatePayRow();
+/* ══════════════════════════════════════════════════════════
+   BOOT
+══════════════════════════════════════════════════════════ */
+updateHeaderPair();
+updatePayRow('payRow',      S.exchange, S.fiat, v => { S.pay  = v; restartBookTimer(); });
+updatePayRow('makerPayRow', S.exchange, S.fiat, v => { MK.pay = v; });
+// Прячем makerPayRow по умолчанию (не на вкладке мейкера)
+document.getElementById('makerPayRow').classList.add('hidden');
 loadOrderbook();
-refreshTimer = setInterval(loadOrderbook, 10_000);
+bookTimer = setInterval(loadOrderbook, 10_000);
 </script>
 </body>
 </html>

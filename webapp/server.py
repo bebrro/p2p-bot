@@ -239,6 +239,93 @@ async def api_chat(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_spread_compare(request: web.Request) -> web.Response:
+    """GET /api/spread_compare/{fiat}/{asset} — все биржи параллельно."""
+    fiat  = request.match_info["fiat"]
+    asset = request.match_info["asset"]
+    try:
+        results = await asyncio.gather(
+            binance_p2p.get_best_price(asset, fiat, "BUY"),
+            binance_p2p.get_best_price(asset, fiat, "SELL"),
+            bybit_p2p.get_best_price(asset, fiat, "1"),
+            bybit_p2p.get_best_price(asset, fiat, "0"),
+            okx_p2p.get_best_price(asset, fiat, "buy"),
+            okx_p2p.get_best_price(asset, fiat, "sell"),
+            wallet_p2p.get_best_price(asset, fiat, "buy"),
+            wallet_p2p.get_best_price(asset, fiat, "sell"),
+            return_exceptions=True,
+        )
+        def _v(x): return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+        exchanges = [
+            {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
+            {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
+            {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
+            {"id": "wallet",  "name": "Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
+        ]
+        for ex in exchanges:
+            if ex["buy"] and ex["sell"]:
+                s = calc_spread(ex["buy"], ex["sell"])
+                ex["spread_pct"] = s["spread_pct"]
+                ex["spread_abs"] = s["spread_abs"]
+            else:
+                ex["spread_pct"] = None
+                ex["spread_abs"] = None
+
+        arb = []
+        for ex1 in exchanges:
+            for ex2 in exchanges:
+                if ex1["id"] == ex2["id"]: continue
+                if ex1["buy"] and ex2["sell"]:
+                    s = calc_spread(ex1["buy"], ex2["sell"])
+                    if s["spread_pct"] > 0:
+                        arb.append({
+                            "from": ex1["name"], "to": ex2["name"],
+                            "pct": s["spread_pct"], "abs": s["spread_abs"],
+                        })
+        arb.sort(key=lambda x: -x["pct"])
+        return web.json_response({"exchanges": exchanges, "arbitrage": arb[:6]})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_maker(request: web.Request) -> web.Response:
+    """GET /api/maker/{exchange}/{fiat}/{asset}/{side}?pay="""
+    exchange = request.match_info["exchange"]
+    fiat     = request.match_info["fiat"]
+    asset    = request.match_info["asset"]
+    side     = request.match_info["side"]
+    pay      = request.rel_url.query.get("pay", "")
+
+    FIAT_STEP = {"KZT": 0.50, "RUB": 0.05, "TRY": 0.05, "USD": 0.001}
+    step = FIAT_STEP.get(fiat, 0.01)
+
+    try:
+        ads = await _fetch(exchange, fiat, asset, side, rows=10, pay=pay)
+        if not ads:
+            return web.json_response({"ads": [], "recommendations": [], "step": step})
+
+        recs = []
+        if side == "buy":
+            ads.sort(key=lambda x: x["price"], reverse=True)
+            if len(ads) >= 1:
+                recs.append({"pos": 1, "price": round(ads[0]["price"] + step, 4), "label": "выше лидера", "medal": "🥇"})
+                recs.append({"pos": 2, "price": round(ads[0]["price"] - step, 4), "label": "ниже лидера",  "medal": "🥈"})
+            if len(ads) >= 2:
+                recs.append({"pos": 3, "price": round(ads[1]["price"] - step, 4), "label": "ниже 2-го",   "medal": "🥉"})
+        else:
+            ads.sort(key=lambda x: x["price"])
+            if len(ads) >= 1:
+                recs.append({"pos": 1, "price": round(ads[0]["price"] - step, 4), "label": "ниже лидера", "medal": "🥇"})
+                recs.append({"pos": 2, "price": round(ads[0]["price"] + step, 4), "label": "выше лидера", "medal": "🥈"})
+            if len(ads) >= 2:
+                recs.append({"pos": 3, "price": round(ads[1]["price"] + step, 4), "label": "выше 2-го",   "medal": "🥉"})
+
+        return web.json_response({"ads": ads[:5], "recommendations": recs, "step": step})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -253,10 +340,12 @@ def create_app() -> web.Application:
     app = web.Application(middlewares=[ngrok_middleware])
 
     # API routes (регистрировать ДО статики)
-    app.router.add_get("/api/orderbook/{exchange}/{fiat}/{asset}", api_orderbook)
-    app.router.add_get("/api/history/{exchange}/{fiat}/{asset}",  api_history)
-    app.router.add_post("/api/ai",                                api_ai)
-    app.router.add_post("/api/chat",                              api_chat)
+    app.router.add_get("/api/orderbook/{exchange}/{fiat}/{asset}",       api_orderbook)
+    app.router.add_get("/api/history/{exchange}/{fiat}/{asset}",        api_history)
+    app.router.add_get("/api/spread_compare/{fiat}/{asset}",            api_spread_compare)
+    app.router.add_get("/api/maker/{exchange}/{fiat}/{asset}/{side}",   api_maker)
+    app.router.add_post("/api/ai",                                       api_ai)
+    app.router.add_post("/api/chat",                                     api_chat)
 
     # Root → index.html
     app.router.add_get("/",           index_handler)
