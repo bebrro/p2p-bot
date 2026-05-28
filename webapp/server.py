@@ -71,7 +71,17 @@ async def _fetch(exchange: str, fiat: str, asset: str, side: str,
 # ─── Handlers ─────────────────────────────────────────────────────────────────
 
 async def index_handler(request: web.Request) -> web.Response:
-    return web.FileResponse(STATIC_DIR / "index.html")
+    content = (STATIC_DIR / "index.html").read_bytes()
+    return web.Response(
+        body=content,
+        content_type="text/html",
+        charset="utf-8",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 async def api_orderbook(request: web.Request) -> web.Response:
