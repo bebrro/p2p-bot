@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from config import FIATS, FIAT_FLAGS
-from api import binance_p2p, bybit_p2p
+from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 import db
 
 router = Router()
@@ -44,9 +44,15 @@ async def _fetch_trader_ads(exchange: str, fiat: str, asset: str, nickname: str)
         if exchange == "binance":
             bn_type = "SELL" if trade_type == "buy" else "BUY"
             ads = await binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type=bn_type, rows=50)
-        else:
+        elif exchange == "bybit":
             side = "0" if trade_type == "buy" else "1"
             ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side=side, size=50)
+        elif exchange == "okx":
+            ads = await okx_p2p.get_ads(asset=asset, fiat=fiat, side=trade_type, rows=50)
+        elif exchange == "wallet":
+            ads = await wallet_p2p.get_ads(asset=asset, fiat=fiat, side=trade_type, rows=50)
+        else:
+            ads = []
 
         nick_lower = nickname.lower()
         for ad in ads:
@@ -106,8 +112,9 @@ def tracker_menu_kb(user_id: int) -> InlineKeyboardMarkup:
     trackers = _get_trackers(user_id)
     buttons  = []
 
+    _EX_ICONS = {"binance": "🟡", "bybit": "🟠", "okx": "🔵", "wallet": "💎"}
     for i, t in enumerate(trackers):
-        ex = "🟡" if t["exchange"] == "binance" else "🟠"
+        ex = _EX_ICONS.get(t["exchange"], "🔷")
         buttons.append([InlineKeyboardButton(
             text=f"{ex} {t['nickname']} | {t['asset']}/{t['fiat']}",
             callback_data=f"tracker:view:{i}",
@@ -118,11 +125,26 @@ def tracker_menu_kb(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+_EX_LABELS = {
+    "binance": "🟡 Binance",
+    "bybit":   "🟠 Bybit",
+    "okx":     "🔵 OKX",
+    "wallet":  "💎 Wallet",
+}
+
+def _ex_label(exchange: str) -> str:
+    return _EX_LABELS.get(exchange, exchange.title())
+
+
 def tracker_exchange_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="🟡 Binance", callback_data="tracker:add:ex:binance"),
-            InlineKeyboardButton(text="🟠 Bybit",   callback_data="tracker:add:ex:bybit"),
+            InlineKeyboardButton(text="🟡 Binance",  callback_data="tracker:add:ex:binance"),
+            InlineKeyboardButton(text="🟠 Bybit",    callback_data="tracker:add:ex:bybit"),
+        ],
+        [
+            InlineKeyboardButton(text="🔵 OKX",      callback_data="tracker:add:ex:okx"),
+            InlineKeyboardButton(text="💎 TG Wallet", callback_data="tracker:add:ex:wallet"),
         ],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="tracker:list")],
     ])
@@ -192,7 +214,7 @@ async def tracker_add_fiat(callback: CallbackQuery, state: FSMContext):
     await state.update_data(exchange=exchange, fiat=fiat, asset="USDT")
     await state.set_state(TrackerStates.waiting_nickname)
 
-    ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+    ex = _ex_label(exchange)
     await callback.message.edit_text(
         f"👁 Трекер | {ex} | USDT/{fiat}\n\n"
         f"Введи <b>точный никнейм</b> трейдера которого хочешь отслеживать:\n"
@@ -281,7 +303,7 @@ async def tracker_delete(callback: CallbackQuery):
 # ─── Форматирование ───────────────────────────────────────────────────────────
 
 def _format_tracker_card(entry: dict, ads: dict, is_new: bool = False) -> str:
-    ex       = "🟡 Binance" if entry["exchange"] == "binance" else "🟠 Bybit"
+    ex       = _ex_label(entry["exchange"])
     nickname = entry["nickname"]
     fiat     = entry["fiat"]
     asset    = entry["asset"]
@@ -351,7 +373,7 @@ async def check_trackers(bot) -> None:
                 nickname = entry["nickname"]
                 fiat     = entry["fiat"]
                 exchange = entry["exchange"]
-                ex       = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+                ex       = _ex_label(exchange)
                 changes  = []
 
                 # Проверяем покупку

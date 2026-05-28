@@ -67,16 +67,29 @@ def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def fiat_menu(exchange: str, action: str = "ads") -> InlineKeyboardMarkup:
+def fiat_menu(exchange: str) -> InlineKeyboardMarkup:
+    """Шаг 1: выбор фиатной валюты → ведёт к выбору ассета."""
     buttons = [
         [InlineKeyboardButton(
             text=FIAT_FLAGS.get(f, f),
-            callback_data=f"{action}:{exchange}:{f}:USDT",
+            callback_data=f"asset:{exchange}:{f}",
         )]
         for f in FIATS
     ]
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def asset_menu(exchange: str, fiat: str) -> InlineKeyboardMarkup:
+    """Шаг 2: выбор ассета (USDT / BTC / ETH) → ведёт к выбору типа сделки."""
+    asset_buttons = [
+        InlineKeyboardButton(text=a, callback_data=f"ads:{exchange}:{fiat}:{a}")
+        for a in ASSETS
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        asset_buttons,
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"exchange:{exchange}")],
+    ])
 
 
 def trade_type_menu(exchange: str, fiat: str, asset: str) -> InlineKeyboardMarkup:
@@ -86,7 +99,8 @@ def trade_type_menu(exchange: str, fiat: str, asset: str) -> InlineKeyboardMarku
             InlineKeyboardButton(text="📕 Продать", callback_data=f"ads:{exchange}:{fiat}:{asset}:sell:price"),
         ],
         [InlineKeyboardButton(text="📊 Двойной стакан", callback_data=f"book:{exchange}:{fiat}:{asset}:price")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"exchange:{exchange}")],
+        # Назад → выбор ассета (не биржа)
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"asset:{exchange}:{fiat}")],
     ])
 
 
@@ -102,9 +116,12 @@ def ads_list_menu(exchange: str, fiat: str, asset: str, trade_type: str, sort: s
                   user_id: int = 0) -> InlineKeyboardMarkup:
     from handlers.filters import get_filter
     f = get_filter(user_id) if user_id else {}
-    tp = f.get("third_party")
+    tp         = f.get("third_party")
+    rep_orders = f.get("min_orders", 0)
+    rep_comp   = f.get("min_completion", 0)
 
-    prefix = f"ads:{exchange}:{fiat}:{asset}:{trade_type}"
+    prefix  = f"ads:{exchange}:{fiat}:{asset}:{trade_type}"
+    tp_back = f"{exchange}:{fiat}:{asset}:{trade_type}:{sort}"
     buttons = sort_buttons(f"sort_ads:{exchange}:{fiat}:{asset}:{trade_type}", sort)
 
     # Строка 1: платёжный метод + сумма
@@ -119,8 +136,8 @@ def ads_list_menu(exchange: str, fiat: str, asset: str, trade_type: str, sort: s
         ),
     ])
 
-    # Строка 2: фильтр 3-е лица (с подсветкой активного)
-    tp_back = f"{exchange}:{fiat}:{asset}:{trade_type}:{sort}"
+    # Строка 2: репутация + 3-е лица
+    rep_text = f"🏅 ≥{rep_orders}сд/{rep_comp}% ●" if (rep_orders or rep_comp) else "🏅 Репутация"
     if tp == "yes":
         tp_btn_text = "✅ 3-е лица  ●"
     elif tp == "no":
@@ -128,10 +145,12 @@ def ads_list_menu(exchange: str, fiat: str, asset: str, trade_type: str, sort: s
     else:
         tp_btn_text = "👥 3-е лица"
     buttons.append([
-        InlineKeyboardButton(
-            text=tp_btn_text,
-            callback_data=f"filterthirdparty:{tp_back}",
-        ),
+        InlineKeyboardButton(text=rep_text,     callback_data=f"filterrep:{tp_back}"),
+        InlineKeyboardButton(text=tp_btn_text,  callback_data=f"filterthirdparty:{tp_back}"),
+    ])
+
+    # Строка 3: сброс фильтров
+    buttons.append([
         InlineKeyboardButton(
             text="✖️ Сбросить фильтры",
             callback_data=f"filterclear:{prefix}:{sort}",

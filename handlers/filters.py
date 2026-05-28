@@ -32,4 +32,8 @@ def filter_summary(user_id: int) -> str:
         parts.append("✅ 3-е лица")
     elif f.get("third_party") == "no":
         parts.append("❌ без 3-х лиц")
+    orders = f.get("min_orders", 0)
+    comp   = f.get("min_completion", 0)
+    if orders or comp:
+        parts.append(f"🏅 ≥{orders}сд/≥{comp}%")
     return "  |  ".join(parts) if parts else ""

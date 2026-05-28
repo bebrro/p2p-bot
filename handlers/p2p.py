@@ -3,7 +3,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread, format_ad
-from keyboards import fiat_menu, trade_type_menu, ads_list_menu, book_menu, spread_fiat_menu
+from keyboards import fiat_menu, asset_menu, trade_type_menu, ads_list_menu, book_menu, spread_fiat_menu
 from handlers.filters import get_filter, set_filter, clear_filter, filter_summary
 from handlers.blacklist import is_blacklisted, add_to_blacklist
 from config import (
@@ -65,6 +65,10 @@ def format_orderbook(buy_ads: list, sell_ads: list, asset: str, fiat: str, excha
         best_sell = sell_ads[0]["price"]  # наибольшая цена продажи
         s = calc_spread(best_sell, best_buy)
         lines.append(f"Спред: {s['spread_abs']:,.2f} ({s['spread_pct']}%)")
+    buy_vol  = sum(a["available"] for a in buy_ads)
+    sell_vol = sum(a["available"] for a in sell_ads)
+    if buy_vol or sell_vol:
+        lines.append(f"Объём:  {buy_vol:>8.2f} │ {sell_vol:.2f} {asset}")
     lines.append("</code>")
     return "\n".join(lines)
 
@@ -102,6 +106,14 @@ async def fetch_ads(exchange: str, asset: str, fiat: str, trade_type: str, rows:
             ads = [a for a in ads if a["min_amount"] <= min_amount <= a["max_amount"]]
     else:
         ads = []
+
+    # ── Фильтр по репутации ───────────────────────────────────────────────────────
+    min_orders     = f.get("min_orders", 0)
+    min_completion = f.get("min_completion", 0)
+    if min_orders:
+        ads = [a for a in ads if a.get("orders", 0) >= min_orders]
+    if min_completion:
+        ads = [a for a in ads if a.get("completion", 0) >= min_completion]
 
     # Скрываем заблокированных мерчантов
     if user_id:
@@ -305,6 +317,63 @@ async def set_amount(callback: CallbackQuery):
     await show_ads(callback)
 
 
+def _reputation_kb(back_parts: str) -> InlineKeyboardMarkup:
+    back_cb = f"ads:{back_parts}"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏆 Топ  (≥500 сд / ≥90%)",    callback_data=f"setrep:500:90:{back_parts}")],
+        [InlineKeyboardButton(text="✅ Надёжные (≥100 сд / ≥80%)", callback_data=f"setrep:100:80:{back_parts}")],
+        [
+            InlineKeyboardButton(text="📊 Только % (≥80%)",         callback_data=f"setrep:0:80:{back_parts}"),
+            InlineKeyboardButton(text="🔢 Только сделки (≥50)",     callback_data=f"setrep:50:0:{back_parts}"),
+        ],
+        [InlineKeyboardButton(text="❌ Сбросить",                   callback_data=f"setrep:0:0:{back_parts}")],
+        [InlineKeyboardButton(text="⬅️ Назад",                      callback_data=back_cb)],
+    ])
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("filterrep:"))
+async def show_reputation_filter(callback: CallbackQuery):
+    back_parts = callback.data.split(":", 1)[1]   # exchange:fiat:asset:trade_type:sort
+    f = get_filter(callback.from_user.id)
+    cur_orders = f.get("min_orders", 0)
+    cur_comp   = f.get("min_completion", 0)
+
+    active = f"≥{cur_orders} сд / ≥{cur_comp}%" if (cur_orders or cur_comp) else "не задан"
+    await callback.message.edit_text(
+        f"🏅 <b>Фильтр по репутации мерчанта</b>\n\n"
+        f"Скрывает мерчантов с малым количеством сделок или низким % успеха.\n\n"
+        f"Текущий: <b>{active}</b>",
+        parse_mode="HTML",
+        reply_markup=_reputation_kb(back_parts),
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("setrep:"))
+async def set_reputation(callback: CallbackQuery):
+    # setrep:{orders}:{completion}:{exchange}:{fiat}:{asset}:{trade_type}:{sort}
+    _, orders_str, comp_str, back_parts = callback.data.split(":", 3)
+    orders = int(orders_str)
+    comp   = int(comp_str)
+    uid    = callback.from_user.id
+
+    if orders:
+        set_filter(uid, "min_orders", orders)
+    else:
+        clear_filter(uid, "min_orders")
+    if comp:
+        set_filter(uid, "min_completion", comp)
+    else:
+        clear_filter(uid, "min_completion")
+
+    if orders or comp:
+        await callback.answer(f"✅ ≥{orders} сд / ≥{comp}%")
+    else:
+        await callback.answer("❌ Фильтр репутации сброшен")
+
+    callback.data = f"ads:{back_parts}"
+    await show_ads(callback)
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith("filterclear:"))
 async def clear_all_filters(callback: CallbackQuery):
     back_cb = callback.data.split(":", 1)[1]
@@ -321,6 +390,15 @@ async def choose_exchange(callback: CallbackQuery):
     exchange = callback.data.split(":")[1]
     name = _ex_label(exchange) + " P2P"
     await callback.message.edit_text(f"{name}\n\nВыбери валюту:", reply_markup=fiat_menu(exchange))
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("asset:") and len(c.data.split(":")) == 3)
+async def choose_asset(callback: CallbackQuery):
+    _, exchange, fiat = callback.data.split(":")
+    await callback.message.edit_text(
+        f"{_ex_label(exchange)} | {fiat}\n\nВыбери ассет:",
+        reply_markup=asset_menu(exchange, fiat),
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("ads:") and len(c.data.split(":")) == 4)
@@ -357,7 +435,13 @@ async def show_ads(callback: CallbackQuery):
     fsum = filter_summary(callback.from_user.id)
     filter_line = f"\n🔍 {fsum}" if fsum else ""
 
-    text = f"{_ex_label(exchange)} | {asset}/{fiat} | {type_label}{filter_line}\n\n"
+    # Объём стакана
+    total_crypto = sum(a["available"] for a in ads)
+    total_fiat   = sum(a["available"] * a["price"] for a in ads)
+    vol_line = (f"\n📦 Объём: {total_crypto:,.2f} {asset} ≈ {total_fiat:,.0f} {fiat}"
+                if total_crypto else "")
+
+    text = f"{_ex_label(exchange)} | {asset}/{fiat} | {type_label}{filter_line}{vol_line}\n\n"
     text += "\n\n─────────────────\n\n".join(
         format_ad(ad, i + 1, exchange) for i, ad in enumerate(ads)
     )
