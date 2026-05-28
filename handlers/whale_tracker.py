@@ -18,6 +18,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from api import binance_p2p, bybit_p2p
 from config import FIATS, FIAT_FLAGS
+import db
 
 router = Router()
 
@@ -31,6 +32,9 @@ FIAT_ICONS = {"KZT": "🇰🇿", "RUB": "🇷🇺", "TRY": "🇹🇷", "USD": "�
 # ── Хранилище ─────────────────────────────────────────────────────────────────
 # {user_id: {"enabled": bool, "threshold": float, "fiats": list, "exchanges": list}}
 _user_settings: dict[int, dict] = {}
+
+# Пользователи, чьи настройки уже загружены из DB
+_db_loaded: set[int] = set()
 
 # {(ex, fiat, asset, side): {nick: {"volume", "price", "absent"}}}
 _whale_state: dict[tuple, dict] = {}
@@ -56,6 +60,32 @@ def _cfg(uid: int) -> dict:
         "fiats":     ["KZT"],     # ← только KZT по умолчанию
         "exchanges": ["binance", "bybit"],
     })
+
+
+async def _load_cfg(uid: int) -> None:
+    """Загружает настройки из DB в память (однократно)."""
+    if uid in _db_loaded:
+        return
+    _db_loaded.add(uid)
+    if db.ok():
+        row = await db.whale_get(uid)
+        if row:
+            _user_settings[uid] = {
+                "enabled":   row["enabled"],
+                "threshold": row["threshold"],
+                "fiats":     row["fiats"],
+                "exchanges": row["exchanges"],
+            }
+
+
+async def _save_cfg(uid: int) -> None:
+    """Сохраняет текущие настройки пользователя в DB."""
+    cfg = _user_settings.get(uid)
+    if cfg and db.ok():
+        await db.whale_save(
+            uid, cfg["enabled"], cfg["threshold"],
+            cfg["fiats"], cfg["exchanges"],
+        )
 
 
 def _active_pairs(uid: int) -> list[tuple]:
@@ -135,7 +165,8 @@ def _status_text(uid: int) -> str:
 @router.callback_query(lambda c: c.data == "wt:list")
 async def wt_list(callback: CallbackQuery):
     uid = callback.from_user.id
-    _cfg(uid)   # создать запись (выключенную) если пользователь впервые
+    await _load_cfg(uid)  # загрузить из DB (однократно)
+    _cfg(uid)             # создать запись (выключенную) если пользователь впервые
     await callback.message.edit_text(
         _status_text(uid),
         reply_markup=_main_kb(uid),
@@ -146,6 +177,7 @@ async def wt_list(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "wt:toggle")
 async def wt_toggle(callback: CallbackQuery):
     uid = callback.from_user.id
+    await _load_cfg(uid)
     cfg = _cfg(uid)
     cfg["enabled"] = not cfg["enabled"]
 
@@ -154,6 +186,7 @@ async def wt_toggle(callback: CallbackQuery):
         for pair in _active_pairs(uid):
             _initialized.discard(pair)
 
+    await _save_cfg(uid)  # сохраняем в DB
     status = "✅ Запущен! Первый скан — тихий (состояние), уведомления со второго." \
              if cfg["enabled"] else "⏸ Остановлен."
     await callback.answer(status, show_alert=cfg["enabled"])
@@ -167,6 +200,7 @@ async def wt_toggle(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data and c.data.startswith("wt:fiat:"))
 async def wt_toggle_fiat(callback: CallbackQuery):
     uid  = callback.from_user.id
+    await _load_cfg(uid)
     cfg  = _cfg(uid)
     fiat = callback.data.split(":")[2]
 
@@ -185,6 +219,7 @@ async def wt_toggle_fiat(callback: CallbackQuery):
         fiats.append(fiat)
         await callback.answer(f"✅ {fiat} добавлен")
 
+    await _save_cfg(uid)  # сохраняем в DB
     await callback.message.edit_text(
         _status_text(uid),
         reply_markup=_main_kb(uid),
@@ -218,7 +253,10 @@ async def wt_got_threshold(message: Message, state: FSMContext):
             parse_mode="HTML",
         )
         return
-    _cfg(message.from_user.id)["threshold"] = val
+    uid = message.from_user.id
+    await _load_cfg(uid)
+    _cfg(uid)["threshold"] = val
+    await _save_cfg(uid)  # сохраняем в DB
     await message.answer(
         f"✅ Порог установлен: <b>{val:,.0f}</b>",
         parse_mode="HTML",
@@ -304,6 +342,21 @@ async def check_whales(bot) -> None:
     """Вызывается каждые 120 секунд из bot.py"""
     import logging
     logger = logging.getLogger(__name__)
+
+    # Если DB доступна — догружаем включённых пользователей из DB
+    # (нужно при первом цикле после рестарта, когда _user_settings пуст)
+    if db.ok():
+        db_enabled = await db.whale_get_all_enabled()
+        for row in db_enabled:
+            uid = row["user_id"]
+            if uid not in _user_settings:
+                _user_settings[uid] = {
+                    "enabled":   True,
+                    "threshold": row["threshold"],
+                    "fiats":     row["fiats"],
+                    "exchanges": row["exchanges"],
+                }
+                _db_loaded.add(uid)
 
     # Собираем активных пользователей и уникальные пары
     all_pairs: set[tuple]          = set()

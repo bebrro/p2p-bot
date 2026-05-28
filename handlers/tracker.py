@@ -4,18 +4,34 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from config import FIATS, FIAT_FLAGS
 from api import binance_p2p, bybit_p2p
+import db
 
 router = Router()
 
 # Хранилище: {user_id: [entry, ...]}
-# entry = {exchange, fiat, asset, nickname, buy: {price, available}, sell: {price, available}}
+# entry = {id (DB), exchange, fiat, asset, nickname, buy: {price, available}|None, sell: ...}
 _trackers: dict[int, list[dict]] = {}
+
+# Пользователи, чьи трекеры уже загружены из DB
+_loaded: set[int] = set()
 
 MAX_TRACKERS = 5  # лимит для бесплатных пользователей
 
 
 class TrackerStates(StatesGroup):
     waiting_nickname = State()
+
+
+# ─── DB helpers ───────────────────────────────────────────────────────────────
+
+async def _ensure_loaded(uid: int) -> None:
+    """Загружает трекеры пользователя из DB (однократно)."""
+    if uid in _loaded:
+        return
+    _loaded.add(uid)
+    if db.ok():
+        rows = await db.trackers_get(uid)
+        _trackers[uid] = rows  # уже имеют {id, exchange, fiat, asset, nickname, buy, sell}
 
 
 # ─── Утилиты ──────────────────────────────────────────────────────────────────
@@ -55,15 +71,28 @@ def _get_trackers(user_id: int) -> list:
     return _trackers.get(user_id, [])
 
 
-def _add_tracker(user_id: int, entry: dict):
+async def _add_tracker(user_id: int, entry: dict) -> None:
+    """Добавляет в память и в DB."""
+    if db.ok():
+        db_id = await db.trackers_add(
+            user_id,
+            entry["exchange"], entry["fiat"], entry["asset"], entry["nickname"],
+            entry["buy"]["price"]  if entry["buy"]  else None,
+            entry["sell"]["price"] if entry["sell"] else None,
+        )
+        entry["id"] = db_id
     if user_id not in _trackers:
         _trackers[user_id] = []
     _trackers[user_id].append(entry)
 
 
-def _remove_tracker(user_id: int, index: int):
+async def _remove_tracker(user_id: int, index: int) -> None:
+    """Удаляет из памяти и из DB."""
     lst = _trackers.get(user_id, [])
     if 0 <= index < len(lst):
+        entry = lst[index]
+        if db.ok() and "id" in entry:
+            await db.trackers_delete(user_id, entry["id"])
         lst.pop(index)
 
 
@@ -75,7 +104,7 @@ def get_all_trackers() -> dict[int, list]:
 
 def tracker_menu_kb(user_id: int) -> InlineKeyboardMarkup:
     trackers = _get_trackers(user_id)
-    buttons = []
+    buttons  = []
 
     for i, t in enumerate(trackers):
         ex = "🟡" if t["exchange"] == "binance" else "🟠"
@@ -123,7 +152,8 @@ def tracker_view_kb(index: int) -> InlineKeyboardMarkup:
 
 @router.callback_query(lambda c: c.data == "tracker:list")
 async def tracker_list(callback: CallbackQuery):
-    user_id  = callback.from_user.id
+    user_id = callback.from_user.id
+    await _ensure_loaded(user_id)
     trackers = _get_trackers(user_id)
     count    = len(trackers)
     text = (
@@ -137,6 +167,7 @@ async def tracker_list(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "tracker:add:start")
 async def tracker_add_start(callback: CallbackQuery):
     user_id = callback.from_user.id
+    await _ensure_loaded(user_id)
     if len(_get_trackers(user_id)) >= MAX_TRACKERS:
         await callback.answer(f"❌ Максимум {MAX_TRACKERS} трекеров", show_alert=True)
         return
@@ -181,8 +212,10 @@ async def tracker_save_nickname(message: Message, state: FSMContext):
     exchange = data["exchange"]
     fiat     = data["fiat"]
     asset    = data["asset"]
+    uid      = message.from_user.id
 
     await state.clear()
+    await _ensure_loaded(uid)
     await message.answer("⏳ Ищу трейдера на бирже...")
 
     ads = await _fetch_trader_ads(exchange, fiat, asset, nickname)
@@ -204,17 +237,21 @@ async def tracker_save_nickname(message: Message, state: FSMContext):
         "buy":      _snapshot(ads["buy"]),
         "sell":     _snapshot(ads["sell"]),
     }
-    _add_tracker(message.from_user.id, entry)
+    await _add_tracker(uid, entry)
 
     text = _format_tracker_card(entry, ads, is_new=True)
-    await message.answer(text, parse_mode="HTML",
-                         reply_markup=tracker_view_kb(len(_get_trackers(message.from_user.id)) - 1))
+    await message.answer(
+        text, parse_mode="HTML",
+        reply_markup=tracker_view_kb(len(_get_trackers(uid)) - 1),
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("tracker:view:"))
 async def tracker_view(callback: CallbackQuery):
+    user_id  = callback.from_user.id
+    await _ensure_loaded(user_id)
     index    = int(callback.data.split(":")[2])
-    trackers = _get_trackers(callback.from_user.id)
+    trackers = _get_trackers(user_id)
     if index >= len(trackers):
         await callback.answer("❌ Трекер не найден", show_alert=True)
         return
@@ -233,8 +270,10 @@ async def tracker_refresh(callback: CallbackQuery):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("tracker:delete:"))
 async def tracker_delete(callback: CallbackQuery):
-    index = int(callback.data.split(":")[2])
-    _remove_tracker(callback.from_user.id, index)
+    user_id = callback.from_user.id
+    await _ensure_loaded(user_id)
+    index   = int(callback.data.split(":")[2])
+    await _remove_tracker(user_id, index)
     await callback.answer("✅ Трекер удалён")
     await tracker_list(callback)
 
@@ -293,17 +332,27 @@ async def check_trackers(bot) -> None:
     import logging
     logger = logging.getLogger(__name__)
 
-    for user_id, entries in list(_trackers.items()):
-        for i, entry in enumerate(entries):
+    # Если DB доступна — читаем все трекеры из неё (работает после рестарта)
+    if db.ok():
+        all_entries = await db.trackers_get_all()  # содержит user_id
+        by_user: dict[int, list] = {}
+        for e in all_entries:
+            uid = e["user_id"]
+            by_user.setdefault(uid, []).append(e)
+    else:
+        by_user = dict(_trackers)
+
+    for user_id, entries in by_user.items():
+        for entry in list(entries):
             try:
-                ads       = await _fetch_trader_ads(
+                ads      = await _fetch_trader_ads(
                     entry["exchange"], entry["fiat"], entry["asset"], entry["nickname"]
                 )
-                nickname  = entry["nickname"]
-                fiat      = entry["fiat"]
-                exchange  = entry["exchange"]
-                ex        = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
-                changes   = []
+                nickname = entry["nickname"]
+                fiat     = entry["fiat"]
+                exchange = entry["exchange"]
+                ex       = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+                changes  = []
 
                 # Проверяем покупку
                 new_buy = _snapshot(ads["buy"])
@@ -335,9 +384,20 @@ async def check_trackers(bot) -> None:
                         f"<b>{new_sell['price']:,.2f}</b> {arrow}{abs(diff):.2f}"
                     )
 
-                # Обновляем состояние
-                entry["buy"]  = new_buy
-                entry["sell"] = new_sell
+                # Обновляем цены в DB
+                if db.ok() and "id" in entry:
+                    await db.trackers_update_prices(
+                        entry["id"],
+                        new_buy["price"]  if new_buy  else None,
+                        new_sell["price"] if new_sell else None,
+                    )
+
+                # Обновляем в памяти (если загружен)
+                if user_id in _trackers:
+                    for mem in _trackers[user_id]:
+                        if mem.get("id") == entry.get("id"):
+                            mem["buy"]  = new_buy
+                            mem["sell"] = new_sell
 
                 if changes:
                     text = (

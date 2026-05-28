@@ -5,24 +5,34 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from api import binance_p2p, bybit_p2p
 from utils.spread import calc_spread
 from config import FIATS, FIAT_FLAGS
+import db
 
 router = Router()
 
-# {(exchange, fiat, asset): deque([(ts, buy_price, sell_price), ...])}
-# Храним данные каждые 30 мин, max 14 дней = 672 точки
+# В памяти храним последние точки (кэш). При перезапуске — грузим из DB.
 _history: dict[tuple, deque] = {}
-MAX_POINTS = 672
+MAX_POINTS = 672   # 14 дней × 48 точек/день
 
 
-def record_price(exchange: str, fiat: str, asset: str, buy: float, sell: float):
+async def record_price(exchange: str, fiat: str, asset: str, buy: float, sell: float) -> None:
+    """Записывает точку в память и в DB."""
     key = (exchange, fiat, asset)
     if key not in _history:
         _history[key] = deque(maxlen=MAX_POINTS)
     _history[key].append((datetime.now(), buy, sell))
+    if db.ok():
+        await db.history_add(exchange, fiat, asset, buy, sell)
 
 
-def get_history(exchange: str, fiat: str, asset: str) -> deque:
-    return _history.get((exchange, fiat, asset), deque())
+async def get_history(exchange: str, fiat: str, asset: str) -> list:
+    """Возвращает [(datetime, buy, sell), ...] от старого к новому.
+    Сначала ищет в памяти, при пустой памяти читает из DB."""
+    key = (exchange, fiat, asset)
+    if key in _history and _history[key]:
+        return list(_history[key])
+    if db.ok():
+        return await db.history_get(exchange, fiat, asset)
+    return []
 
 
 def _fiat_kb(exchange: str) -> InlineKeyboardMarkup:
@@ -35,12 +45,12 @@ def _fiat_kb(exchange: str) -> InlineKeyboardMarkup:
 
 
 def _hist_kb(exchange: str, fiat: str, asset: str) -> InlineKeyboardMarkup:
-    other = "bybit" if exchange == "binance" else "binance"
+    other       = "bybit" if exchange == "binance" else "binance"
     other_label = "🟠 Bybit" if other == "bybit" else "🟡 Binance"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"↔️ {other_label}", callback_data=f"hist:{other}:{fiat}:{asset}")],
-        [InlineKeyboardButton(text="🔄 Обновить", callback_data=f"hist:{exchange}:{fiat}:{asset}")],
-        [InlineKeyboardButton(text="⬅️ Назад",    callback_data="back:main")],
+        [InlineKeyboardButton(text="🔄 Обновить",       callback_data=f"hist:{exchange}:{fiat}:{asset}")],
+        [InlineKeyboardButton(text="⬅️ Назад",          callback_data="back:main")],
     ])
 
 
@@ -63,7 +73,7 @@ def _ascii_chart(values: list[float], width: int = 20, height: int = 5) -> str:
 @router.callback_query(lambda c: c.data and c.data.startswith("hist:") and len(c.data.split(":")) == 4)
 async def show_history(callback: CallbackQuery):
     _, exchange, fiat, asset = callback.data.split(":")
-    hist = list(get_history(exchange, fiat, asset))
+    hist = await get_history(exchange, fiat, asset)
 
     ex = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
 
@@ -81,30 +91,30 @@ async def show_history(callback: CallbackQuery):
     h7d = [(ts, b, s) for ts, b, s in hist if ts > now - timedelta(days=7)]
 
     def stats(data):
-        if not data: return None
-        spreads = [(calc_spread(b, s)["spread_pct"], b, s, ts) for ts, b, s in data]
-        sprds   = [x[0] for x in spreads]
-        buys    = [x[1] for x in data]
-        sells   = [x[2] for x in data]
-        best    = max(spreads, key=lambda x: x[0])
-        # Лучший час
-        hours   = {}
+        if not data:
+            return None
+        spreads  = [(calc_spread(b, s)["spread_pct"], b, s, ts) for ts, b, s in data]
+        sprds    = [x[0] for x in spreads]
+        buys     = [x[1] for x in data]
+        sells    = [x[2] for x in data]
+        best     = max(spreads, key=lambda x: x[0])
+        hours    = {}
         for ts, b, s in data:
-            h = ts.hour
+            h  = ts.hour
             sp = calc_spread(b, s)["spread_pct"]
             hours[h] = hours.get(h, []) + [sp]
-        best_hour = max(hours, key=lambda h: sum(hours[h])/len(hours[h])) if hours else None
-        avg_per_h = {h: round(sum(v)/len(v), 3) for h, v in hours.items()}
+        best_hour = max(hours, key=lambda h: sum(hours[h]) / len(hours[h])) if hours else None
+        avg_per_h = {h: round(sum(v) / len(v), 3) for h, v in hours.items()}
         return {
-            "spread_avg": round(sum(sprds)/len(sprds), 3),
+            "spread_avg": round(sum(sprds) / len(sprds), 3),
             "spread_max": round(max(sprds), 3),
             "spread_min": round(min(sprds), 3),
             "buy_now":    buys[-1],
             "sell_now":   sells[-1],
             "best_spread_time": best[3].strftime("%H:%M"),
-            "best_hour": best_hour,
-            "avg_per_h": avg_per_h,
-            "buy_chart": [b for _, b, _ in data[-20:]],
+            "best_hour":  best_hour,
+            "avg_per_h":  avg_per_h,
+            "buy_chart":  [b for _, b, _ in data[-20:]],
             "sell_chart": [s for _, _, s in data[-20:]],
         }
 
@@ -129,13 +139,11 @@ async def show_history(callback: CallbackQuery):
             "📅 <b>7 дней</b>",
             f"  Спред: avg <b>{s7d['spread_avg']}%</b> | min {s7d['spread_min']}% | max {s7d['spread_max']}%",
         ]
-        # Топ-3 лучших часа
         if s7d["avg_per_h"]:
-            top3 = sorted(s7d["avg_per_h"].items(), key=lambda x: x[1], reverse=True)[:3]
+            top3      = sorted(s7d["avg_per_h"].items(), key=lambda x: x[1], reverse=True)[:3]
             hours_str = " → ".join(f"{h}:00 ({v}%)" for h, v in top3)
             lines.append(f"  ⭐ Топ часы: {hours_str}")
 
-    # ASCII мини-график покупки
     if s24 and s24["buy_chart"]:
         lines += ["", "<code>Цена покупки (24ч):"]
         lines.append(_ascii_chart(s24["buy_chart"]))
@@ -152,9 +160,11 @@ async def collect_prices() -> None:
     """Вызывается каждые 30 мин из bot.py"""
     import logging
     logger = logging.getLogger(__name__)
-    pairs = [("binance", "KZT", "USDT"), ("binance", "RUB", "USDT"),
-             ("bybit",   "KZT", "USDT"), ("bybit",   "RUB", "USDT"),
-             ("binance", "TRY", "USDT"), ("bybit",   "TRY", "USDT")]
+    pairs = [
+        ("binance", "KZT", "USDT"), ("binance", "RUB", "USDT"),
+        ("bybit",   "KZT", "USDT"), ("bybit",   "RUB", "USDT"),
+        ("binance", "TRY", "USDT"), ("bybit",   "TRY", "USDT"),
+    ]
     for exchange, fiat, asset in pairs:
         try:
             if exchange == "binance":
@@ -164,6 +174,6 @@ async def collect_prices() -> None:
                 buy  = await bybit_p2p.get_best_price(asset, fiat, "1")
                 sell = await bybit_p2p.get_best_price(asset, fiat, "0")
             if buy and sell:
-                record_price(exchange, fiat, asset, buy, sell)
+                await record_price(exchange, fiat, asset, buy, sell)
         except Exception as e:
             logger.error(f"Price collect error {exchange}/{fiat}: {e}")

@@ -14,6 +14,7 @@ from handlers import (
 )
 from api import binance_p2p, bybit_p2p
 from utils.spread import calc_spread
+import db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def _loop(coro_fn, interval: int, label: str):
 
 
 async def check_alerts_task(bot: Bot):
-    all_alerts = alerts.get_all_alerts()
+    all_alerts = await alerts.get_all_alerts()
     for user_id, user_alerts in list(all_alerts.items()):
         for alert in user_alerts:
             try:
@@ -60,6 +61,11 @@ async def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN не задан!")
         return
+
+    # ── База данных ────────────────────────────────────────────────────────────
+    await db.init()
+    if db.ok():
+        await blacklist.load_from_db()   # загружаем ЧС в память (is_blacklisted sync)
 
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=MemoryStorage())
