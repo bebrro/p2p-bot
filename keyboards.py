@@ -93,18 +93,43 @@ def sort_buttons(callback_prefix: str, current_sort: str) -> list:
     return [row]
 
 
-def ads_list_menu(exchange: str, fiat: str, asset: str, trade_type: str, sort: str, ads: list) -> InlineKeyboardMarkup:
+def ads_list_menu(exchange: str, fiat: str, asset: str, trade_type: str, sort: str, ads: list,
+                  user_id: int = 0) -> InlineKeyboardMarkup:
+    from handlers.filters import get_filter
+    f = get_filter(user_id) if user_id else {}
+    tp = f.get("third_party")
+
     prefix = f"ads:{exchange}:{fiat}:{asset}:{trade_type}"
     buttons = sort_buttons(f"sort_ads:{exchange}:{fiat}:{asset}:{trade_type}", sort)
 
+    # Строка 1: платёжный метод + сумма
     buttons.append([
         InlineKeyboardButton(
-            text="🔍 Фильтры",
+            text="🔍 Метод оплаты",
             callback_data=f"filterpay:{exchange}:{fiat}:{asset}:{trade_type}:{sort}",
         ),
         InlineKeyboardButton(
             text="💰 Мин. сумма",
             callback_data=f"filteramt:{exchange}:{fiat}:{asset}:{trade_type}:{sort}",
+        ),
+    ])
+
+    # Строка 2: фильтр 3-е лица (с подсветкой активного)
+    tp_back = f"{exchange}:{fiat}:{asset}:{trade_type}:{sort}"
+    if tp == "yes":
+        tp_btn_text = "✅ 3-е лица  ●"
+    elif tp == "no":
+        tp_btn_text = "❌ без 3-х лиц  ●"
+    else:
+        tp_btn_text = "👥 3-е лица"
+    buttons.append([
+        InlineKeyboardButton(
+            text=tp_btn_text,
+            callback_data=f"filterthirdparty:{tp_back}",
+        ),
+        InlineKeyboardButton(
+            text="✖️ Сбросить фильтры",
+            callback_data=f"filterclear:{prefix}:{sort}",
         ),
     ])
 

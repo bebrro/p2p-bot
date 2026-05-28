@@ -1,6 +1,6 @@
 from config import PAYMENT_LABELS
 
-# Хранилище фильтров: {user_id: {"pay": "KaspiBank", "min_amount": 5000}}
+# Хранилище фильтров: {user_id: {"pay": "KaspiBank", "min_amount": 5000, "third_party": "yes"|"no"}}
 _filters: dict[int, dict] = {}
 
 
@@ -28,4 +28,8 @@ def filter_summary(user_id: int) -> str:
         parts.append(f"💳 {PAYMENT_LABELS.get(f['pay'], f['pay'])}")
     if f.get("min_amount"):
         parts.append(f"💰 от {f['min_amount']:,.0f}")
+    if f.get("third_party") == "yes":
+        parts.append("✅ 3-е лица")
+    elif f.get("third_party") == "no":
+        parts.append("❌ без 3-х лиц")
     return "  |  ".join(parts) if parts else ""

@@ -81,6 +81,20 @@ async def fetch_ads(exchange: str, asset: str, fiat: str, trade_type: str, rows:
     if user_id:
         ads = [a for a in ads if not is_blacklisted(user_id, a["nickname"])]
 
+    # ── Умный фильтр описаний (3-е лица) ──────────────────────────────────────
+    tp_filter = f.get("third_party") if user_id else None
+    if tp_filter and ads:
+        from utils.desc_parser import parse_description
+        filtered = []
+        for ad in ads:
+            info = parse_description(ad.get("description", ""))
+            if tp_filter == "yes" and info["third_party"] is False:
+                continue  # явно написал "нет третьих лиц" — скрываем
+            if tp_filter == "no" and info["third_party"] is True:
+                continue  # явно написал "принимаю третьих" — скрываем
+            filtered.append(ad)
+        ads = filtered
+
     return ads
 
 
@@ -150,6 +164,62 @@ def _amount_keyboard(fiat: str, back_cb: str) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text="❌ Любая сумма", callback_data=f"setamt:0:{back_cb}")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("filterthirdparty:"))
+async def show_thirdparty_filter(callback: CallbackQuery):
+    """Меню фильтра по третьим лицам."""
+    back_cb_parts = callback.data.split(":", 1)[1]   # exchange:fiat:asset:trade_type:sort
+    back_cb = f"ads:{back_cb_parts}"
+
+    uid = callback.from_user.id
+    cur = get_filter(uid).get("third_party")
+
+    await callback.message.edit_text(
+        "👥 <b>Фильтр: третьи лица</b>\n\n"
+        "Некоторые мерчанты пишут в описании:\n"
+        "• «принимаю от третьих лиц» — можно слать с чужой карты\n"
+        "• «только свой перевод» — нельзя с чужой карты\n\n"
+        "Бот читает описание и фильтрует автоматически.\n\n"
+        f"Текущий фильтр: <b>{'✅ Принимает 3-е лица' if cur == 'yes' else '❌ Без 3-х лиц' if cur == 'no' else 'Неважно'}</b>",
+        parse_mode="HTML",
+        reply_markup=_thirdparty_kb(back_cb_parts),
+    )
+
+
+def _thirdparty_kb(back_parts: str) -> InlineKeyboardMarkup:
+    back_cb = f"ads:{back_parts}"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Принимает 3-е лица", callback_data=f"setthirdparty:yes:{back_parts}"),
+        ],
+        [
+            InlineKeyboardButton(text="❌ Только свой перевод", callback_data=f"setthirdparty:no:{back_parts}"),
+        ],
+        [
+            InlineKeyboardButton(text="🔄 Неважно (сбросить)", callback_data=f"setthirdparty:off:{back_parts}"),
+        ],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_cb)],
+    ])
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("setthirdparty:"))
+async def set_thirdparty(callback: CallbackQuery):
+    parts    = callback.data.split(":", 2)
+    val      = parts[1]   # yes / no / off
+    back_parts = parts[2]
+
+    uid = callback.from_user.id
+    if val == "off":
+        clear_filter(uid, "third_party")
+        await callback.answer("🔄 Фильтр сброшен")
+    else:
+        set_filter(uid, "third_party", val)
+        label = "✅ Только с 3-ми лицами" if val == "yes" else "❌ Только свой перевод"
+        await callback.answer(label)
+
+    callback.data = f"ads:{back_parts}"
+    await show_ads(callback)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("filterpay:"))
@@ -262,7 +332,8 @@ async def show_ads(callback: CallbackQuery):
 
     await callback.message.edit_text(
         text,
-        reply_markup=ads_list_menu(exchange, fiat, asset, trade_type, sort, ads),
+        reply_markup=ads_list_menu(exchange, fiat, asset, trade_type, sort, ads,
+                                   user_id=callback.from_user.id),
     )
 
 
@@ -325,7 +396,19 @@ async def copy_description(callback: CallbackQuery):
     if not desc:
         await callback.answer("ℹ️ У этого объявления нет описания.", show_alert=True)
         return
-    await callback.message.answer(f"📋 Описание #{index + 1}:\n\n{desc}")
+
+    from utils.desc_parser import parse_description
+    info   = parse_description(desc)
+    flags  = info["flags"]
+
+    flags_block = ""
+    if flags:
+        flags_block = "\n\n🏷 <b>Автоанализ:</b>\n" + "\n".join(f"  • {f}" for f in flags)
+
+    await callback.message.answer(
+        f"📋 <b>Описание #{index + 1}:</b>\n\n{desc}{flags_block}",
+        parse_mode="HTML",
+    )
     await callback.answer("✅ Отправлено выше")
 
 
