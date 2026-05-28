@@ -13,7 +13,7 @@ GEMINI_URL = (
 )
 
 
-async def ask(prompt: str, temperature: float = 0.2, max_tokens: int = 700) -> str:
+async def ask(prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> str:
     """
     Отправляет prompt в Gemini Flash, возвращает текст ответа.
     При ошибке возвращает строку начинающуюся с '❌'.

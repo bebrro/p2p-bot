@@ -210,7 +210,7 @@ async def ai_go(callback: CallbackQuery):
         return
 
     # Паттерны из истории
-    hist     = list(get_history(exchange, fiat, asset))
+    hist     = await get_history(exchange, fiat, asset)
     patterns = _compute_patterns(hist) if len(hist) >= 10 else None
 
     # Строим промпт и спрашиваем AI
