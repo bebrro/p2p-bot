@@ -12,6 +12,7 @@ from handlers import (
     blacklist, ad_schedule, export,
     whale_tracker, pattern_engine, ai_advisor,
     price_signal,
+    subscription, pnl,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -119,17 +120,20 @@ async def main():
 
     # ── Команды (кнопка ☰ рядом с полем ввода) ────────────────────────────
     await bot.set_my_commands([
-        BotCommand(command="start",  description="📱 Главное меню"),
-        BotCommand(command="p2p",    description="📊 P2P курсы"),
-        BotCommand(command="calc",   description="🧮 Калькулятор прибыли"),
-        BotCommand(command="whale",  description="🐋 Whale Tracker"),
-        BotCommand(command="ai",     description="🤖 AI Советник"),
+        BotCommand(command="start",     description="📱 Главное меню"),
+        BotCommand(command="p2p",       description="📊 P2P курсы"),
+        BotCommand(command="calc",      description="🧮 Калькулятор прибыли"),
+        BotCommand(command="whale",     description="🐋 Whale Tracker"),
+        BotCommand(command="ai",        description="🤖 AI Советник"),
+        BotCommand(command="pnl",       description="📊 P&L трекер (Pro/Team)"),
+        BotCommand(command="subscribe", description="⭐ Подписка и тарифы"),
         BotCommand(command="alerts",    description="🔔 Алерты на спред"),
         BotCommand(command="stopwhale", description="🛑 Экстренно остановить Whale Tracker"),
     ])
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     for r in [
+        subscription.router, pnl.router,           # монетизация и P&L первыми
         start.router, maker.router, tracker.router,
         position_monitor.router, calculator.router,
         multipair.router, price_history.router,

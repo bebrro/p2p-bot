@@ -25,9 +25,11 @@ from handlers.account_manager import (
     get_account_credentials, upsert_account_memory, remove_account_memory,
 )
 from handlers.auto_reprice import add_rule_memory, remove_rule_memory
+from handlers.pnl import calc_pnl
 from utils.spread import calc_spread
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
+from utils.subscription import get_plan_key, get_limits, format_expires
 
 logger     = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -402,9 +404,14 @@ async def api_trackers_add(request: web.Request) -> web.Response:
         if not uid or not nickname:
             return web.json_response({"error": "uid and nickname required"}, status=400)
 
+        sub      = await db.subscription_get(uid)
+        plan_key = get_plan_key(sub)
+        limits   = get_limits(plan_key)
         existing = await db.trackers_get(uid)
-        if len(existing) >= 5:
-            return web.json_response({"error": "Максимум 5 трекеров"}, status=400)
+        if len(existing) >= limits["trackers"]:
+            return web.json_response({
+                "error": f"Лимит трекеров для плана {plan_key}: {limits['trackers']}. Обнови подписку /subscribe"
+            }, status=403)
 
         ads = await _fetch_trader_ads(exchange, fiat, asset, nickname)
         if not ads["buy"] and not ads["sell"]:
@@ -468,6 +475,14 @@ async def api_alerts_add(request: web.Request) -> web.Response:
         pay       = body.get("pay", "")
         if not uid or threshold <= 0:
             return web.json_response({"error": "uid and threshold required"}, status=400)
+        sub      = await db.subscription_get(uid)
+        plan_key = get_plan_key(sub)
+        limits   = get_limits(plan_key)
+        existing_alerts = await db.alerts_get(uid)
+        if len(existing_alerts) >= limits["alerts"]:
+            return web.json_response({
+                "error": f"Лимит алертов ({limits['alerts']}) для плана {plan_key}. Обнови подписку /subscribe"
+            }, status=403)
         await db.alerts_add(uid, exchange, fiat, asset, threshold, direction, pay)
         return web.json_response({"ok": True})
     except KeyError as e:
@@ -748,6 +763,16 @@ async def api_repricer_add(request: web.Request) -> web.Response:
         if not uid or not ad_id or min_price <= 0 or max_price <= min_price:
             return web.json_response({"error": "Проверь параметры"}, status=400)
 
+        # Проверяем лимит репрайсера по плану
+        sub      = await db.subscription_get(uid)
+        plan_key = get_plan_key(sub)
+        limits   = get_limits(plan_key)
+        existing_rules = await db.repricer_get(uid)
+        if len(existing_rules) >= limits["repricer_rules"]:
+            return web.json_response({
+                "error": f"Лимит правил ({limits['repricer_rules']}) для плана {plan_key}. Обнови подписку /subscribe"
+            }, status=403)
+
         api_key, api_secret, extra = get_account_credentials(uid, exchange)
         if not api_key:
             return web.json_response({"error": f"Нет активного аккаунта {exchange}"}, status=404)
@@ -808,6 +833,54 @@ async def api_repricer_delete(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# ─── Subscription & P&L API ───────────────────────────────────────────────────
+
+async def api_subscription(request: web.Request) -> web.Response:
+    """GET /api/user/subscription?uid=xxx  — текущий план пользователя."""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        sub      = await db.subscription_get(uid)
+        plan_key = get_plan_key(sub)
+        expires  = format_expires(sub) if sub else ""
+        expires_iso = None
+        if sub and sub.get("expires_at"):
+            ea = sub["expires_at"]
+            expires_iso = ea.isoformat() if hasattr(ea, "isoformat") else str(ea)
+        return web.json_response({
+            "plan":              plan_key,
+            "expires_at":        expires_iso,
+            "expires_formatted": expires,
+        })
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_pnl(request: web.Request) -> web.Response:
+    """GET /api/user/pnl?uid=xxx  — P&L статистика (только Pro/Team)."""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        sub      = await db.subscription_get(uid)
+        plan_key = get_plan_key(sub)
+        if plan_key == "free":
+            return web.json_response({"plan": "free", "has_access": False, "stats": None})
+
+        api_key, api_secret, _ = get_account_credentials(uid, "bybit")
+        if not api_key:
+            return web.json_response({"error": "No active Bybit account"}, status=404)
+
+        from api import bybit_auth as _ba
+        orders = await _ba.get_p2p_orders(api_key, api_secret, status="50")
+        stats  = calc_pnl(orders) if orders else None
+        return web.json_response({"plan": plan_key, "has_access": True, "stats": stats})
+    except Exception as e:
+        logger.error(f"api_pnl uid={uid}: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -850,6 +923,9 @@ def create_app() -> web.Application:
     app.router.add_delete("/api/user/repricer/{id}",                    api_repricer_delete)
     app.router.add_post("/api/ai",                                       api_ai)
     app.router.add_post("/api/chat",                                     api_chat)
+    # Subscription & P&L
+    app.router.add_get("/api/user/subscription",                         api_subscription)
+    app.router.add_get("/api/user/pnl",                                  api_pnl)
 
     # Root → index.html
     app.router.add_get("/",           index_handler)

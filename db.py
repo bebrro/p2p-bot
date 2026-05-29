@@ -99,6 +99,14 @@ async def _create_tables() -> None:
             UNIQUE(user_id, exchange, fiat, asset, nickname)
         );
 
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            user_id    BIGINT PRIMARY KEY,
+            plan       VARCHAR(20) DEFAULT 'free',
+            expires_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS exchange_accounts (
             id          SERIAL PRIMARY KEY,
             user_id     BIGINT NOT NULL,
@@ -570,3 +578,37 @@ async def repricer_get_all_enabled() -> list[dict]:
             "FROM repricer_rules WHERE enabled=TRUE ORDER BY user_id,id"
         )
     return [dict(r) for r in rows]
+
+
+# ── Subscriptions ──────────────────────────────────────────────────────────────
+
+async def subscription_get(user_id: int) -> dict | None:
+    """Возвращает подписку пользователя или None если нет."""
+    if not ok():
+        return None
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT plan, expires_at FROM subscriptions WHERE user_id=$1", user_id
+        )
+    return dict(row) if row else None
+
+
+async def subscription_set(user_id: int, plan: str, expires_at=None) -> None:
+    """Создаёт или обновляет подписку."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute("""
+            INSERT INTO subscriptions(user_id, plan, expires_at, updated_at)
+            VALUES($1, $2, $3, NOW())
+            ON CONFLICT(user_id) DO UPDATE SET plan=$2, expires_at=$3, updated_at=NOW()
+        """, user_id, plan, expires_at)
+
+
+async def subscription_get_all() -> dict[int, dict]:
+    """Все подписки всех пользователей."""
+    if not ok():
+        return {}
+    async with _pool.acquire() as c:
+        rows = await c.fetch("SELECT user_id, plan, expires_at FROM subscriptions")
+    return {r["user_id"]: dict(r) for r in rows}

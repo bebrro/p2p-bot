@@ -8,6 +8,10 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")  # Fernet key для шифро
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")  # https://aistudio.google.com/app/apikey
 WEBAPP_URL     = os.getenv("WEBAPP_URL",     "")  # HTTPS URL Mini App (ngrok / VPS)
 WEBAPP_PORT    = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8765")))
+# Comma-separated admin Telegram user IDs for /give_pro command
+ADMIN_IDS: list[int] = [
+    int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()
+]
 
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]

@@ -314,6 +314,22 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .rp-badge.bybit{background:rgba(255,140,0,.2);color:#faa61a}
 .rp-badge.okx{background:rgba(44,165,224,.15);color:#2ca5e0}
 
+/* ── Subscription & P&L ──────────────────────────────── */
+.sub-plan-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.sub-plan-badge.free{background:rgba(255,255,255,.1);color:var(--hint)}
+.sub-plan-badge.pro{background:rgba(250,166,26,.2);color:var(--gold)}
+.sub-plan-badge.team{background:rgba(67,181,129,.2);color:var(--green)}
+.sub-upgrade-btn{width:100%;padding:10px;background:linear-gradient(135deg,var(--btn),#4fc3f7);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;font-family:inherit;transition:opacity .15s;box-shadow:0 2px 8px rgba(44,165,224,.3)}
+.sub-upgrade-btn:active{opacity:.8}
+.pnl-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.pnl-card{background:var(--bg);border-radius:8px;padding:9px 11px;text-align:center}
+.pnl-card-lbl{font-size:10px;color:var(--hint);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.pnl-card-val{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.pnl-card-val.green{color:var(--green)}.pnl-card-val.red{color:var(--red)}.pnl-card-val.gold{color:var(--gold)}
+.pnl-profit-card{background:var(--bg);border-radius:8px;padding:9px 11px;text-align:center;margin-top:6px}
+.pnl-locked{text-align:center;padding:16px;color:var(--hint);font-size:12px;line-height:1.6}
+.pnl-locked .star-icon{font-size:28px;margin-bottom:8px;display:block}
+
 /* ── Bottom nav ───────────────────────────────────────────── */
 .bottom-nav{display:flex;background:var(--bg2);border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;height:var(--nav-h);position:fixed;bottom:0;left:0;right:0;z-index:100;padding-bottom:env(safe-area-inset-bottom,0px)}
 .nav-btn{flex:1;background:none;border:none;color:var(--hint);font-size:8.5px;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:color .15s;letter-spacing:.1px}
@@ -561,9 +577,40 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
   <div class="settings-section">
+    <div class="settings-section-title">⭐ Подписка</div>
+    <div class="settings-card" id="subCard">
+      <div class="settings-row">
+        <div><div class="settings-row-label">Текущий план</div><div class="settings-row-sub" id="subExpiry"></div></div>
+        <span id="subPlanBadge" class="sub-plan-badge free">—</span>
+      </div>
+    </div>
+    <!-- P&L Stats (видны только Pro/Team) -->
+    <div id="subPnlSection" style="display:none;margin-top:8px">
+      <div class="settings-section-title" style="margin-bottom:6px">📊 P&L (последние 20 сделок)</div>
+      <div class="pnl-grid">
+        <div class="pnl-card"><div class="pnl-card-lbl">Сделок</div><div class="pnl-card-val" id="pnlTotal">—</div></div>
+        <div class="pnl-card"><div class="pnl-card-lbl">Маржа</div><div class="pnl-card-val gold" id="pnlMargin">—</div></div>
+        <div class="pnl-card"><div class="pnl-card-lbl">Ср. покупка</div><div class="pnl-card-val green" id="pnlBuy">—</div></div>
+        <div class="pnl-card"><div class="pnl-card-lbl">Ср. продажа</div><div class="pnl-card-val red" id="pnlSell">—</div></div>
+      </div>
+      <div class="pnl-profit-card">
+        <div class="pnl-card-lbl">Расч. прибыль</div>
+        <div class="pnl-card-val" id="pnlProfit" style="font-size:18px">—</div>
+      </div>
+    </div>
+    <!-- Заглушка для Free -->
+    <div id="subLockedHint" class="pnl-locked" style="display:none">
+      <span class="star-icon">⭐</span>
+      P&L трекер, расширенные лимиты и Smart Арбитраж доступны в Pro / Team.
+    </div>
+    <button class="sub-upgrade-btn" id="subUpgradeBtn" onclick="openSubscribeInBot()" style="display:none">
+      ⭐ Оформить подписку через бот
+    </button>
+  </div>
+  <div class="settings-section">
     <div class="settings-section-title">О приложении</div>
     <div class="settings-card">
-      <div class="settings-row"><span class="settings-row-label">Версия</span><span style="font-size:12px;color:var(--hint)">2.1.0</span></div>
+      <div class="settings-row"><span class="settings-row-label">Версия</span><span style="font-size:12px;color:var(--hint)">2.2.0</span></div>
       <div class="settings-row"><span class="settings-row-label">Биржи</span><span style="font-size:12px;color:var(--hint)">Binance · Bybit · OKX · Wallet</span></div>
       <div class="settings-row"><span class="settings-row-label">Пары</span><span style="font-size:12px;color:var(--hint)">USDT · BTC · ETH</span></div>
     </div>
@@ -731,7 +778,7 @@ function switchTab(tab,btn){
   if(tab==='chart')    loadChart();
   if(tab==='spread')   loadCompare();
   if(tab==='monitor')  { const sub=document.querySelector('.sub-btn[data-sub="'+currentSub+'"]'); switchMonitor(currentSub,sub); }
-  if(tab==='settings') initSettingsTab();
+  if(tab==='settings'){ initSettingsTab(); loadSubscription(); }
   if(tab==='ai')       initChat();
 }
 
@@ -1557,6 +1604,67 @@ function initChat(){ if(chatInited)return; chatInited=true; sendChat('Приве
 function resetChat(){ chatHistory=[];chatInited=false; document.getElementById('chatMessages').innerHTML=''; if(S.tab==='ai')initChat(); }
 document.getElementById('chatInput').addEventListener('input',function(){this.style.height='';this.style.height=Math.min(this.scrollHeight,100)+'px';});
 document.getElementById('chatInput').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}});
+
+/* ══════════════════════════════════════════════════════════
+   SUBSCRIPTION & P&L
+══════════════════════════════════════════════════════════ */
+async function loadSubscription(){
+  const uid=getUID(); if(!uid)return;
+  try{
+    const r=await fetch(`/api/user/subscription?uid=${uid}`);
+    const data=await r.json(); if(data.error)return;
+
+    const badge=document.getElementById('subPlanBadge');
+    const expEl=document.getElementById('subExpiry');
+    const pnlSec=document.getElementById('subPnlSection');
+    const lockedHint=document.getElementById('subLockedHint');
+    const upgradeBtn=document.getElementById('subUpgradeBtn');
+    if(!badge)return;
+
+    const planNames={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Team'};
+    badge.textContent=planNames[data.plan]||data.plan;
+    badge.className='sub-plan-badge '+(data.plan||'free');
+
+    if(data.expires_formatted) expEl.textContent=data.expires_formatted;
+
+    if(data.plan!=='free'){
+      pnlSec.style.display='block';
+      loadPnlData(uid);
+    } else {
+      lockedHint.style.display='block';
+      upgradeBtn.style.display='block';
+    }
+  }catch(e){console.error('sub:',e);}
+}
+
+async function loadPnlData(uid){
+  if(!uid)return;
+  try{
+    const r=await fetch(`/api/user/pnl?uid=${uid}`);
+    const data=await r.json();
+    if(data.error||!data.stats)return;
+    const s=data.stats;
+    const sign=s.est_profit>=0?'+':'';
+
+    const el=id=>document.getElementById(id);
+    if(el('pnlTotal'))  el('pnlTotal').textContent=s.total||0;
+    if(el('pnlMargin')) el('pnlMargin').textContent=s.avg_buy?(sign+s.margin_pct.toFixed(2)+'%'):'—';
+    if(el('pnlBuy'))    el('pnlBuy').textContent=s.avg_buy?fmt(s.avg_buy):'—';
+    if(el('pnlSell'))   el('pnlSell').textContent=s.avg_sell?fmt(s.avg_sell):'—';
+    const profEl=el('pnlProfit');
+    if(profEl&&s.est_profit!=null){
+      profEl.textContent=sign+fmt(s.est_profit);
+      profEl.className='pnl-card-val '+(s.est_profit>=0?'green':'red');
+      profEl.style.fontSize='18px';
+    }
+  }catch(e){console.error('pnl:',e);}
+}
+
+function openSubscribeInBot(){
+  const botName=tg?.initDataUnsafe?.bot?.username||'';
+  if(tg&&botName) tg.openTelegramLink(`https://t.me/${botName}?start=subscribe`);
+  else if(tg) tg.close();
+}
 
 /* ══════════════════════════════════════════════════════════
    BOOT
