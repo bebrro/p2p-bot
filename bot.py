@@ -110,7 +110,9 @@ async def main():
     # ── База данных ────────────────────────────────────────────────────────────
     await db.init()
     if db.ok():
-        await blacklist.load_from_db()   # загружаем ЧС в память (is_blacklisted sync)
+        await blacklist.load_from_db()          # ЧС в память
+        await account_manager.load_from_db()    # API-аккаунты (Bybit + OKX)
+        await auto_reprice.load_from_db()       # Правила репрайсера
 
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=MemoryStorage())

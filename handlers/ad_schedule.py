@@ -71,7 +71,7 @@ async def sch_list(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "sch:add:start")
 async def sch_add_start(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
-    api_key, _ = get_account_credentials(uid)
+    api_key, _, _extra = get_account_credentials(uid)
     if not api_key:
         await callback.message.edit_text(
             "❌ Сначала добавь API ключ в 🔑 Аккаунты",
@@ -132,7 +132,7 @@ async def sch_got_times(message: Message, state: FSMContext):
     await state.clear()
 
     uid     = message.from_user.id
-    api_key, api_secret = get_account_credentials(uid)
+    api_key, api_secret, _ = get_account_credentials(uid)
 
     # Пытаемся получить название объявления
     label = data["item_id"]
@@ -229,7 +229,7 @@ async def run_schedule(bot) -> None:
                 if _last_state.get(state_key) == new_state:
                     continue   # уже в нужном состоянии, не трогаем
 
-                api_key, api_secret = get_account_credentials(user_id)
+                api_key, api_secret, _ = get_account_credentials(user_id)
                 if not api_key:
                     continue
 

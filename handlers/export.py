@@ -106,7 +106,7 @@ def _build_csv(orders: list[dict]) -> bytes:
 @router.callback_query(lambda c: c.data == "export:start")
 async def export_start(callback: CallbackQuery):
     uid = callback.from_user.id
-    api_key, _ = get_account_credentials(uid)
+    api_key, _, _extra = get_account_credentials(uid)
     if not api_key:
         await callback.message.edit_text(
             "📥 <b>Экспорт сделок</b>\n\n"
@@ -131,7 +131,7 @@ async def export_start(callback: CallbackQuery):
 async def export_csv(callback: CallbackQuery):
     period  = callback.data.split(":")[2]
     uid     = callback.from_user.id
-    api_key, api_secret = get_account_credentials(uid)
+    api_key, api_secret, _ = get_account_credentials(uid)
     if not api_key:
         await callback.answer("❌ Нет активного API ключа", show_alert=True)
         return

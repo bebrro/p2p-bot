@@ -98,6 +98,37 @@ async def _create_tables() -> None:
             created_at       TIMESTAMPTZ DEFAULT NOW(),
             UNIQUE(user_id, exchange, fiat, asset, nickname)
         );
+
+        CREATE TABLE IF NOT EXISTS exchange_accounts (
+            id          SERIAL PRIMARY KEY,
+            user_id     BIGINT NOT NULL,
+            exchange    VARCHAR(20) NOT NULL DEFAULT 'bybit',
+            label       TEXT NOT NULL,
+            api_key     TEXT NOT NULL,
+            api_secret  TEXT NOT NULL,
+            extra       TEXT DEFAULT '',
+            nickname    TEXT DEFAULT '',
+            is_active   BOOLEAN DEFAULT FALSE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS repricer_rules (
+            id            SERIAL PRIMARY KEY,
+            user_id       BIGINT NOT NULL,
+            exchange      VARCHAR(20) NOT NULL DEFAULT 'bybit',
+            ad_id         TEXT NOT NULL,
+            fiat          VARCHAR(10) NOT NULL,
+            asset         VARCHAR(10) NOT NULL,
+            side          VARCHAR(10) NOT NULL,
+            target_pos    INT DEFAULT 1,
+            delta         FLOAT DEFAULT 0.5,
+            min_price     FLOAT NOT NULL,
+            max_price     FLOAT NOT NULL,
+            current_price FLOAT,
+            enabled       BOOLEAN DEFAULT TRUE,
+            created_at    TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, exchange, ad_id)
+        );
         """)
         # Migrations — idempotent, safe to run on every startup
         await c.execute(
@@ -399,3 +430,143 @@ def _tracker_row(r, include_uid: bool = False) -> dict:
     if not include_uid:
         d.pop("user_id", None)
     return d
+
+
+# ── Exchange accounts ──────────────────────────────────────────────────────────
+
+async def accounts_get(user_id: int) -> list[dict]:
+    """Все аккаунты пользователя."""
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id,exchange,label,api_key,api_secret,extra,nickname,is_active "
+            "FROM exchange_accounts WHERE user_id=$1 ORDER BY id",
+            user_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def accounts_add(user_id: int, exchange: str, label: str,
+                        api_key: str, api_secret: str,
+                        extra: str = "", nickname: str = "") -> int:
+    """Добавляет аккаунт, возвращает id."""
+    if not ok():
+        return -1
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "INSERT INTO exchange_accounts"
+            "(user_id,exchange,label,api_key,api_secret,extra,nickname,is_active) "
+            "VALUES($1,$2,$3,$4,$5,$6,$7,FALSE) RETURNING id",
+            user_id, exchange, label, api_key, api_secret, extra, nickname,
+        )
+    return row["id"]
+
+
+async def accounts_delete(user_id: int, account_id: int) -> None:
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "DELETE FROM exchange_accounts WHERE user_id=$1 AND id=$2",
+            user_id, account_id,
+        )
+
+
+async def accounts_set_active(user_id: int, exchange: str, account_id: int) -> None:
+    """Активирует один аккаунт (для данной биржи), деактивирует остальные."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "UPDATE exchange_accounts SET is_active=FALSE "
+            "WHERE user_id=$1 AND exchange=$2",
+            user_id, exchange,
+        )
+        await c.execute(
+            "UPDATE exchange_accounts SET is_active=TRUE "
+            "WHERE user_id=$1 AND id=$2",
+            user_id, account_id,
+        )
+
+
+async def accounts_get_all() -> list[dict]:
+    """Все аккаунты всех пользователей — для загрузки в память при старте."""
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id,user_id,exchange,label,api_key,api_secret,extra,nickname,is_active "
+            "FROM exchange_accounts ORDER BY user_id,id"
+        )
+    return [dict(r) for r in rows]
+
+
+# ── Repricer rules ─────────────────────────────────────────────────────────────
+
+async def repricer_get(user_id: int) -> list[dict]:
+    """Все правила переценки пользователя."""
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id,exchange,ad_id,fiat,asset,side,target_pos,delta,"
+            "min_price,max_price,current_price,enabled "
+            "FROM repricer_rules WHERE user_id=$1 ORDER BY id",
+            user_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def repricer_add(user_id: int, exchange: str, ad_id: str,
+                        fiat: str, asset: str, side: str,
+                        target_pos: int, delta: float,
+                        min_price: float, max_price: float,
+                        current_price: float | None = None) -> int:
+    """Добавляет правило, возвращает id."""
+    if not ok():
+        return -1
+    async with _pool.acquire() as c:
+        row = await c.fetchrow("""
+            INSERT INTO repricer_rules
+            (user_id,exchange,ad_id,fiat,asset,side,target_pos,delta,min_price,max_price,current_price,enabled)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)
+            ON CONFLICT(user_id,exchange,ad_id) DO UPDATE SET
+                target_pos=$7, delta=$8, min_price=$9, max_price=$10, enabled=TRUE
+            RETURNING id
+        """, user_id, exchange, ad_id, fiat, asset, side,
+             target_pos, delta, min_price, max_price, current_price)
+    return row["id"]
+
+
+async def repricer_delete(user_id: int, rule_id: int) -> None:
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "DELETE FROM repricer_rules WHERE user_id=$1 AND id=$2",
+            user_id, rule_id,
+        )
+
+
+async def repricer_update_price(rule_id: int, current_price: float) -> None:
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "UPDATE repricer_rules SET current_price=$1 WHERE id=$2",
+            current_price, rule_id,
+        )
+
+
+async def repricer_get_all_enabled() -> list[dict]:
+    """Все включённые правила всех пользователей для фонового цикла."""
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id,user_id,exchange,ad_id,fiat,asset,side,target_pos,delta,"
+            "min_price,max_price,current_price "
+            "FROM repricer_rules WHERE enabled=TRUE ORDER BY user_id,id"
+        )
+    return [dict(r) for r in rows]

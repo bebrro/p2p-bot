@@ -1,66 +1,106 @@
 """
-Управление API аккаунтами Bybit.
-Хранит ключи в зашифрованном виде (AES через Fernet).
+Управление API аккаунтами (Bybit и OKX).
+Хранит зашифрованные ключи в БД; при старте загружает в память.
 
 Безопасность:
-• Ключи шифруются сразу при вводе и никогда не логируются
-• Сообщения с ключами удаляются из чата
-• При каждом API-вызове ключ расшифровывается только в памяти
-• Пользователь должен создавать ключи БЕЗ права вывода средств
+• Ключи шифруются через AES (Fernet) перед записью в БД
+• Сообщения с ключами удаляются из чата сразу
+• Ключи никогда не попадают в логи
+• Пользователь создаёт ключи БЕЗ права вывода средств
 """
+import logging
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from api import bybit_auth
+from api import bybit_auth, okx_auth
 from utils.encryption import encrypt, decrypt
+import db
 
+logger = logging.getLogger(__name__)
 router = Router()
 
-# {user_id: [{"label", "api_key"(enc), "api_secret"(enc), "nickname", "active"}]}
+# {user_id: [{"id", "exchange", "label", "api_key"(enc), "api_secret"(enc),
+#             "extra"(enc), "nickname", "active"}]}
 _accounts: dict[int, list] = {}
-MAX_ACCOUNTS = 5
+MAX_ACCOUNTS = 5   # per user total (all exchanges)
+
+EXCHANGE_NAMES = {"bybit": "🟠 Bybit", "okx": "🔵 OKX"}
 
 
 class AccStates(StatesGroup):
-    waiting_label  = State()
-    waiting_key    = State()
-    waiting_secret = State()
+    waiting_exchange = State()   # не используется напрямую — заменён inline
+    waiting_label    = State()
+    waiting_key      = State()
+    waiting_secret   = State()
+    waiting_extra    = State()   # OKX passphrase
 
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# ─── DB-sync helpers ──────────────────────────────────────────────────────────
 
-def get_active_account(user_id: int) -> dict | None:
+async def load_from_db() -> None:
+    """Вызвать один раз при старте из bot.py."""
+    rows = await db.accounts_get_all()
+    for r in rows:
+        uid = r["user_id"]
+        if uid not in _accounts:
+            _accounts[uid] = []
+        _accounts[uid].append({
+            "id":       r["id"],
+            "exchange": r["exchange"],
+            "label":    r["label"],
+            "api_key":  r["api_key"],
+            "api_secret": r["api_secret"],
+            "extra":    r.get("extra", ""),
+            "nickname": r.get("nickname", ""),
+            "active":   r["is_active"],
+        })
+    logger.info(f"Загружено {len(rows)} аккаунтов из БД")
+
+
+# ─── Public helpers ────────────────────────────────────────────────────────────
+
+def get_active_account(user_id: int, exchange: str = "bybit") -> dict | None:
     for acc in _accounts.get(user_id, []):
-        if acc.get("active"):
+        if acc.get("active") and acc.get("exchange", "bybit") == exchange:
             return acc
     return None
 
 
-def get_account_credentials(user_id: int) -> tuple[str | None, str | None]:
-    """Возвращает (api_key, api_secret) активного аккаунта или (None, None)."""
-    acc = get_active_account(user_id)
+def get_account_credentials(user_id: int,
+                             exchange: str = "bybit") -> tuple[str | None, str | None, str | None]:
+    """
+    Возвращает (api_key, api_secret, extra) активного аккаунта для биржи.
+    extra = passphrase для OKX, '' для Bybit.
+    """
+    acc = get_active_account(user_id, exchange)
     if not acc:
-        return None, None
+        return None, None, None
     try:
-        return decrypt(acc["api_key"]), decrypt(acc["api_secret"])
+        extra = decrypt(acc["extra"]) if acc.get("extra") else ""
+        return decrypt(acc["api_key"]), decrypt(acc["api_secret"]), extra
     except Exception:
-        return None, None
+        return None, None, None
+
+
+def _all_accounts(user_id: int) -> list:
+    return _accounts.get(user_id, [])
 
 
 def _accounts_kb(user_id: int) -> InlineKeyboardMarkup:
-    accounts = _accounts.get(user_id, [])
-    buttons  = []
-    for i, acc in enumerate(accounts):
-        mark = "✅ " if acc.get("active") else ""
+    accs    = _all_accounts(user_id)
+    buttons = []
+    for i, acc in enumerate(accs):
+        ex_name = EXCHANGE_NAMES.get(acc.get("exchange", "bybit"), acc.get("exchange", ""))
+        mark    = "✅ " if acc.get("active") else ""
         buttons.append([
             InlineKeyboardButton(
-                text=f"{mark}🔑 {acc['label']} ({acc.get('nickname', '?')})",
+                text=f"{mark}{ex_name} {acc['label']} ({acc.get('nickname', '?')})",
                 callback_data=f"acc:select:{i}",
             ),
             InlineKeyboardButton(text="🗑", callback_data=f"acc:del:{i}"),
         ])
-    if len(accounts) < MAX_ACCOUNTS:
+    if len(accs) < MAX_ACCOUNTS:
         buttons.append([InlineKeyboardButton(text="➕ Добавить аккаунт", callback_data="acc:add:start")])
     buttons.append([InlineKeyboardButton(text="ℹ️ Безопасность", callback_data="acc:security")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад",         callback_data="back:main")])
@@ -71,38 +111,43 @@ def _accounts_kb(user_id: int) -> InlineKeyboardMarkup:
 
 @router.callback_query(lambda c: c.data == "acc:list")
 async def acc_list(callback: CallbackQuery):
-    uid  = callback.from_user.id
-    accs = _accounts.get(uid, [])
-    active = get_active_account(uid)
-    text = (
-        "🔑 <b>API аккаунты Bybit</b>\n\n"
-        f"Аккаунтов: {len(accs)}/{MAX_ACCOUNTS}\n"
-        + (f"Активный: <b>{active['label']}</b> ({active.get('nickname','?')})\n" if active else "Нет активного аккаунта.\n")
-        + "\nНажми на аккаунт чтобы активировать, 🗑 — удалить."
+    uid    = callback.from_user.id
+    accs   = _all_accounts(uid)
+    bybit_active = get_active_account(uid, "bybit")
+    okx_active   = get_active_account(uid, "okx")
+
+    lines = [f"🔑 <b>API аккаунты</b>", f"Аккаунтов: {len(accs)}/{MAX_ACCOUNTS}"]
+    if bybit_active:
+        lines.append(f"Bybit активный: <b>{bybit_active['label']}</b>")
+    if okx_active:
+        lines.append(f"OKX активный: <b>{okx_active['label']}</b>")
+    if not bybit_active and not okx_active:
+        lines.append("Нет активных аккаунтов.")
+    lines.append("\nНажми на аккаунт — активировать, 🗑 — удалить.")
+
+    await callback.message.edit_text(
+        "\n".join(lines), reply_markup=_accounts_kb(uid), parse_mode="HTML"
     )
-    await callback.message.edit_text(text, reply_markup=_accounts_kb(uid), parse_mode="HTML")
 
 
 @router.callback_query(lambda c: c.data == "acc:security")
 async def acc_security(callback: CallbackQuery):
     await callback.message.edit_text(
-        "🔒 <b>Как мы защищаем твои ключи</b>\n\n"
-        "1️⃣ <b>Шифрование AES-128</b>\n"
-        "   Ключи хранятся только в зашифрованном виде.\n"
+        "🔒 <b>Безопасность API ключей</b>\n\n"
+        "1️⃣ <b>Шифрование AES-128 (Fernet)</b>\n"
+        "   Ключи хранятся только в зашифрованном виде в БД.\n"
         "   Расшифровка только в памяти при API-вызове.\n\n"
-        "2️⃣ <b>Немедленное удаление</b>\n"
-        "   Сообщения с ключами удаляются из чата сразу.\n\n"
+        "2️⃣ <b>Сообщения удаляются</b>\n"
+        "   Сообщения с ключами исчезают из чата сразу.\n\n"
         "3️⃣ <b>Нулевое логирование</b>\n"
         "   API ключи никогда не попадают в логи.\n\n"
         "4️⃣ <b>Минимальные права</b>\n"
-        "   Создавай ключ с правами только:\n"
-        "   ✅ P2P торговля / чтение\n"
-        "   ❌ БЕЗ вывода средств\n"
-        "   ❌ БЕЗ спотовой торговли\n\n"
+        "   <b>Bybit:</b> только ✅ P2P, без вывода\n"
+        "   <b>OKX:</b> только ✅ Trade (C2C), без вывода\n\n"
         "5️⃣ <b>IP-вайтлист (рекомендуется)</b>\n"
-        "   В настройках Bybit укажи IP сервера бота.\n\n"
-        "⚡ Даже если ключ утечёт — без права вывода\n"
-        "никто не сможет взять твои деньги.",
+        "   Укажи IP Railway-сервера в настройках ключа.\n\n"
+        "⚡ Без права вывода никто не заберёт средства\n"
+        "даже при утечке ключа.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="acc:list")]
         ]),
@@ -111,14 +156,33 @@ async def acc_security(callback: CallbackQuery):
 
 
 @router.callback_query(lambda c: c.data == "acc:add:start")
-async def acc_add_start(callback: CallbackQuery, state: FSMContext):
-    if len(_accounts.get(callback.from_user.id, [])) >= MAX_ACCOUNTS:
+async def acc_add_start(callback: CallbackQuery):
+    uid = callback.from_user.id
+    if len(_all_accounts(uid)) >= MAX_ACCOUNTS:
         await callback.answer(f"❌ Максимум {MAX_ACCOUNTS} аккаунтов", show_alert=True)
         return
-    await state.set_state(AccStates.waiting_label)
     await callback.message.edit_text(
-        "🔑 <b>Добавление аккаунта Bybit</b>\n\n"
-        "Шаг 1/3 — Введи название (например: <b>Основной</b> или <b>Работа</b>)",
+        "🔑 <b>Добавление аккаунта</b>\n\nВыбери биржу:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🟠 Bybit", callback_data="acc:add:bybit"),
+                InlineKeyboardButton(text="🔵 OKX",   callback_data="acc:add:okx"),
+            ],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="acc:list")],
+        ]),
+    )
+
+
+@router.callback_query(lambda c: c.data in ("acc:add:bybit", "acc:add:okx"))
+async def acc_add_exchange(callback: CallbackQuery, state: FSMContext):
+    exchange = callback.data.split(":")[-1]
+    await state.set_state(AccStates.waiting_label)
+    await state.update_data(exchange=exchange)
+    ex_name = "Bybit" if exchange == "bybit" else "OKX"
+    await callback.message.edit_text(
+        f"🔑 <b>Добавление {ex_name}</b>\n\n"
+        "Шаг 1/3 — Введи <b>название</b> (например: <code>Основной</code>)",
         parse_mode="HTML",
     )
 
@@ -126,13 +190,17 @@ async def acc_add_start(callback: CallbackQuery, state: FSMContext):
 @router.message(AccStates.waiting_label)
 async def acc_got_label(message: Message, state: FSMContext):
     await state.update_data(label=message.text.strip()[:30])
+    data    = await state.get_data()
+    exchange = data.get("exchange", "bybit")
     await state.set_state(AccStates.waiting_key)
     await message.answer(
-        "🔑 Шаг 2/3 — Введи <b>API Key</b>\n\n"
-        "Как создать ключ на Bybit:\n"
-        "Профиль → API → Создать ключ\n"
-        "Права: ✅ P2P,  ❌ без вывода\n\n"
-        "⚠️ Сообщение будет удалено сразу после отправки.",
+        f"🔑 Шаг 2/3 — Введи <b>API Key</b>\n\n"
+        + (
+            "Bybit: Профиль → API → Создать ключ → P2P ✅, вывод ❌\n"
+            if exchange == "bybit" else
+            "OKX: Профиль → API → Создать → Trade ✅, вывод ❌\n"
+        )
+        + "\n⚠️ Сообщение удалится сразу после отправки.",
         parse_mode="HTML",
     )
 
@@ -148,7 +216,7 @@ async def acc_got_key(message: Message, state: FSMContext):
     await state.set_state(AccStates.waiting_secret)
     await message.answer(
         "🔑 Шаг 3/3 — Введи <b>API Secret</b>\n\n"
-        "⚠️ Сообщение будет удалено сразу после отправки.",
+        "⚠️ Сообщение удалится сразу после отправки.",
         parse_mode="HTML",
     )
 
@@ -160,47 +228,97 @@ async def acc_got_secret(message: Message, state: FSMContext):
         await message.delete()
     except Exception:
         pass
+    data     = await state.get_data()
+    exchange = data.get("exchange", "bybit")
+    await state.update_data(raw_secret=raw_secret)
 
-    data = await state.get_data()
+    if exchange == "okx":
+        # OKX требует passphrase
+        await state.set_state(AccStates.waiting_extra)
+        await message.answer(
+            "🔑 Доп. шаг — Введи <b>Passphrase</b>\n\n"
+            "Это пароль который ты задал при создании API ключа на OKX.\n"
+            "⚠️ Сообщение удалится сразу после отправки.",
+            parse_mode="HTML",
+        )
+    else:
+        # Bybit — сразу проверяем
+        await _finalize_account(message, state, passphrase="")
+
+
+@router.message(AccStates.waiting_extra)
+async def acc_got_extra(message: Message, state: FSMContext):
+    passphrase = message.text.strip()
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await _finalize_account(message, state, passphrase=passphrase)
+
+
+async def _finalize_account(message: Message, state: FSMContext, passphrase: str):
+    data     = await state.get_data()
     await state.clear()
 
+    exchange   = data.get("exchange", "bybit")
+    label      = data["label"]
+    raw_key    = data["raw_key"]
+    raw_secret = data["raw_secret"]
+
     wait_msg = await message.answer("⏳ Проверяю ключ...")
-    is_valid, result = await bybit_auth.verify_api_key(data["raw_key"], raw_secret)
+
+    # Верификация
+    if exchange == "bybit":
+        is_valid, result = await bybit_auth.verify_api_key(raw_key, raw_secret)
+    else:
+        is_valid, result = await okx_auth.verify_api_key(raw_key, raw_secret, passphrase)
 
     if not is_valid:
         await wait_msg.edit_text(
             f"❌ Ключ не прошёл проверку:\n<code>{result}</code>\n\n"
-            "Проверь правильность ключа и права доступа.\n"
-            "Попробуй ещё раз: /start → 🔑 Аккаунты",
+            "Проверь правильность ключа и права доступа.",
             parse_mode="HTML",
         )
         return
 
-    uid = message.from_user.id
+    uid     = message.from_user.id
+    enc_key = encrypt(raw_key)
+    enc_sec = encrypt(raw_secret)
+    enc_ext = encrypt(passphrase) if passphrase else ""
+
+    # Сохраняем в БД
+    acc_id = await db.accounts_add(uid, exchange, label, enc_key, enc_sec, enc_ext, result)
+
+    # Обновляем память
     if uid not in _accounts:
         _accounts[uid] = []
-
-    # Новый аккаунт сразу становится активным
-    for acc in _accounts[uid]:
-        acc["active"] = False
-
-    _accounts[uid].append({
-        "label":      data["label"],
-        "api_key":    encrypt(data["raw_key"]),
-        "api_secret": encrypt(raw_secret),
+    new_acc = {
+        "id":         acc_id,
+        "exchange":   exchange,
+        "label":      label,
+        "api_key":    enc_key,
+        "api_secret": enc_sec,
+        "extra":      enc_ext,
         "nickname":   result,
-        "active":     True,
-    })
+        "active":     False,
+    }
+    _accounts[uid].append(new_acc)
 
+    # Если это первый аккаунт для данной биржи — делаем активным
+    same_ex = [a for a in _accounts[uid] if a.get("exchange") == exchange and a is not new_acc]
+    if not any(a.get("active") for a in same_ex):
+        new_acc["active"] = True
+        await db.accounts_set_active(uid, exchange, acc_id)
+
+    ex_name = EXCHANGE_NAMES.get(exchange, exchange.title())
     await wait_msg.edit_text(
-        f"✅ Аккаунт <b>{data['label']}</b> добавлен!\n"
-        f"Никнейм Bybit: <b>{result}</b>\n\n"
-        "Ключ зашифрован и сохранён.",
+        f"✅ Аккаунт <b>{label}</b> добавлен!\n"
+        f"Биржа: {ex_name} | Никнейм: <b>{result}</b>\n\n"
+        "Ключ зашифрован и сохранён в БД.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔑 Мои аккаунты",   callback_data="acc:list")],
             [InlineKeyboardButton(text="🔄 Авто-переценка", callback_data="rp:list")],
-            [InlineKeyboardButton(text="📊 Статистика",     callback_data="stats:view")],
         ]),
     )
 
@@ -209,11 +327,19 @@ async def acc_got_secret(message: Message, state: FSMContext):
 async def acc_select(callback: CallbackQuery):
     idx  = int(callback.data.split(":")[2])
     uid  = callback.from_user.id
-    accs = _accounts.get(uid, [])
+    accs = _all_accounts(uid)
     if 0 <= idx < len(accs):
-        for i, a in enumerate(accs):
-            a["active"] = (i == idx)
-        await callback.answer(f"✅ Активен: {accs[idx]['label']}")
+        selected = accs[idx]
+        exchange = selected.get("exchange", "bybit")
+        # В памяти деактивируем все для этой биржи, активируем выбранный
+        for a in accs:
+            if a.get("exchange") == exchange:
+                a["active"] = False
+        selected["active"] = True
+        # В БД
+        if db.ok():
+            await db.accounts_set_active(uid, exchange, selected["id"])
+        await callback.answer(f"✅ Активен: {selected['label']}")
     await acc_list(callback)
 
 
@@ -221,11 +347,18 @@ async def acc_select(callback: CallbackQuery):
 async def acc_del(callback: CallbackQuery):
     idx  = int(callback.data.split(":")[2])
     uid  = callback.from_user.id
-    accs = _accounts.get(uid, [])
+    accs = _all_accounts(uid)
     if 0 <= idx < len(accs):
-        accs.pop(idx)
-        # Если удалили активный — активируем первый
-        if accs and not any(a["active"] for a in accs):
-            accs[0]["active"] = True
+        removed  = accs.pop(idx)
+        exchange = removed.get("exchange", "bybit")
+        # Если удалили активный — активируем первый оставшийся для этой биржи
+        same = [a for a in accs if a.get("exchange") == exchange]
+        if same and not any(a["active"] for a in same):
+            same[0]["active"] = True
+            if db.ok():
+                await db.accounts_set_active(uid, exchange, same[0]["id"])
+        # Удаляем из БД
+        if db.ok() and removed.get("id"):
+            await db.accounts_delete(uid, removed["id"])
         await callback.answer("✅ Удалён")
     await acc_list(callback)

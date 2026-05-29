@@ -1,64 +1,93 @@
 """
-Авто-переценка объявлений Bybit.
+Авто-переценка объявлений — Bybit и OKX.
 
 Логика:
-• Пользователь указывает ID объявления + целевую позицию + шаг + диапазон цен
-• Каждые 60 секунд бот смотрит на стакан и корректирует цену так,
-  чтобы объявление оставалось на нужной позиции
-• Например: топ-3, шаг 0.5 → цена = цена_3го_конкурента - 0.5
-• Ограничения: min_price ≤ цена ≤ max_price
+• Пользователь указывает биржу, ID объявления, целевую позицию, шаг, диапазон
+• Каждые 60 секунд бот смотрит на публичный стакан и корректирует цену
+• Например: топ-1, шаг 0.5 → цена = цена_лидера ± 0.5
+• Правила хранятся в PostgreSQL; при рестарте не теряются
 """
-import asyncio
+import logging
 from datetime import datetime
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from api import bybit_p2p, bybit_auth
-from handlers.account_manager import get_account_credentials
-from config import FIATS, FIAT_FLAGS
+from api import bybit_p2p, okx_p2p, bybit_auth, okx_auth
+from handlers.account_manager import get_account_credentials, get_active_account, EXCHANGE_NAMES
+import db
 
+logger = logging.getLogger(__name__)
 router = Router()
 
-# {user_id: [{item_id, fiat, asset, side, target_pos, delta, min_price, max_price, current_price}]}
+# In-memory зеркало правил: {user_id: [{...}]}
 _repricers: dict[int, list] = {}
 MAX_REPRICERS = 5
 
-# Лог последних переценок {user_id: ["[10:30] USDT/KZT 519.5 → 518.8"]}
+# Лог переценок: {user_id: ["[10:30] USDT/KZT 519.5 → 518.8"]}
 _log: dict[int, list] = {}
 MAX_LOG = 30
 
 
 class RepriceStates(StatesGroup):
-    waiting_item_id = State()
-    waiting_params  = State()
+    waiting_ad_id  = State()
+    waiting_params = State()
 
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# ─── DB-sync helpers ──────────────────────────────────────────────────────────
+
+async def load_from_db() -> None:
+    """Загружает все правила из БД в _repricers. Вызывать из bot.py при старте."""
+    rows = await db.repricer_get_all_enabled()
+    for r in rows:
+        uid = r["user_id"]
+        if uid not in _repricers:
+            _repricers[uid] = []
+        rule = {
+            "db_id":      r["id"],
+            "exchange":   r["exchange"],
+            "item_id":    r["ad_id"],
+            "fiat":       r["fiat"],
+            "asset":      r["asset"],
+            "side":       r["side"],
+            "target_pos": r["target_pos"],
+            "delta":      r["delta"],
+            "min_price":  r["min_price"],
+            "max_price":  r["max_price"],
+            "current_price": r.get("current_price"),
+        }
+        _repricers[uid].append(rule)
+    logger.info(f"Загружено {len(rows)} правил репрайсера из БД")
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _add_log(user_id: int, msg: str):
-    if user_id not in _log:
-        _log[user_id] = []
-    _log[user_id].append(msg)
+    _log.setdefault(user_id, []).append(msg)
     if len(_log[user_id]) > MAX_LOG:
         _log[user_id].pop(0)
 
 
+def _rule_label(rule: dict) -> str:
+    ex     = EXCHANGE_NAMES.get(rule.get("exchange", "bybit"), "?")
+    side_e = "📗" if rule["side"] == "1" else "📕"
+    price  = rule.get("current_price")
+    price_s = f"{price:,.2f}" if isinstance(price, float) else "—"
+    return f"{side_e} {ex} {rule['asset']}/{rule['fiat']} топ-{rule['target_pos']} [{price_s}]"
+
+
 def _repricers_kb(user_id: int) -> InlineKeyboardMarkup:
-    rps     = _repricers.get(user_id, [])
+    rules   = _repricers.get(user_id, [])
     buttons = []
-    for i, r in enumerate(rps):
-        side_em = "📗" if r["side"] == "1" else "📕"
-        price   = r.get("current_price", "?")
-        price_s = f"{price:,.2f}" if isinstance(price, float) else str(price)
+    for i, r in enumerate(rules):
         buttons.append([InlineKeyboardButton(
-            text=f"{side_em} {r['asset']}/{r['fiat']} топ-{r['target_pos']} [{price_s}]",
+            text=_rule_label(r),
             callback_data=f"rp:del:{i}",
         )])
-    if len(rps) < MAX_REPRICERS:
+    if len(rules) < MAX_REPRICERS:
         buttons.append([InlineKeyboardButton(text="➕ Добавить правило", callback_data="rp:add:start")])
     buttons.append([InlineKeyboardButton(text="📋 Лог переценок", callback_data="rp:log")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад",         callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -66,52 +95,76 @@ def _repricers_kb(user_id: int) -> InlineKeyboardMarkup:
 
 @router.callback_query(lambda c: c.data == "rp:list")
 async def rp_list(callback: CallbackQuery):
-    uid = callback.from_user.id
-    rps = _repricers.get(uid, [])
-    await callback.message.edit_text(
+    uid  = callback.from_user.id
+    rps  = _repricers.get(uid, [])
+    text = (
         "🔄 <b>Авто-переценка</b>\n\n"
-        "Бот автоматически корректирует цену твоих объявлений каждые 60 секунд.\n\n"
+        "Бот автоматически корректирует цену объявлений каждые 60 сек.\n"
+        "Поддерживаются: 🟠 Bybit, 🔵 OKX\n\n"
         f"Активных правил: {len(rps)}/{MAX_REPRICERS}\n"
-        "Нажми на правило чтобы удалить.",
-        reply_markup=_repricers_kb(uid),
-        parse_mode="HTML",
+        "Нажми на правило чтобы удалить."
     )
+    await callback.message.edit_text(text, reply_markup=_repricers_kb(uid), parse_mode="HTML")
 
 
 @router.callback_query(lambda c: c.data == "rp:add:start")
 async def rp_add_start(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
-    api_key, _ = get_account_credentials(uid)
-    if not api_key:
+    # Проверяем есть ли хоть один аккаунт (Bybit или OKX)
+    has_bybit = get_active_account(uid, "bybit") is not None
+    has_okx   = get_active_account(uid, "okx")   is not None
+
+    if not has_bybit and not has_okx:
         await callback.message.edit_text(
-            "❌ Сначала добавь API ключ Bybit.\n\n"
-            "Нажми 🔑 Аккаунты → Добавить аккаунт",
+            "❌ Сначала добавь API ключ.\n\n"
+            "🔑 Аккаунты → Добавить аккаунт → Bybit или OKX",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔑 Аккаунты", callback_data="acc:list")],
             ]),
         )
         return
-    await state.set_state(RepriceStates.waiting_item_id)
+
+    # Показываем выбор биржи (только те у которых есть активный аккаунт)
+    ex_buttons = []
+    if has_bybit:
+        ex_buttons.append(InlineKeyboardButton(text="🟠 Bybit", callback_data="rp:ex:bybit"))
+    if has_okx:
+        ex_buttons.append(InlineKeyboardButton(text="🔵 OKX",   callback_data="rp:ex:okx"))
+
     await callback.message.edit_text(
-        "🔄 <b>Авто-переценка — шаг 1/2</b>\n\n"
-        "Введи <b>ID объявления Bybit</b>\n\n"
-        "Где найти ID:\n"
-        "Bybit → P2P → Мои объявления → нажми на объявление\n"
-        "ID в строке URL или под заголовком.",
+        "🔄 <b>Авто-переценка — выбери биржу</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            ex_buttons,
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="rp:list")],
+        ]),
+    )
+
+
+@router.callback_query(lambda c: c.data in ("rp:ex:bybit", "rp:ex:okx"))
+async def rp_choose_exchange(callback: CallbackQuery, state: FSMContext):
+    exchange = callback.data.split(":")[-1]
+    await state.set_state(RepriceStates.waiting_ad_id)
+    await state.update_data(exchange=exchange)
+    ex_name = "Bybit" if exchange == "bybit" else "OKX"
+    await callback.message.edit_text(
+        f"🔄 <b>Авто-переценка {ex_name} — шаг 1/2</b>\n\n"
+        "Введи <b>ID объявления</b>\n\n"
+        f"{'Bybit: P2P → Мои объявления → открой объявление → ID в URL' if exchange == 'bybit' else 'OKX: C2C → Мои объявления → открой → advId в URL'}",
         parse_mode="HTML",
     )
 
 
-@router.message(RepriceStates.waiting_item_id)
-async def rp_got_item_id(message: Message, state: FSMContext):
-    await state.update_data(item_id=message.text.strip())
+@router.message(RepriceStates.waiting_ad_id)
+async def rp_got_ad_id(message: Message, state: FSMContext):
+    await state.update_data(ad_id=message.text.strip())
     await state.set_state(RepriceStates.waiting_params)
     await message.answer(
         "🔄 <b>Авто-переценка — шаг 2/2</b>\n\n"
         "Введи параметры одной строкой:\n"
         "<code>позиция шаг мин_цена макс_цена</code>\n\n"
         "<b>Примеры:</b>\n"
-        "<code>1 0.5 510 530</code> — держаться #1, шаг 0.5, не ниже 510\n"
+        "<code>1 0.5 510 530</code> — держаться #1, шаг 0.5, диапазон 510–530\n"
         "<code>3 1.0 500 600</code> — держаться в топ-3, шаг 1.0",
         parse_mode="HTML",
     )
@@ -128,54 +181,75 @@ async def rp_got_params(message: Message, state: FSMContext):
         if target_pos < 1 or delta < 0 or min_price >= max_price:
             raise ValueError
     except Exception:
-        await message.answer(
-            "❌ Неверный формат. Пример:\n<code>3 0.5 500 600</code>",
-            parse_mode="HTML",
-        )
+        await message.answer("❌ Неверный формат. Пример:\n<code>3 0.5 500 600</code>", parse_mode="HTML")
         return
 
-    data = await state.get_data()
+    data     = await state.get_data()
     await state.clear()
 
-    uid = message.from_user.id
-    api_key, api_secret = get_account_credentials(uid)
+    uid      = message.from_user.id
+    exchange = data.get("exchange", "bybit")
+    ad_id    = data["ad_id"]
+
+    api_key, api_secret, extra = get_account_credentials(uid, exchange)
+    if not api_key:
+        await message.answer("❌ Нет активного аккаунта для этой биржи.")
+        return
+
     wait = await message.answer("⏳ Загружаю данные объявления...")
 
     try:
-        my_ads = await bybit_auth.get_my_ads(api_key, api_secret, status=10)
-        ad = next((a for a in my_ads if a["id"] == data["item_id"]), None)
+        if exchange == "bybit":
+            my_ads = await bybit_auth.get_my_ads(api_key, api_secret, status=10)
+        else:
+            my_ads = await okx_auth.get_my_ads(api_key, api_secret, extra)
+
+        ad = next((a for a in my_ads if str(a["id"]) == str(ad_id)), None)
         if not ad:
             await wait.edit_text(
-                "❌ Объявление не найдено.\n\n"
-                "Проверь ID. Объявление должно быть активным (online)."
+                "❌ Объявление не найдено.\n"
+                "Проверь ID. Объявление должно быть активным."
             )
             return
     except Exception as e:
         await wait.edit_text(f"❌ Ошибка API: <code>{e}</code>", parse_mode="HTML")
         return
 
-    if uid not in _repricers:
-        _repricers[uid] = []
+    rules = _repricers.setdefault(uid, [])
+    if len(rules) >= MAX_REPRICERS:
+        await wait.edit_text(f"❌ Максимум {MAX_REPRICERS} правил.")
+        return
 
-    _repricers[uid].append({
-        "item_id":       data["item_id"],
-        "fiat":          ad["fiat"],
-        "asset":         ad["asset"],
-        "side":          ad["side"],
-        "target_pos":    target_pos,
-        "delta":         delta,
-        "min_price":     min_price,
-        "max_price":     max_price,
+    # Сохраняем в БД
+    db_id = await db.repricer_add(
+        uid, exchange, ad_id, ad["fiat"], ad["asset"], ad["side"],
+        target_pos, delta, min_price, max_price, ad["price"],
+    )
+
+    rule = {
+        "db_id":       db_id,
+        "exchange":    exchange,
+        "item_id":     ad_id,
+        "fiat":        ad["fiat"],
+        "asset":       ad["asset"],
+        "side":        ad["side"],
+        "target_pos":  target_pos,
+        "delta":       delta,
+        "min_price":   min_price,
+        "max_price":   max_price,
         "current_price": ad["price"],
-    })
+    }
+    rules.append(rule)
 
     side_label = "продажа" if ad["side"] == "1" else "покупка"
+    ex_name    = EXCHANGE_NAMES.get(exchange, exchange.title())
     await wait.edit_text(
         f"✅ <b>Правило добавлено!</b>\n\n"
+        f"Биржа: {ex_name}\n"
         f"Объявление: {ad['asset']}/{ad['fiat']} ({side_label})\n"
         f"Цель: топ-{target_pos} | шаг: ±{delta}\n"
-        f"Диапазон цены: {min_price:,.2f} — {max_price:,.2f}\n\n"
-        f"Переценка запустится в течение 60 секунд.",
+        f"Диапазон: {min_price:,.2f} — {max_price:,.2f}\n\n"
+        "Переценка запустится в течение 60 секунд.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Мои правила", callback_data="rp:list")]
@@ -200,11 +274,13 @@ async def rp_log(callback: CallbackQuery):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("rp:del:"))
 async def rp_del(callback: CallbackQuery):
-    idx = int(callback.data.split(":")[2])
-    uid = callback.from_user.id
-    rps = _repricers.get(uid, [])
+    idx  = int(callback.data.split(":")[2])
+    uid  = callback.from_user.id
+    rps  = _repricers.get(uid, [])
     if 0 <= idx < len(rps):
-        rps.pop(idx)
+        removed = rps.pop(idx)
+        if db.ok() and removed.get("db_id"):
+            await db.repricer_delete(uid, removed["db_id"])
         await callback.answer("✅ Удалено")
     await rp_list(callback)
 
@@ -212,38 +288,41 @@ async def rp_del(callback: CallbackQuery):
 # ─── Background task ───────────────────────────────────────────────────────────
 
 async def run_repricer(bot) -> None:
-    """Вызывается каждые 60 секунд из bot.py"""
-    import logging
-    logger = logging.getLogger(__name__)
-
+    """Вызывается каждые 60 секунд из bot.py."""
     for user_id, rules in list(_repricers.items()):
         for rule in rules:
             try:
-                api_key, api_secret = get_account_credentials(user_id)
+                exchange = rule.get("exchange", "bybit")
+                fiat     = rule["fiat"]
+                asset    = rule["asset"]
+                side     = rule["side"]   # "1"=sell, "0"=buy (normalized)
+
+                # Получаем кредс для этой биржи
+                api_key, api_secret, extra = get_account_credentials(user_id, exchange)
                 if not api_key:
                     continue
 
-                fiat  = rule["fiat"]
-                asset = rule["asset"]
-                side  = rule["side"]  # "1"=sell, "0"=buy
+                # Публичный стакан (конкуренты)
+                if exchange == "bybit":
+                    ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side=side, size=20)
+                else:  # okx
+                    okx_side = "sell" if side == "1" else "buy"
+                    ads = await okx_p2p.get_ads(asset=asset, fiat=fiat, side=okx_side, rows=20)
 
-                # Получаем публичный стакан конкурентов
-                ads = await bybit_p2p.get_ads(asset=asset, fiat=fiat, side=side, size=20)
                 if not ads:
                     continue
 
-                # Сортировка: sell — дешевле лучше (ascending), buy — дороже лучше (descending)
+                # Сортировка: sell → ascending (дешевле лучше), buy → descending (дороже лучше)
                 if side == "1":
-                    sorted_ads = sorted(ads, key=lambda x: x["price"])
-                    def calc_target(ref): return round(ref - rule["delta"], 2)
+                    sorted_ads   = sorted(ads, key=lambda x: x["price"])
+                    calc_target  = lambda ref: round(ref - rule["delta"], 2)
                 else:
-                    sorted_ads = sorted(ads, key=lambda x: x["price"], reverse=True)
-                    def calc_target(ref): return round(ref + rule["delta"], 2)
+                    sorted_ads   = sorted(ads, key=lambda x: x["price"], reverse=True)
+                    calc_target  = lambda ref: round(ref + rule["delta"], 2)
 
                 target_pos = rule["target_pos"]
                 if len(sorted_ads) >= target_pos:
-                    ref_price    = sorted_ads[target_pos - 1]["price"]
-                    target_price = calc_target(ref_price)
+                    target_price = calc_target(sorted_ads[target_pos - 1]["price"])
                 elif sorted_ads:
                     target_price = sorted_ads[-1]["price"]
                 else:
@@ -251,25 +330,37 @@ async def run_repricer(bot) -> None:
 
                 # Зажимаем в диапазон
                 target_price = max(rule["min_price"], min(rule["max_price"], target_price))
-                old_price    = rule.get("current_price", 0)
+                old_price    = rule.get("current_price") or 0
 
-                # Не обновляем если разница < 0.01
                 if abs(target_price - old_price) < 0.01:
                     continue
 
-                # Обновляем через API
-                res      = await bybit_auth.update_ad_price(api_key, api_secret, rule["item_id"], target_price)
-                ret_code = res.get("retCode", -1)
-                ts       = datetime.now().strftime("%H:%M:%S")
+                # Обновляем цену через API
+                if exchange == "bybit":
+                    res      = await bybit_auth.update_ad_price(api_key, api_secret, rule["item_id"], target_price)
+                    ret_code = res.get("retCode", -1)
+                    success  = ret_code == 0
+                    err_msg  = res.get("retMsg", "?") if not success else ""
+                else:  # okx
+                    res      = await okx_auth.update_ad_price(api_key, api_secret, extra, rule["item_id"], target_price)
+                    ret_code = str(res.get("code", "-1"))
+                    success  = ret_code == "0"
+                    err_msg  = res.get("msg", "?") if not success else ""
 
-                if ret_code == 0:
+                ts     = datetime.now().strftime("%H:%M:%S")
+                ex_tag = "BY" if exchange == "bybit" else "OX"
+
+                if success:
                     rule["current_price"] = target_price
-                    _add_log(user_id, f"[{ts}] {asset}/{fiat} {old_price:,.2f} → <b>{target_price:,.2f}</b>")
-                    logger.info(f"Repriced uid={user_id} {asset}/{fiat} {old_price}→{target_price}")
+                    if db.ok() and rule.get("db_id"):
+                        await db.repricer_update_price(rule["db_id"], target_price)
+                    _add_log(user_id,
+                             f"[{ts}] [{ex_tag}] {asset}/{fiat} {old_price:,.2f} → <b>{target_price:,.2f}</b>")
+                    logger.info(f"Repriced uid={user_id} {exchange} {asset}/{fiat} "
+                                f"{old_price}→{target_price}")
                 else:
-                    err = res.get("retMsg", "?")
-                    _add_log(user_id, f"[{ts}] ❌ {asset}/{fiat}: {err}")
-                    logger.warning(f"Reprice failed uid={user_id}: {err}")
+                    _add_log(user_id, f"[{ts}] [{ex_tag}] ❌ {asset}/{fiat}: {err_msg}")
+                    logger.warning(f"Reprice failed uid={user_id} {exchange}: {err_msg}")
 
             except Exception as e:
                 logger.error(f"Repricer error uid={user_id}: {e}")
