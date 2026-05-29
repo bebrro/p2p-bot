@@ -87,6 +87,23 @@ def _all_accounts(user_id: int) -> list:
     return _accounts.get(user_id, [])
 
 
+def upsert_account_memory(uid: int, acc: dict) -> None:
+    """Добавляет/обновляет аккаунт в памяти (для вызова из server.py)."""
+    if uid not in _accounts:
+        _accounts[uid] = []
+    for a in _accounts[uid]:
+        if a.get("id") == acc.get("id"):
+            a.update(acc)
+            return
+    _accounts[uid].append(acc)
+
+
+def remove_account_memory(uid: int, account_id: int) -> None:
+    """Удаляет аккаунт из памяти."""
+    if uid in _accounts:
+        _accounts[uid] = [a for a in _accounts[uid] if a.get("id") != account_id]
+
+
 def _accounts_kb(user_id: int) -> InlineKeyboardMarkup:
     accs    = _all_accounts(user_id)
     buttons = []

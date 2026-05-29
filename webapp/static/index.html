@@ -268,6 +268,52 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .chat-send-btn:active:not(:disabled){transform:scale(.92)}
 .chat-send-btn:disabled{opacity:.4;cursor:default}
 
+/* ── Repricer (Auto) panel ────────────────────────────────── */
+.rp-section{background:var(--bg2);border-radius:var(--r);padding:10px;margin-bottom:8px}
+.rp-section-title{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.rp-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+.rp-form-field{display:flex;flex-direction:column;gap:3px}
+.rp-form-lbl{font-size:10px;color:var(--hint)}
+.rp-input{background:var(--bg);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:5px 8px;font-size:13px;font-family:inherit;outline:none;width:100%}
+.rp-input:focus{border-color:var(--btn)}
+.rp-input::placeholder{color:var(--hint)}
+.rp-full{grid-column:1/-1}
+.rp-btn{width:100%;padding:8px;background:var(--btn);color:var(--btnt);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;transition:opacity .15s}
+.rp-btn:active{opacity:.75}
+.rp-btn.secondary{background:rgba(255,255,255,.07);color:var(--text);margin-top:4px}
+.rp-acc-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.rp-acc-item:last-child{border-bottom:none}
+.rp-acc-dot{width:7px;height:7px;border-radius:50%;background:var(--hint);flex-shrink:0}
+.rp-acc-dot.active{background:var(--green)}
+.rp-acc-info{flex:1;min-width:0}
+.rp-acc-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-acc-sub{font-size:10px;color:var(--hint)}
+.rp-acc-del{background:none;border:none;color:var(--hint);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;flex-shrink:0}
+.rp-acc-del:active{color:var(--red)}
+.rp-rule-item{background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:5px;display:flex;align-items:center;gap:8px;animation:fadeIn .2s}
+.rp-rule-info{flex:1;min-width:0}
+.rp-rule-title{font-size:12px;font-weight:600}
+.rp-rule-sub{font-size:10px;color:var(--hint);margin-top:2px}
+.rp-rule-price{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--green);flex-shrink:0}
+.rp-rule-del{background:none;border:none;color:var(--hint);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0}
+.rp-rule-del:active{color:var(--red)}
+.rp-ad-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer}
+.rp-ad-item:last-child{border-bottom:none}
+.rp-ad-item.selected{background:rgba(44,165,224,.08);border-radius:6px;padding-left:6px;margin-left:-6px}
+.rp-ad-radio{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.2);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.rp-ad-item.selected .rp-ad-radio{border-color:var(--btn)}
+.rp-ad-radio::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--btn);display:none}
+.rp-ad-item.selected .rp-ad-radio::after{display:block}
+.rp-ad-info{flex:1;min-width:0}
+.rp-ad-title{font-size:12px;font-weight:600}
+.rp-ad-sub{font-size:10px;color:var(--hint)}
+.rp-ad-price{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.rp-passphrase-row{display:none}
+.rp-passphrase-row.visible{display:block}
+.rp-badge{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;margin-left:4px}
+.rp-badge.bybit{background:rgba(255,140,0,.2);color:#faa61a}
+.rp-badge.okx{background:rgba(44,165,224,.15);color:#2ca5e0}
+
 /* ── Bottom nav ───────────────────────────────────────────── */
 .bottom-nav{display:flex;background:var(--bg2);border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;height:var(--nav-h);position:fixed;bottom:0;left:0;right:0;z-index:100;padding-bottom:env(safe-area-inset-bottom,0px)}
 .nav-btn{flex:1;background:none;border:none;color:var(--hint);font-size:8.5px;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:color .15s;letter-spacing:.1px}
@@ -443,6 +489,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="sub-btn"        data-sub="trackers"  onclick="switchMonitor('trackers',this)">👁 Трекеры</button>
     <button class="sub-btn"        data-sub="alerts"    onclick="switchMonitor('alerts',this)">🔔 Алерты</button>
     <button class="sub-btn"        data-sub="blacklist" onclick="switchMonitor('blacklist',this)">🚫 ЧС</button>
+    <button class="sub-btn"        data-sub="auto"      onclick="switchMonitor('auto',this)">🤖 Авто</button>
   </div>
 
   <!-- Пары (бывшая вкладка Мульти) -->
@@ -467,6 +514,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- Чёрный список -->
   <div class="mon-panel hidden" id="monBlacklist" style="overflow-y:auto">
     <div id="blacklistContent"><div class="spinner"></div></div>
+  </div>
+
+  <!-- 🤖 Авто-репрайсер -->
+  <div class="mon-panel hidden" id="monAuto" style="overflow-y:auto">
+    <div id="autoContent"><div class="spinner"></div></div>
   </div>
 </div>
 
@@ -903,6 +955,7 @@ function switchMonitor(sub,btn){
   if(sub==='trackers')  loadTrackers();
   if(sub==='alerts')    loadAlerts();
   if(sub==='blacklist') loadBlacklist();
+  if(sub==='auto')      loadAuto();
 }
 
 /* ── Pairs (Мультипара) ───────────────────────────────────── */
@@ -1160,6 +1213,289 @@ async function addToBlacklist(){
 async function removeFromBlacklist(nick){
   const uid=getUID(); if(!uid)return;
   try{ await fetch(`/api/user/blacklist/${encodeURIComponent(nick)}?uid=${uid}`,{method:'DELETE'}); loadBlacklist(); }
+  catch(e){ alert(e.message); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUTO-REPRICER TAB
+══════════════════════════════════════════════════════════ */
+
+// Локальное состояние панели
+const RP={
+  accEx:'bybit',   // биржа для добавления аккаунта
+  ruleEx:'bybit',  // биржа для добавления правила
+  myAds:[],        // загруженные объявления
+  selAdId:null,    // выбранный ad_id
+};
+
+/* ── Загрузка панели ─────────────────────────────── */
+async function loadAuto(){
+  const uid=getUID(), box=document.getElementById('autoContent');
+  if(!uid){ box.innerHTML=`<div class="empty-hint">Открой через Telegram чтобы войти.</div>`; return; }
+  box.innerHTML='<div class="spinner"></div>';
+  try{
+    const [accsRes,rulesRes]=await Promise.all([
+      fetch(`/api/user/accounts?uid=${uid}`).then(r=>r.json()),
+      fetch(`/api/user/repricer?uid=${uid}`).then(r=>r.json()),
+    ]);
+    renderAutoPanel(accsRes.accounts||[], rulesRes.rules||[], uid, box);
+  }catch(e){
+    box.innerHTML=`<div class="err-box">${esc(e.message)}</div>`;
+  }
+}
+
+function renderAutoPanel(accounts, rules, uid, box){
+  const exIcons={bybit:'🟠',okx:'🔵'};
+  const exNames={bybit:'Bybit',okx:'OKX'};
+  const sideLabel=s=>s==='1'?'Продажа':'Покупка';
+
+  /* Секция 1 — API ключи */
+  const accHtml=accounts.length
+    ? accounts.map(a=>`
+      <div class="rp-acc-item">
+        <div class="rp-acc-dot ${a.active?'active':''}"></div>
+        <div class="rp-acc-info">
+          <div class="rp-acc-name">${exIcons[a.exchange]||'?'} ${esc(a.label)}
+            <span class="rp-badge ${a.exchange}">${exNames[a.exchange]||a.exchange}</span>
+          </div>
+          <div class="rp-acc-sub">${esc(a.nickname||'—')}${a.active?' · ✅ Активный':''}</div>
+        </div>
+        ${!a.active?`<button class="rp-acc-del" onclick="activateAccount(${a.id},'${a.exchange}')" title="Активировать">✓</button>`:''}
+        <button class="rp-acc-del" onclick="deleteAccount(${a.id})" title="Удалить">✕</button>
+      </div>`).join('')
+    : '<div style="color:var(--hint);font-size:11px;text-align:center;padding:8px 0">Нет подключённых аккаунтов</div>';
+
+  /* Секция 2 — правила */
+  const rulesHtml=rules.length
+    ? rules.map(r=>`
+      <div class="rp-rule-item">
+        <div class="rp-rule-info">
+          <div class="rp-rule-title">${exIcons[r.exchange]||'?'} ${r.asset}/${r.fiat} · ${sideLabel(r.side)}</div>
+          <div class="rp-rule-sub">Топ-${r.target_pos} · Шаг ${r.delta} · ${r.min_price}–${r.max_price}</div>
+        </div>
+        <div class="rp-rule-price">${r.current_price!=null?Number(r.current_price).toLocaleString('ru'):'—'}</div>
+        <button class="rp-rule-del" onclick="deleteRepricerRule(${r.id})">✕</button>
+      </div>`).join('')
+    : '<div style="color:var(--hint);font-size:11px;text-align:center;padding:6px 0">Нет активных правил</div>';
+
+  /* Доступные биржи для добавления правил */
+  const connExchanges=[...new Set(accounts.map(a=>a.exchange))];
+  const ruleExBtns=connExchanges.length
+    ? connExchanges.map(ex=>`<button class="pill ${RP.ruleEx===ex?'active':''}" onclick="rpSetRuleEx('${ex}',this)">${exIcons[ex]} ${exNames[ex]}</button>`).join('')
+    : `<span style="color:var(--hint);font-size:11px">Сначала подключи аккаунт</span>`;
+
+  box.innerHTML=`
+<!-- ── Аккаунты ── -->
+<div class="rp-section">
+  <div class="rp-section-title">🔑 API Ключи</div>
+
+  <!-- Существующие аккаунты -->
+  <div id="rpAccList">${accHtml}</div>
+  <hr class="divider">
+
+  <!-- Форма добавления -->
+  <div style="margin-bottom:6px">
+    <div class="rp-form-lbl" style="margin-bottom:5px">Добавить аккаунт:</div>
+    <div class="pill-row" id="rpAccExRow">
+      <button class="pill ${RP.accEx==='bybit'?'active':''}" onclick="rpSetAccEx('bybit',this)">🟠 Bybit</button>
+      <button class="pill ${RP.accEx==='okx'?'active':''}"   onclick="rpSetAccEx('okx',this)">🔵 OKX</button>
+    </div>
+  </div>
+  <div class="rp-form-grid">
+    <div class="rp-form-field rp-full">
+      <div class="rp-form-lbl">Название</div>
+      <input class="rp-input" id="rpAccLabel" placeholder="Основной">
+    </div>
+    <div class="rp-form-field rp-full">
+      <div class="rp-form-lbl">API Key</div>
+      <input class="rp-input" id="rpAccKey" placeholder="API Key" autocomplete="off">
+    </div>
+    <div class="rp-form-field rp-full">
+      <div class="rp-form-lbl">API Secret</div>
+      <input class="rp-input" id="rpAccSecret" placeholder="API Secret" type="password" autocomplete="off">
+    </div>
+    <div class="rp-form-field rp-full rp-passphrase-row" id="rpPassRow">
+      <div class="rp-form-lbl">Passphrase (OKX)</div>
+      <input class="rp-input" id="rpAccExtra" placeholder="Passphrase" type="password" autocomplete="off">
+    </div>
+  </div>
+  <div id="rpAccResult"></div>
+  <button class="rp-btn" onclick="addAccount()">🔌 Подключить</button>
+</div>
+
+<!-- ── Правила переценки ── -->
+<div class="rp-section">
+  <div class="rp-section-title">🤖 Правила переценки</div>
+
+  <div id="rpRuleList">${rulesHtml}</div>
+  <hr class="divider">
+
+  <div style="margin-bottom:6px">
+    <div class="rp-form-lbl" style="margin-bottom:5px">Биржа:</div>
+    <div class="pill-row" id="rpRuleExRow">${ruleExBtns}</div>
+  </div>
+
+  <button class="rp-btn secondary" onclick="loadMyAds()" id="rpLoadAdsBtn" ${connExchanges.length?'':'disabled'}>
+    📋 Загрузить мои объявления
+  </button>
+  <div id="rpAdsList" style="margin-top:6px"></div>
+
+  <div id="rpRuleForm" style="display:none;margin-top:6px">
+    <div class="rp-form-grid">
+      <div class="rp-form-field">
+        <div class="rp-form-lbl">Позиция (топ-N)</div>
+        <input class="rp-input" id="rpTargetPos" type="number" value="1" min="1" max="10">
+      </div>
+      <div class="rp-form-field">
+        <div class="rp-form-lbl">Шаг (₸/₽)</div>
+        <input class="rp-input" id="rpDelta" type="number" value="0.5" step="0.01" min="0">
+      </div>
+      <div class="rp-form-field">
+        <div class="rp-form-lbl">Мин. цена</div>
+        <input class="rp-input" id="rpMinPrice" type="number" placeholder="500">
+      </div>
+      <div class="rp-form-field">
+        <div class="rp-form-lbl">Макс. цена</div>
+        <input class="rp-input" id="rpMaxPrice" type="number" placeholder="540">
+      </div>
+    </div>
+    <div id="rpRuleResult"></div>
+    <button class="rp-btn" onclick="addRepricerRule()">➕ Добавить правило</button>
+  </div>
+</div>
+`;
+  // Синхронизируем состояние passphrase поля
+  _rpUpdatePassRow();
+}
+
+/* ── Helpers ─────────────────────────────────────── */
+function rpSetAccEx(ex,btn){
+  RP.accEx=ex;
+  document.querySelectorAll('#rpAccExRow .pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _rpUpdatePassRow();
+}
+function rpSetRuleEx(ex,btn){
+  RP.ruleEx=ex;
+  document.querySelectorAll('#rpRuleExRow .pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  // Сброс выбранного объявления при смене биржи
+  RP.selAdId=null; RP.myAds=[];
+  const adsList=document.getElementById('rpAdsList');
+  if(adsList) adsList.innerHTML='';
+  const form=document.getElementById('rpRuleForm');
+  if(form) form.style.display='none';
+}
+function _rpUpdatePassRow(){
+  const row=document.getElementById('rpPassRow');
+  if(row) row.classList.toggle('visible', RP.accEx==='okx');
+}
+
+/* ── Добавить аккаунт ────────────────────────────── */
+async function addAccount(){
+  const uid=getUID(); if(!uid)return;
+  const label  =document.getElementById('rpAccLabel')?.value.trim()||RP.accEx;
+  const key    =document.getElementById('rpAccKey')?.value.trim();
+  const secret =document.getElementById('rpAccSecret')?.value.trim();
+  const extra  =document.getElementById('rpAccExtra')?.value.trim()||'';
+  const res    =document.getElementById('rpAccResult');
+  if(!key||!secret){ res.innerHTML=`<div class="err-box">Введи API Key и Secret</div>`; return; }
+  if(RP.accEx==='okx'&&!extra){ res.innerHTML=`<div class="err-box">Введи Passphrase для OKX</div>`; return; }
+  res.innerHTML='<div class="spinner" style="margin:8px auto"></div>';
+  try{
+    const r=await fetch('/api/user/accounts',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({uid,exchange:RP.accEx,label,api_key:key,api_secret:secret,extra}),
+    }).then(x=>x.json());
+    if(r.error){ res.innerHTML=`<div class="err-box">${esc(r.error)}</div>`; return; }
+    res.innerHTML=`<div style="color:var(--green);font-size:11px;text-align:center;padding:4px">✅ ${esc(r.label)} подключён (${esc(r.nickname)})</div>`;
+    // Очищаем поля
+    ['rpAccKey','rpAccSecret','rpAccExtra'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    setTimeout(()=>loadAuto(),800);
+  }catch(e){ res.innerHTML=`<div class="err-box">${esc(e.message)}</div>`; }
+}
+
+/* ── Удалить/активировать аккаунт ───────────────── */
+async function deleteAccount(id){
+  const uid=getUID(); if(!uid)return;
+  if(!confirm('Удалить аккаунт?'))return;
+  try{ await fetch(`/api/user/accounts/${id}?uid=${uid}`,{method:'DELETE'}); loadAuto(); }
+  catch(e){ alert(e.message); }
+}
+async function activateAccount(id, exchange){
+  const uid=getUID(); if(!uid)return;
+  try{
+    await fetch(`/api/user/accounts/${id}/activate?uid=${uid}`,{method:'POST'});
+    loadAuto();
+  }catch(e){ alert(e.message); }
+}
+
+/* ── Загрузить мои объявления ───────────────────── */
+async function loadMyAds(){
+  const uid=getUID(); if(!uid)return;
+  const btn=document.getElementById('rpLoadAdsBtn');
+  const box=document.getElementById('rpAdsList');
+  if(btn) btn.textContent='⏳ Загружаю...';
+  try{
+    const r=await fetch(`/api/user/myads?uid=${uid}&exchange=${RP.ruleEx}`).then(x=>x.json());
+    if(r.error){ box.innerHTML=`<div class="err-box">${esc(r.error)}</div>`; return; }
+    RP.myAds=r.ads||[];
+    if(!RP.myAds.length){ box.innerHTML=`<div style="color:var(--hint);font-size:11px;text-align:center;padding:6px">Нет активных объявлений</div>`; return; }
+    renderMyAds();
+  }catch(e){ box.innerHTML=`<div class="err-box">${esc(e.message)}</div>`; }
+  finally{ if(btn) btn.textContent='📋 Загрузить мои объявления'; }
+}
+function renderMyAds(){
+  const box=document.getElementById('rpAdsList');
+  const sideLabel=s=>s==='1'?'Продажа':'Покупка';
+  box.innerHTML=RP.myAds.map(ad=>`
+    <div class="rp-ad-item ${RP.selAdId===ad.id?'selected':''}" onclick="selectAd('${ad.id}',this)">
+      <div class="rp-ad-radio"></div>
+      <div class="rp-ad-info">
+        <div class="rp-ad-title">${ad.asset}/${ad.fiat} · ${sideLabel(ad.side)}</div>
+        <div class="rp-ad-sub">${Number(ad.quantity||0).toFixed(2)} ${ad.asset}</div>
+      </div>
+      <div class="rp-ad-price">${Number(ad.price||0).toLocaleString('ru')}</div>
+    </div>`).join('');
+}
+function selectAd(adId, el){
+  RP.selAdId=adId;
+  // Перерисовываем список
+  renderMyAds();
+  // Показываем форму параметров
+  const form=document.getElementById('rpRuleForm');
+  if(form){ form.style.display='block'; form.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+
+/* ── Добавить правило переценки ─────────────────── */
+async function addRepricerRule(){
+  const uid=getUID(); if(!uid)return;
+  if(!RP.selAdId){ alert('Выбери объявление'); return; }
+  const targetPos=parseInt(document.getElementById('rpTargetPos')?.value)||1;
+  const delta    =parseFloat(document.getElementById('rpDelta')?.value)||0.5;
+  const minPrice =parseFloat(document.getElementById('rpMinPrice')?.value)||0;
+  const maxPrice =parseFloat(document.getElementById('rpMaxPrice')?.value)||0;
+  const res      =document.getElementById('rpRuleResult');
+  if(minPrice<=0||maxPrice<=minPrice){ res.innerHTML=`<div class="err-box">Проверь мин/макс цену</div>`; return; }
+  res.innerHTML='<div class="spinner" style="margin:6px auto"></div>';
+  try{
+    const r=await fetch('/api/user/repricer',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({uid,exchange:RP.ruleEx,ad_id:RP.selAdId,target_pos:targetPos,delta,min_price:minPrice,max_price:maxPrice}),
+    }).then(x=>x.json());
+    if(r.error){ res.innerHTML=`<div class="err-box">${esc(r.error)}</div>`; return; }
+    res.innerHTML=`<div style="color:var(--green);font-size:11px;text-align:center;padding:4px">✅ Правило добавлено!</div>`;
+    RP.selAdId=null; RP.myAds=[];
+    setTimeout(()=>loadAuto(),700);
+  }catch(e){ res.innerHTML=`<div class="err-box">${esc(e.message)}</div>`; }
+}
+
+/* ── Удалить правило ─────────────────────────────── */
+async function deleteRepricerRule(id){
+  const uid=getUID(); if(!uid)return;
+  try{ await fetch(`/api/user/repricer/${id}?uid=${uid}`,{method:'DELETE'}); loadAuto(); }
   catch(e){ alert(e.message); }
 }
 

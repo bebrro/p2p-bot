@@ -36,6 +36,17 @@ class RepriceStates(StatesGroup):
 
 # ─── DB-sync helpers ──────────────────────────────────────────────────────────
 
+def add_rule_memory(uid: int, rule: dict) -> None:
+    """Добавляет правило в память (для вызова из server.py)."""
+    _repricers.setdefault(uid, []).append(rule)
+
+
+def remove_rule_memory(uid: int, db_id: int) -> None:
+    """Удаляет правило из памяти."""
+    if uid in _repricers:
+        _repricers[uid] = [r for r in _repricers[uid] if r.get("db_id") != db_id]
+
+
 async def load_from_db() -> None:
     """Загружает все правила из БД в _repricers. Вызывать из bot.py при старте."""
     rows = await db.repricer_get_all_enabled()

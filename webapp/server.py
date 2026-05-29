@@ -16,12 +16,18 @@ from aiohttp import web
 
 import db
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p, gemini
+from api import bybit_auth, okx_auth
 from handlers.price_history import get_history
 from handlers.pattern_engine import _compute_patterns
 from handlers.ai_advisor import _build_prompt
 from handlers.tracker import _fetch_trader_ads
+from handlers.account_manager import (
+    get_account_credentials, upsert_account_memory, remove_account_memory,
+)
+from handlers.auto_reprice import add_rule_memory, remove_rule_memory
 from utils.spread import calc_spread
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
+from utils.encryption import encrypt
 
 logger     = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -584,6 +590,224 @@ async def api_status(request: web.Request) -> web.Response:
     return web.json_response(status)
 
 
+# ─── Accounts API (Mini App repricer) ─────────────────────────────────────────
+
+async def api_accounts_list(request: web.Request) -> web.Response:
+    """GET /api/user/accounts?uid=xxx  — список аккаунтов (без ключей)."""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    rows = await db.accounts_get(uid)
+    safe = [
+        {"id": r["id"], "exchange": r["exchange"], "label": r["label"],
+         "nickname": r.get("nickname", ""), "active": r["is_active"]}
+        for r in rows
+    ]
+    return web.json_response({"accounts": safe})
+
+
+async def api_accounts_add(request: web.Request) -> web.Response:
+    """POST /api/user/accounts  body:{uid,exchange,label,api_key,api_secret,extra?}"""
+    try:
+        body       = await request.json()
+        uid        = int(body.get("uid") or 0)
+        exchange   = (body.get("exchange") or "bybit").lower()
+        label      = (body.get("label")    or "").strip()[:30]
+        raw_key    = (body.get("api_key")  or "").strip()
+        raw_secret = (body.get("api_secret") or "").strip()
+        raw_extra  = (body.get("extra")    or "").strip()   # passphrase for OKX
+
+        if not uid or not raw_key or not raw_secret:
+            return web.json_response({"error": "uid, api_key, api_secret required"}, status=400)
+        if not label:
+            label = exchange.title()
+
+        # Верификация ключа
+        if exchange == "bybit":
+            ok_flag, nick = await bybit_auth.verify_api_key(raw_key, raw_secret)
+        elif exchange == "okx":
+            ok_flag, nick = await okx_auth.verify_api_key(raw_key, raw_secret, raw_extra)
+        else:
+            return web.json_response({"error": f"Exchange {exchange!r} not supported"}, status=400)
+
+        if not ok_flag:
+            return web.json_response({"error": f"Ключ не прошёл проверку: {nick}"}, status=422)
+
+        enc_key    = encrypt(raw_key)
+        enc_secret = encrypt(raw_secret)
+        enc_extra  = encrypt(raw_extra) if raw_extra else ""
+
+        acc_id = await db.accounts_add(uid, exchange, label, enc_key, enc_secret, enc_extra, nick)
+
+        new_acc = {
+            "id": acc_id, "exchange": exchange, "label": label,
+            "api_key": enc_key, "api_secret": enc_secret, "extra": enc_extra,
+            "nickname": nick, "active": False,
+        }
+        # Если первый для этой биржи — делаем активным
+        existing = await db.accounts_get(uid)
+        same_ex  = [r for r in existing if r["exchange"] == exchange and r["id"] != acc_id]
+        if not any(r["is_active"] for r in same_ex):
+            new_acc["active"] = True
+            await db.accounts_set_active(uid, exchange, acc_id)
+
+        upsert_account_memory(uid, new_acc)
+        return web.json_response({
+            "id": acc_id, "exchange": exchange,
+            "label": label, "nickname": nick, "active": new_acc["active"],
+        })
+    except Exception as e:
+        logger.error(f"api_accounts_add: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_accounts_activate(request: web.Request) -> web.Response:
+    """POST /api/user/accounts/{id}/activate?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        acc_id   = int(request.match_info["id"])
+        rows     = await db.accounts_get(uid)
+        target   = next((r for r in rows if r["id"] == acc_id), None)
+        if not target:
+            return web.json_response({"error": "not found"}, status=404)
+        exchange = target["exchange"]
+        await db.accounts_set_active(uid, exchange, acc_id)
+        # обновляем память
+        from handlers.account_manager import _accounts
+        for a in _accounts.get(uid, []):
+            if a.get("exchange") == exchange:
+                a["active"] = (a.get("id") == acc_id)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_accounts_delete(request: web.Request) -> web.Response:
+    """DELETE /api/user/accounts/{id}?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        acc_id = int(request.match_info["id"])
+        await db.accounts_delete(uid, acc_id)
+        remove_account_memory(uid, acc_id)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_myads(request: web.Request) -> web.Response:
+    """GET /api/user/myads?uid=xxx&exchange=bybit  — свои P2P объявления."""
+    uid      = _uid(request)
+    exchange = request.rel_url.query.get("exchange", "bybit").lower()
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    api_key, api_secret, extra = get_account_credentials(uid, exchange)
+    if not api_key:
+        return web.json_response({"error": f"Нет активного аккаунта {exchange}"}, status=404)
+    try:
+        if exchange == "bybit":
+            ads = await bybit_auth.get_my_ads(api_key, api_secret, status=1)
+        elif exchange == "okx":
+            ads = await okx_auth.get_my_ads(api_key, api_secret, extra)
+        else:
+            return web.json_response({"error": "unsupported exchange"}, status=400)
+        return web.json_response({"ads": ads})
+    except Exception as e:
+        logger.error(f"api_myads {exchange}: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+# ─── Repricer API (Mini App) ───────────────────────────────────────────────────
+
+async def api_repricer_list(request: web.Request) -> web.Response:
+    """GET /api/user/repricer?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    rows = await db.repricer_get(uid)
+    return web.json_response({"rules": rows})
+
+
+async def api_repricer_add(request: web.Request) -> web.Response:
+    """POST /api/user/repricer
+    body:{uid,exchange,ad_id,target_pos,delta,min_price,max_price}
+    """
+    try:
+        body       = await request.json()
+        uid        = int(body.get("uid") or 0)
+        exchange   = (body.get("exchange") or "bybit").lower()
+        ad_id      = str(body.get("ad_id") or "").strip()
+        target_pos = int(body.get("target_pos") or 1)
+        delta      = float(body.get("delta") or 0.5)
+        min_price  = float(body.get("min_price") or 0)
+        max_price  = float(body.get("max_price") or 0)
+
+        if not uid or not ad_id or min_price <= 0 or max_price <= min_price:
+            return web.json_response({"error": "Проверь параметры"}, status=400)
+
+        api_key, api_secret, extra = get_account_credentials(uid, exchange)
+        if not api_key:
+            return web.json_response({"error": f"Нет активного аккаунта {exchange}"}, status=404)
+
+        # Проверяем что объявление существует
+        if exchange == "bybit":
+            ads = await bybit_auth.get_my_ads(api_key, api_secret, status=10)
+        else:
+            ads = await okx_auth.get_my_ads(api_key, api_secret, extra)
+
+        ad = next((a for a in ads if str(a["id"]) == str(ad_id)), None)
+        if not ad:
+            return web.json_response({"error": "Объявление не найдено"}, status=404)
+
+        db_id = await db.repricer_add(
+            uid, exchange, ad_id, ad["fiat"], ad["asset"], ad["side"],
+            target_pos, delta, min_price, max_price, ad["price"],
+        )
+
+        rule = {
+            "db_id":       db_id,
+            "exchange":    exchange,
+            "item_id":     ad_id,
+            "fiat":        ad["fiat"],
+            "asset":       ad["asset"],
+            "side":        ad["side"],
+            "target_pos":  target_pos,
+            "delta":       delta,
+            "min_price":   min_price,
+            "max_price":   max_price,
+            "current_price": ad["price"],
+        }
+        add_rule_memory(uid, rule)
+
+        return web.json_response({
+            "id": db_id, "exchange": exchange, "ad_id": ad_id,
+            "fiat": ad["fiat"], "asset": ad["asset"], "side": ad["side"],
+            "target_pos": target_pos, "delta": delta,
+            "min_price": min_price, "max_price": max_price,
+            "current_price": ad["price"],
+        })
+    except Exception as e:
+        logger.error(f"api_repricer_add: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_repricer_delete(request: web.Request) -> web.Response:
+    """DELETE /api/user/repricer/{id}?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        rid = int(request.match_info["id"])
+        await db.repricer_delete(uid, rid)
+        remove_rule_memory(uid, rid)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -614,6 +838,16 @@ def create_app() -> web.Application:
     app.router.add_get("/api/user/blacklist",                           api_blacklist_list)
     app.router.add_post("/api/user/blacklist",                          api_blacklist_add)
     app.router.add_delete("/api/user/blacklist/{nick}",                 api_blacklist_remove)
+    # Accounts (repricer mini app)
+    app.router.add_get("/api/user/accounts",                            api_accounts_list)
+    app.router.add_post("/api/user/accounts",                           api_accounts_add)
+    app.router.add_post("/api/user/accounts/{id}/activate",             api_accounts_activate)
+    app.router.add_delete("/api/user/accounts/{id}",                    api_accounts_delete)
+    app.router.add_get("/api/user/myads",                               api_myads)
+    # Repricer rules
+    app.router.add_get("/api/user/repricer",                            api_repricer_list)
+    app.router.add_post("/api/user/repricer",                           api_repricer_add)
+    app.router.add_delete("/api/user/repricer/{id}",                    api_repricer_delete)
     app.router.add_post("/api/ai",                                       api_ai)
     app.router.add_post("/api/chat",                                     api_chat)
 
