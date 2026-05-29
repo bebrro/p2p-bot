@@ -11,12 +11,11 @@
 import logging
 from datetime import datetime, timezone, timedelta
 
-from aiogram import Router
+from aiogram import Router, Bot
 from aiogram.filters import Command
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    Bot,
 )
 
 import db
