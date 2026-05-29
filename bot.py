@@ -19,6 +19,7 @@ from handlers import (
     whale_tracker, pattern_engine, ai_advisor,
     price_signal,
     subscription, pnl,
+    referral, digest,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -142,6 +143,8 @@ async def main():
         BotCommand(command="pay_confirm", description="💳 Подтвердить оплату USDT"),
         BotCommand(command="alerts",      description="🔔 Алерты на спред"),
         BotCommand(command="stopwhale", description="🛑 Экстренно остановить Whale Tracker"),
+        BotCommand(command="ref",        description="👥 Реферальная программа"),
+        BotCommand(command="digest",     description="☀️ Утренний дайджест"),
     ])
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
@@ -155,6 +158,7 @@ async def main():
         blacklist.router, ad_schedule.router, export.router,
         whale_tracker.router, pattern_engine.router, ai_advisor.router,
         price_signal.router,
+        referral.router,
         p2p.router, alerts.router,   # p2p последним (широкие фильтры)
     ]:
         dp.include_router(r)
@@ -168,6 +172,7 @@ async def main():
     asyncio.create_task(_loop(lambda: arbitrage.check_arbitrage(bot),         120,   "arbitrage"))
     asyncio.create_task(_loop(lambda: ad_schedule.run_schedule(bot),           60,   "schedule"))
     asyncio.create_task(_loop(lambda: whale_tracker.check_whales(bot),        120,  "whales"))
+    asyncio.create_task(_loop(lambda: digest.send_daily_digest(bot),           60,  "digest"))
 
     if WEBHOOK_HOST:
         # ── Webhook режим (production) ─────────────────────────────────────────

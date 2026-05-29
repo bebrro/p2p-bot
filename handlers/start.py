@@ -5,14 +5,16 @@
 • Новый пользователь (нет записи в DB) → автоматически 3 дня Pro + онбординг
 • Старый пользователь → сразу главное меню
 """
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 
 from aiogram import Router
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
+    Bot,
 )
 
 import db
@@ -143,10 +145,25 @@ async def _give_trial(uid: int) -> datetime:
 # ─── /start ────────────────────────────────────────────────────────────────────
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
-    uid = message.from_user.id
+async def cmd_start(message: Message, command: CommandObject, bot: Bot):
+    uid      = message.from_user.id
+    username = message.from_user.username or ""
 
-    if await _is_new_user(uid):
+    # Регистрируем пользователя (idempotent — ON CONFLICT DO NOTHING)
+    is_new = await db.user_register(uid, username)
+
+    # Обрабатываем реферальный параметр: /start ref_12345
+    ref_arg = command.args or ""
+    if ref_arg.startswith("ref_") and is_new:
+        try:
+            referrer_id = int(ref_arg[4:])
+            # Импорт здесь во избежание циклического импорта
+            from handlers.referral import process_referral
+            asyncio.create_task(process_referral(referrer_id, uid, bot))
+        except (ValueError, Exception) as e:
+            logger.warning(f"Bad ref arg '{ref_arg}': {e}")
+
+    if is_new or await _is_new_user(uid):
         await _give_trial(uid)
         await message.answer(
             _WELCOME_NEW.format(days=TRIAL_DAYS),

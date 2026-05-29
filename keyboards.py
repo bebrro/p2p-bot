@@ -25,6 +25,7 @@ def main_menu() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="⭐ Подписка",   callback_data="sub:list"),
             InlineKeyboardButton(text="📊 P&L трекер", callback_data="pnl:view"),
+            InlineKeyboardButton(text="👥 Рефералы",   callback_data="ref:show"),
         ],
         [
             InlineKeyboardButton(text="🟡 Binance P2P", callback_data="exchange:binance"),

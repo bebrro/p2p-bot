@@ -120,6 +120,26 @@ async def _create_tables() -> None:
             created_at  TIMESTAMPTZ DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS users (
+            user_id    BIGINT PRIMARY KEY,
+            username   TEXT    DEFAULT '',
+            first_seen TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS referrals (
+            id          SERIAL PRIMARY KEY,
+            referrer_id BIGINT NOT NULL,
+            referred_id BIGINT NOT NULL UNIQUE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_ref_referrer ON referrals(referrer_id);
+
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id        BIGINT PRIMARY KEY,
+            digest_enabled BOOLEAN DEFAULT TRUE,
+            updated_at     TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS arb_alerts (
             id         SERIAL PRIMARY KEY,
             user_id    BIGINT NOT NULL,
@@ -588,6 +608,85 @@ async def repricer_get_all_enabled() -> list[dict]:
             "FROM repricer_rules WHERE enabled=TRUE ORDER BY user_id,id"
         )
     return [dict(r) for r in rows]
+
+
+# ── Users ─────────────────────────────────────────────────────────────────────
+
+async def user_register(user_id: int, username: str = "") -> bool:
+    """Регистрирует пользователя. Возвращает True если это первый визит."""
+    if not ok(): return False
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "INSERT INTO users(user_id, username) VALUES($1, $2) ON CONFLICT DO NOTHING",
+            user_id, username or "",
+        )
+    return res == "INSERT 0 1"  # True = новый пользователь
+
+
+async def users_get_all_ids() -> list[int]:
+    """Все зарегистрированные user_id (для рассылки)."""
+    if not ok(): return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch("SELECT user_id FROM users")
+    return [r["user_id"] for r in rows]
+
+
+# ── Referrals ──────────────────────────────────────────────────────────────────
+
+async def referral_add(referrer_id: int, referred_id: int) -> bool:
+    """Сохраняет реферал. False если пользователь уже был кем-то приглашён."""
+    if not ok(): return False
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "INSERT INTO referrals(referrer_id, referred_id) VALUES($1, $2) ON CONFLICT DO NOTHING",
+            referrer_id, referred_id,
+        )
+    return res == "INSERT 0 1"
+
+
+async def referral_count(referrer_id: int) -> int:
+    """Количество приглашённых пользователем."""
+    if not ok(): return 0
+    async with _pool.acquire() as c:
+        count = await c.fetchval(
+            "SELECT COUNT(*) FROM referrals WHERE referrer_id=$1", referrer_id
+        )
+    return int(count or 0)
+
+
+# ── User settings ──────────────────────────────────────────────────────────────
+
+async def user_settings_get(user_id: int) -> dict:
+    """Настройки пользователя (с дефолтами)."""
+    if not ok(): return {"digest_enabled": True}
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT digest_enabled FROM user_settings WHERE user_id=$1", user_id
+        )
+    return dict(row) if row else {"digest_enabled": True}
+
+
+async def user_settings_set(user_id: int, digest_enabled: bool) -> None:
+    if not ok(): return
+    async with _pool.acquire() as c:
+        await c.execute("""
+            INSERT INTO user_settings(user_id, digest_enabled, updated_at)
+            VALUES($1, $2, NOW())
+            ON CONFLICT(user_id) DO UPDATE SET digest_enabled=$2, updated_at=NOW()
+        """, user_id, digest_enabled)
+
+
+async def users_get_digest_recipients() -> list[int]:
+    """user_id всех кто хочет дайджест (по умолчанию — все)."""
+    if not ok(): return []
+    async with _pool.acquire() as c:
+        # Все зарегистрированные пользователи у которых НЕ выключен дайджест
+        rows = await c.fetch("""
+            SELECT u.user_id FROM users u
+            LEFT JOIN user_settings s ON s.user_id = u.user_id
+            WHERE s.digest_enabled IS DISTINCT FROM FALSE
+        """)
+    return [r["user_id"] for r in rows]
 
 
 # ── Arb Alerts ────────────────────────────────────────────────────────────────
