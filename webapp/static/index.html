@@ -792,10 +792,11 @@ const PAY_METHODS = {
     USD:[{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
   },
   okx:{
-    KZT:[{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},{v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'},{v:'FreedomBank',lbl:'Freedom'}],
-    RUB:[{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'FPSBANK',lbl:'СБП'}],
-    TRY:[{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},{v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
-    USD:[{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
+    // OKX returns human-readable names ("Kaspi Bank", "Freedom Finance") — use root keywords
+    KZT:[{v:'',lbl:'Все'},{v:'Kaspi',lbl:'Kaspi'},{v:'Halyk',lbl:'Halyk'},{v:'Jusan',lbl:'Jusan'},{v:'Forte',lbl:'Forte'},{v:'Freedom',lbl:'Freedom'}],
+    RUB:[{v:'',lbl:'Все'},{v:'Tinkoff',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'Raiffeisen',lbl:'Raiffeisen'},{v:'СБП',lbl:'СБП'}],
+    TRY:[{v:'',lbl:'Все'},{v:'Ziraat',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},{v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
+    USD:[{v:'',lbl:'Все'},{v:'Bank',lbl:'Bank Transfer'}],
   },
   wallet:{
     KZT:[{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'}],

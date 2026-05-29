@@ -70,10 +70,15 @@ async def get_ads(
 
     if pay_types:
         lower_pay = [p.lower() for p in pay_types]
-        ads = [
-            a for a in ads
-            if any(lp in pt.lower() for pt in a["pay_types"] for lp in lower_pay)
-        ]
+        def _matches(pay_list: list) -> bool:
+            for pt in pay_list:
+                ptl = pt.lower()
+                for lp in lower_pay:
+                    # "freedom" in "freedom finance"  OR  "kaspibank" in "kaspi bank" (prefix)
+                    if lp in ptl or ptl in lp:
+                        return True
+            return False
+        ads = [a for a in ads if _matches(a["pay_types"])]
 
     return ads[:rows]
 
