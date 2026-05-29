@@ -5,6 +5,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, MenuButtonCommands
 from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT, PAYMENT_LABELS
 from webapp.server import start_webapp
+from utils.rate_limit import RateLimitMiddleware
+
+import os
+WEBHOOK_HOST   = os.getenv("WEBHOOK_HOST",   "")   # https://example.com
+WEBHOOK_PATH   = os.getenv("WEBHOOK_PATH",   "/webhook")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 from handlers import (
     start, p2p, alerts, maker, tracker, calculator,
     position_monitor, price_history, multipair,
@@ -114,9 +120,15 @@ async def main():
         await blacklist.load_from_db()          # ЧС в память
         await account_manager.load_from_db()    # API-аккаунты (Bybit + OKX)
         await auto_reprice.load_from_db()       # Правила репрайсера
+        await arbitrage.load_from_db()          # Арбитражные алерты
 
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=MemoryStorage())
+
+    # Rate limiting — защита от спама
+    _rl = RateLimitMiddleware(rate=10, period=3.0)
+    dp.message.middleware(_rl)
+    dp.callback_query.middleware(RateLimitMiddleware(rate=20, period=3.0))
 
     # ── Команды (кнопка ☰ рядом с полем ввода) ────────────────────────────
     await bot.set_my_commands([
@@ -157,15 +169,33 @@ async def main():
     asyncio.create_task(_loop(lambda: ad_schedule.run_schedule(bot),           60,   "schedule"))
     asyncio.create_task(_loop(lambda: whale_tracker.check_whales(bot),        120,  "whales"))
 
-    # Запускаем Mini App веб-сервер (aiohttp, тот же event loop)
-    await start_webapp(port=WEBAPP_PORT)
-    if WEBAPP_URL:
-        logger.info(f"Mini App: {WEBAPP_URL}")
+    if WEBHOOK_HOST:
+        # ── Webhook режим (production) ─────────────────────────────────────────
+        webhook_url = f"{WEBHOOK_HOST.rstrip('/')}{WEBHOOK_PATH}"
+        await bot.set_webhook(
+            url=webhook_url,
+            secret_token=WEBHOOK_SECRET or None,
+            drop_pending_updates=True,
+        )
+        await start_webapp(
+            port=WEBAPP_PORT,
+            webhook_path=WEBHOOK_PATH,
+            dp=dp,
+            bot=bot,
+            webhook_secret=WEBHOOK_SECRET or None,
+        )
+        logger.info(f"Бот запущен ✅ (Webhook: {webhook_url})")
+        await asyncio.Event().wait()   # держим event loop живым
     else:
-        logger.info(f"Mini App server on :{WEBAPP_PORT} (запусти ngrok http {WEBAPP_PORT}, добавь URL в .env)")
-
-    logger.info("Бот запущен ✅")
-    await dp.start_polling(bot, skip_updates=True)
+        # ── Polling режим (разработка) ─────────────────────────────────────────
+        await bot.delete_webhook(drop_pending_updates=True)
+        await start_webapp(port=WEBAPP_PORT)
+        if WEBAPP_URL:
+            logger.info(f"Mini App: {WEBAPP_URL}")
+        else:
+            logger.info(f"Mini App server :{WEBAPP_PORT}  |  ngrok http {WEBAPP_PORT}")
+        logger.info("Бот запущен ✅ (Polling)")
+        await dp.start_polling(bot, skip_updates=True)
 
 
 if __name__ == "__main__":

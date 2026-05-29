@@ -120,6 +120,16 @@ async def _create_tables() -> None:
             created_at  TIMESTAMPTZ DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS arb_alerts (
+            id         SERIAL PRIMARY KEY,
+            user_id    BIGINT NOT NULL,
+            fiat       VARCHAR(10) NOT NULL,
+            asset      VARCHAR(10) NOT NULL,
+            threshold  FLOAT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, fiat, asset)
+        );
+
         CREATE TABLE IF NOT EXISTS repricer_rules (
             id            SERIAL PRIMARY KEY,
             user_id       BIGINT NOT NULL,
@@ -578,6 +588,57 @@ async def repricer_get_all_enabled() -> list[dict]:
             "FROM repricer_rules WHERE enabled=TRUE ORDER BY user_id,id"
         )
     return [dict(r) for r in rows]
+
+
+# ── Arb Alerts ────────────────────────────────────────────────────────────────
+
+async def arb_alerts_get(user_id: int) -> list[dict]:
+    if not ok(): return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id, fiat, asset, threshold FROM arb_alerts "
+            "WHERE user_id=$1 ORDER BY id",
+            user_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def arb_alerts_add(user_id: int, fiat: str, asset: str, threshold: float) -> int:
+    """Добавляет арбитражный алерт, возвращает id."""
+    if not ok(): return -1
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "INSERT INTO arb_alerts(user_id,fiat,asset,threshold) VALUES($1,$2,$3,$4) "
+            "ON CONFLICT(user_id,fiat,asset) DO UPDATE SET threshold=$4 RETURNING id",
+            user_id, fiat, asset, threshold,
+        )
+    return row["id"]
+
+
+async def arb_alerts_delete_by_id(user_id: int, alert_id: int) -> None:
+    if not ok(): return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "DELETE FROM arb_alerts WHERE user_id=$1 AND id=$2", user_id, alert_id
+        )
+
+
+async def arb_alerts_get_all() -> dict[int, list]:
+    """Все арбитражные алерты всех пользователей."""
+    if not ok(): return {}
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id, user_id, fiat, asset, threshold FROM arb_alerts ORDER BY user_id, id"
+        )
+    result: dict[int, list] = {}
+    for r in rows:
+        result.setdefault(r["user_id"], []).append({
+            "db_id":    r["id"],
+            "fiat":     r["fiat"],
+            "asset":    r["asset"],
+            "threshold": r["threshold"],
+        })
+    return result
 
 
 # ── Subscriptions ──────────────────────────────────────────────────────────────

@@ -10,9 +10,13 @@ Mini App HTTP-сервер (aiohttp.web).
 """
 import asyncio
 import logging
+import time as _time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from aiohttp import web
+
+_start_time = _time.monotonic()
 
 import db
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p, gemini
@@ -927,6 +931,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/user/subscription",                         api_subscription)
     app.router.add_get("/api/user/pnl",                                  api_pnl)
 
+    # Health check
+    app.router.add_get("/health",     health_handler)
     # Root → index.html
     app.router.add_get("/",           index_handler)
     app.router.add_get("/index.html", index_handler)
@@ -934,9 +940,39 @@ def create_app() -> web.Application:
     return app
 
 
-async def start_webapp(port: int = 8080) -> web.AppRunner:
-    """Запускает веб-сервер в текущем event loop. Вызывать из main() бота."""
-    app    = create_app()
+async def health_handler(request: web.Request) -> web.Response:
+    """GET /health — liveness probe для мониторинга и Docker healthcheck."""
+    uptime = round(_time.monotonic() - _start_time)
+    return web.json_response({
+        "status":    "ok",
+        "db":        db.ok(),
+        "uptime_s":  uptime,
+        "ts":        datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def start_webapp(
+    port: int = 8080,
+    webhook_path: str | None = None,
+    dp=None,
+    bot=None,
+    webhook_secret: str | None = None,
+) -> web.AppRunner:
+    """
+    Запускает Mini App сервер в текущем event loop.
+    Если переданы webhook_path + dp + bot — регистрирует Telegram webhook на том же порту.
+    """
+    app = create_app()
+
+    if webhook_path and dp and bot:
+        from aiogram.webhook.aiohttp_server import SimpleRequestHandler
+        SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+            secret_token=webhook_secret or None,
+        ).register(app, path=webhook_path)
+        logger.info(f"Webhook registered at {webhook_path}")
+
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)

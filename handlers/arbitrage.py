@@ -21,10 +21,13 @@ from aiogram.fsm.state import State, StatesGroup
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
 from config import FIATS, FIAT_FLAGS
+import db
+import logging as _log
 
-router = Router()
+router  = Router()
+_logger = _log.getLogger(__name__)
 
-# {user_id: [{"fiat", "asset", "threshold"}]}
+# {user_id: [{"fiat", "asset", "threshold", "db_id"}]}
 _arb_alerts: dict[int, list] = {}
 
 # Кулдаун: "{user_id}:{fiat}:{asset}" → unix_timestamp последнего уведомления
@@ -175,15 +178,20 @@ async def arb_got_threshold(message: Message, state: FSMContext):
     data = await state.get_data()
     await state.clear()
 
-    uid = message.from_user.id
+    uid    = message.from_user.id
+    fiat   = data["fiat"]
+    asset  = data["asset"]
+
+    db_id  = await db.arb_alerts_add(uid, fiat, asset, threshold)
+
     if uid not in _arb_alerts:
         _arb_alerts[uid] = []
     _arb_alerts[uid].append({
-        "fiat": data["fiat"], "asset": data["asset"], "threshold": threshold
+        "fiat": fiat, "asset": asset, "threshold": threshold, "db_id": db_id,
     })
     await message.answer(
         f"✅ Алерт добавлен!\n"
-        f"{data['asset']}/{data['fiat']} → уведомлю при разнице > {threshold}%\n"
+        f"{asset}/{fiat} → уведомлю при разнице > {threshold}%\n"
         f"Кулдаун: 30 минут между повторными уведомлениями.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔍 Арбитраж",     callback_data="arb:list")],
@@ -198,9 +206,22 @@ async def arb_del(callback: CallbackQuery):
     uid = callback.from_user.id
     lst = _arb_alerts.get(uid, [])
     if 0 <= idx < len(lst):
-        lst.pop(idx)
+        alert = lst.pop(idx)
+        if alert.get("db_id") and alert["db_id"] > 0:
+            await db.arb_alerts_delete_by_id(uid, alert["db_id"])
         await callback.answer("✅ Удалён")
     await arb_list(callback)
+
+
+async def load_from_db() -> None:
+    """Загружает арбитражные алерты из БД в память при старте."""
+    if not db.ok():
+        return
+    all_alerts = await db.arb_alerts_get_all()
+    for uid, alerts in all_alerts.items():
+        _arb_alerts[uid] = alerts
+    total = sum(len(v) for v in _arb_alerts.values())
+    _logger.info(f"Arb alerts loaded from DB: {total}")
 
 
 @router.callback_query(lambda c: c.data == "arb:scan")
