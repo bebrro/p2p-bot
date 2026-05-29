@@ -19,28 +19,30 @@ PLANS: dict[str, dict] = {
         "export":         False,
     },
     "pro": {
-        "name":            "Pro",
-        "emoji":           "⭐",
-        "price_usdt":      9.99,
-        "duration_days":   30,
-        "repricer_rules":  10,
-        "trackers":        20,
-        "alerts":          20,
-        "arbitrage_4x":    True,
-        "pnl":             True,
-        "export":          True,
+        "name":             "Pro",
+        "emoji":            "⭐",
+        "price_usdt":       9.99,
+        "price_lifetime":   59.0,
+        "duration_days":    30,
+        "repricer_rules":   10,
+        "trackers":         20,
+        "alerts":           20,
+        "arbitrage_4x":     True,
+        "pnl":              True,
+        "export":           True,
     },
     "team": {
-        "name":            "Team",
-        "emoji":           "👑",
-        "price_usdt":      24.99,
-        "duration_days":   30,
-        "repricer_rules":  50,
-        "trackers":        100,
-        "alerts":          100,
-        "arbitrage_4x":    True,
-        "pnl":             True,
-        "export":          True,
+        "name":             "Team",
+        "emoji":            "👑",
+        "price_usdt":       24.99,
+        "price_lifetime":   149.0,
+        "duration_days":    30,
+        "repricer_rules":   50,
+        "trackers":         100,
+        "alerts":           100,
+        "arbitrage_4x":     True,
+        "pnl":              True,
+        "export":           True,
     },
 }
 
@@ -107,7 +109,10 @@ def format_plan_card(plan_key: str, is_current: bool = False) -> str:
     if plan_key == "free":
         lines.append("💰 Бесплатно")
     else:
-        lines.append(f"💰 {p['price_usdt']:.2f} USDT / {p['duration_days']} дней")
+        lines.append(
+            f"💰 {p['price_usdt']:.2f} USDT/мес  "
+            f"или {p['price_lifetime']:.0f} USDT навсегда 🔥"
+        )
     lines += [
         f"  • Репрайсер: до {p['repricer_rules']} правил",
         f"  • Трекеры: до {p['trackers']}",

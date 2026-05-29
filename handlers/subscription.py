@@ -112,13 +112,15 @@ def _admin_btn() -> list | None:
 def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
     btns = []
     if current_plan != "pro":
-        btns.append([InlineKeyboardButton(
-            text="⭐ Pro — 9.99 USDT / мес",  callback_data="sub:pay:pro",
-        )])
+        btns.append([
+            InlineKeyboardButton(text="⭐ Pro — 9.99/мес",     callback_data="sub:pay:pro"),
+            InlineKeyboardButton(text="⭐ Pro — 59 навсегда🔥", callback_data="sub:pay:pro_life"),
+        ])
     if current_plan != "team":
-        btns.append([InlineKeyboardButton(
-            text="👑 Team — 24.99 USDT / мес", callback_data="sub:pay:team",
-        )])
+        btns.append([
+            InlineKeyboardButton(text="👑 Team — 24.99/мес",      callback_data="sub:pay:team"),
+            InlineKeyboardButton(text="👑 Team — 149 навсегда🔥",  callback_data="sub:pay:team_life"),
+        ])
     admin = _admin_btn()
     if admin:
         btns.append(admin)
@@ -166,35 +168,50 @@ async def sub_list(event: Message | CallbackQuery):
         await event.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
-# ─── sub:pay:pro / sub:pay:team ────────────────────────────────────────────────
+# ─── sub:pay:* ─────────────────────────────────────────────────────────────────
 
-@router.callback_query(lambda c: c.data in ("sub:pay:pro", "sub:pay:team"))
+_PAY_VARIANTS = {
+    "sub:pay:pro":       ("pro",  False),
+    "sub:pay:pro_life":  ("pro",  True),
+    "sub:pay:team":      ("team", False),
+    "sub:pay:team_life": ("team", True),
+}
+
+@router.callback_query(lambda c: c.data in _PAY_VARIANTS)
 async def sub_pay(callback: CallbackQuery):
-    plan_key = callback.data.split(":")[2]          # "pro" or "team"
-    plan     = PLANS.get(plan_key)
+    plan_key, lifetime = _PAY_VARIANTS[callback.data]
+    plan   = PLANS.get(plan_key)
     if not plan:
         await callback.answer("Ошибка плана", show_alert=True)
         return
 
-    uid        = callback.from_user.id
-    amount     = plan["price_usdt"]
-    days       = plan["duration_days"]
-    wallet     = CRYPTO_WALLET_TRC20 or "⚠️ кошелёк не настроен"
+    uid    = callback.from_user.id
+    amount = plan["price_lifetime"] if lifetime else plan["price_usdt"]
+    wallet = CRYPTO_WALLET_TRC20 or "⚠️ кошелёк не настроен"
 
     # Сохраняем pending-платёж
     _pending[uid] = {
         "plan":        plan_key,
         "amount_usdt": amount,
+        "lifetime":    lifetime,
         "created":     time.time(),
     }
 
+    if lifetime:
+        period_str = "♾ <b>навсегда</b> 🔥"
+        note       = "Подписка активируется <b>без срока действия</b>."
+    else:
+        period_str = f"📅 <b>{plan['duration_days']} дней</b>"
+        note       = f"Следующий платёж через {plan['duration_days']} дней."
+
     text = (
-        f"💳 <b>Оплата {plan['emoji']} {plan['name']} — {amount} USDT</b>\n\n"
+        f"💳 <b>Оплата {plan['emoji']} {plan['name']}</b>\n\n"
         f"Сеть: <b>TRON (TRC20)</b>\n\n"
         f"📋 Адрес кошелька:\n"
         f"<code>{wallet}</code>\n\n"
         f"💵 Сумма: <b>{amount} USDT</b>\n"
-        f"📅 Период: <b>{days} дней</b>\n\n"
+        f"⏳ Период: {period_str}\n"
+        f"{note}\n\n"
         f"<b>Как оплатить:</b>\n"
         f"1. Отправь ровно <b>{amount} USDT TRC20</b> на адрес выше\n"
         f"2. Дождись 1-2 подтверждений в сети (~1-2 мин)\n"
@@ -206,7 +223,7 @@ async def sub_pay(callback: CallbackQuery):
     )
 
     pay_kb = []
-    admin = _admin_btn()
+    admin  = _admin_btn()
     if admin:
         pay_kb.append(admin)
     pay_kb.append([InlineKeyboardButton(text="⬅️ К планам", callback_data="sub:list")])
@@ -259,6 +276,7 @@ async def pay_confirm(message: Message):
 
     plan_key   = pending["plan"]
     amount     = pending["amount_usdt"]
+    lifetime   = pending.get("lifetime", False)
     wallet     = CRYPTO_WALLET_TRC20
 
     await message.answer("⏳ Проверяю транзакцию в сети TRON...")
@@ -282,7 +300,7 @@ async def pay_confirm(message: Message):
         return
 
     # ✅ Верификация прошла — активируем подписку
-    await _activate_subscription(message, uid, plan_key, amount_confirmed=detail, txid=txid)
+    await _activate_subscription(message, uid, plan_key, amount_confirmed=detail, txid=txid, lifetime=lifetime)
 
 
 # ─── sub:verify:{txid} callback (retry) ───────────────────────────────────────
@@ -299,6 +317,7 @@ async def sub_verify_retry(callback: CallbackQuery):
 
     plan_key   = pending["plan"]
     amount     = pending["amount_usdt"]
+    lifetime   = pending.get("lifetime", False)
     wallet     = CRYPTO_WALLET_TRC20
 
     await callback.message.edit_text("⏳ Проверяю транзакцию...")
@@ -322,7 +341,7 @@ async def sub_verify_retry(callback: CallbackQuery):
         )
         return
 
-    await _activate_subscription(callback.message, uid, plan_key, amount_confirmed=detail, txid=txid)
+    await _activate_subscription(callback.message, uid, plan_key, amount_confirmed=detail, txid=txid, lifetime=lifetime)
 
 
 # ─── Activation helper ─────────────────────────────────────────────────────────
@@ -333,11 +352,18 @@ async def _activate_subscription(
     plan_key: str,
     amount_confirmed: str,
     txid: str,
+    lifetime: bool = False,
 ) -> None:
     """Записывает подписку в БД, отправляет подтверждение."""
-    plan       = PLANS[plan_key]
-    days       = plan["duration_days"]
-    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+    plan = PLANS[plan_key]
+
+    if lifetime:
+        expires_at  = None   # NULL в БД = бессрочно
+        period_line = "♾ <b>Навсегда</b> — срок не истечёт 🔥"
+    else:
+        days        = plan["duration_days"]
+        expires_at  = datetime.now(timezone.utc) + timedelta(days=days)
+        period_line = f"Действует: <b>{days} дней</b>  →  до {expires_at.strftime('%d.%m.%Y')}"
 
     await db.subscription_set(uid, plan_key, expires_at)
     _pending.pop(uid, None)
@@ -345,7 +371,7 @@ async def _activate_subscription(
     await msg_obj.answer(
         f"🎉 <b>Подписка активирована!</b>\n\n"
         f"План: <b>{plan['emoji']} {plan['name']}</b>\n"
-        f"Действует: <b>{days} дней</b>  →  до {expires_at.strftime('%d.%m.%Y')}\n"
+        f"{period_line}\n"
         f"Оплачено: <b>{amount_confirmed} USDT</b>\n"
         f"TXID: <code>{txid[:20]}…</code>\n\n"
         f"Разблокировано:\n"
@@ -362,7 +388,7 @@ async def _activate_subscription(
     )
     logger.info(
         f"Subscription activated: uid={uid} plan={plan_key} "
-        f"days={days} amount={amount_confirmed} txid={txid}"
+        f"lifetime={lifetime} amount={amount_confirmed} txid={txid}"
     )
 
 
