@@ -885,6 +885,82 @@ async def api_pnl(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_dashboard(request: web.Request) -> web.Response:
+    """GET /api/dashboard?fiat=KZT&asset=USDT&uid=xxx — агрегированный дашборд."""
+    fiat  = request.rel_url.query.get("fiat",  "KZT")
+    asset = request.rel_url.query.get("asset", "USDT")
+    uid   = _uid(request)
+    try:
+        results = await asyncio.gather(
+            binance_p2p.get_best_price(asset, fiat, "BUY"),
+            binance_p2p.get_best_price(asset, fiat, "SELL"),
+            bybit_p2p.get_best_price(asset, fiat, "1"),
+            bybit_p2p.get_best_price(asset, fiat, "0"),
+            okx_p2p.get_best_price(asset, fiat, "buy"),
+            okx_p2p.get_best_price(asset, fiat, "sell"),
+            wallet_p2p.get_best_price(asset, fiat, "buy"),
+            wallet_p2p.get_best_price(asset, fiat, "sell"),
+            return_exceptions=True,
+        )
+        def _v(x): return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+        exchanges = [
+            {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
+            {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
+            {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
+            {"id": "wallet",  "name": "Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
+        ]
+        for ex in exchanges:
+            if ex["buy"] and ex["sell"]:
+                s = calc_spread(ex["buy"], ex["sell"])
+                ex["spread_pct"] = round(s["spread_pct"], 2)
+                ex["spread_abs"] = round(s["spread_abs"], 2)
+            else:
+                ex["spread_pct"] = None
+                ex["spread_abs"] = None
+
+        arb = []
+        for ex1 in exchanges:
+            for ex2 in exchanges:
+                if ex1["id"] == ex2["id"]: continue
+                if ex1["buy"] and ex2["sell"]:
+                    s = calc_spread(ex1["buy"], ex2["sell"])
+                    if s["spread_pct"] > 0:
+                        arb.append({
+                            "from": ex1["name"], "to": ex2["name"],
+                            "from_id": ex1["id"], "to_id": ex2["id"],
+                            "pct": round(s["spread_pct"], 2),
+                            "abs": round(s["spread_abs"], 2),
+                        })
+        arb.sort(key=lambda x: -x["pct"])
+
+        tools: dict = {}
+        if uid and db.ok():
+            a_rows, t_rows, r_rows = await asyncio.gather(
+                db.alerts_get(uid),
+                db.trackers_get(uid),
+                db.repricer_get(uid),
+                return_exceptions=True,
+            )
+            tools = {
+                "alerts":   len(a_rows) if isinstance(a_rows, list) else 0,
+                "trackers": len(t_rows) if isinstance(t_rows, list) else 0,
+                "repricer": len(r_rows) if isinstance(r_rows, list) else 0,
+            }
+
+        return web.json_response({
+            "fiat":      fiat,
+            "asset":     asset,
+            "exchanges": exchanges,
+            "best_arb":  arb[0] if arb else None,
+            "tools":     tools,
+            "ts":        datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"api_dashboard: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -930,6 +1006,7 @@ def create_app() -> web.Application:
     # Subscription & P&L
     app.router.add_get("/api/user/subscription",                         api_subscription)
     app.router.add_get("/api/user/pnl",                                  api_pnl)
+    app.router.add_get("/api/dashboard",                                  api_dashboard)
 
     # Health check
     app.router.add_get("/health",     health_handler)

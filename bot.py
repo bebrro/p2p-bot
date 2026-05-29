@@ -1,11 +1,29 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
+
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, MenuButtonCommands
-from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT, PAYMENT_LABELS
+
+from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT, PAYMENT_LABELS, REDIS_URL, ADMIN_CHAT_ID
 from webapp.server import start_webapp
 from utils.rate_limit import RateLimitMiddleware
+from utils.error_reporter import setup_reporter, report as report_error
+from utils.subscription import get_plan_key, PLANS
+
+# ── FSM Storage: Redis если задан URL, иначе Memory ───────────────────────────
+def _make_storage():
+    if REDIS_URL:
+        try:
+            from aiogram.fsm.storage.redis import RedisStorage
+            storage = RedisStorage.from_url(REDIS_URL)
+            logging.getLogger(__name__).info(f"FSM storage: Redis ({REDIS_URL})")
+            return storage
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Redis FSM failed ({e}), fallback to Memory")
+    logging.getLogger(__name__).info("FSM storage: Memory")
+    return MemoryStorage()
 
 import os
 WEBHOOK_HOST   = os.getenv("WEBHOOK_HOST",   "")   # https://example.com
@@ -30,13 +48,13 @@ logger = logging.getLogger(__name__)
 
 
 async def _loop(coro_fn, interval: int, label: str):
-    """Универсальный фоновый цикл."""
+    """Универсальный фоновый цикл с Telegram-алертом при ошибке."""
     while True:
         await asyncio.sleep(interval)
         try:
             await coro_fn()
         except Exception as e:
-            logger.error(f"{label} error: {e}")
+            await report_error(f"background:{label}", e)
 
 
 async def check_alerts_task(bot: Bot):
@@ -110,6 +128,48 @@ async def check_alerts_task(bot: Bot):
                 logger.error(f"Alert error user={user_id}: {e}")
 
 
+async def check_expiring_subscriptions(bot: Bot) -> None:
+    """
+    Раз в час проверяет подписки с истечением через 3 дня и через 1 день.
+    Каждому пользователю отправляет не более одного уведомления на порог.
+    """
+    import db as _db
+    for threshold_days, notif_type in ((3, "3d"), (1, "1d")):
+        expiring = await _db.subscriptions_expiring_soon(days=threshold_days)
+        for row in expiring:
+            uid      = row["user_id"]
+            plan_key = row["plan"]
+            days_left = max(1, int(row["days_left"] or 1))
+
+            if await _db.expiry_notif_sent(uid, notif_type):
+                continue
+
+            plan = PLANS.get(plan_key, {})
+            name = plan.get("name", plan_key.title())
+
+            try:
+                await bot.send_message(
+                    uid,
+                    f"⏰ <b>Подписка истекает через {days_left} {'день' if days_left == 1 else 'дня'}!</b>\n\n"
+                    f"Твой план <b>{name}</b> закончится {row['expires_at'].strftime('%d.%m.%Y')}.\n\n"
+                    "Продли сейчас — все настройки и алерты сохранятся.\n\n"
+                    "👇 Нажми чтобы продлить:",
+                    reply_markup=__import__("aiogram").types.InlineKeyboardMarkup(
+                        inline_keyboard=[[
+                            __import__("aiogram").types.InlineKeyboardButton(
+                                text="⭐ Продлить подписку",
+                                callback_data="sub:list",
+                            )
+                        ]]
+                    ),
+                    parse_mode="HTML",
+                )
+                await _db.expiry_notif_mark(uid, notif_type)
+                await asyncio.sleep(0.05)
+            except Exception as e:
+                logger.warning(f"Expiry notify uid={uid}: {e}")
+
+
 async def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN не задан!")
@@ -124,7 +184,10 @@ async def main():
         await arbitrage.load_from_db()          # Арбитражные алерты
 
     bot = Bot(token=BOT_TOKEN)
-    dp  = Dispatcher(storage=MemoryStorage())
+    dp  = Dispatcher(storage=_make_storage())
+
+    # Telegram-алерты об ошибках → личка администратора
+    setup_reporter(bot, ADMIN_CHAT_ID)
 
     # Rate limiting — защита от спама
     _rl = RateLimitMiddleware(rate=10, period=3.0)
@@ -173,6 +236,7 @@ async def main():
     asyncio.create_task(_loop(lambda: ad_schedule.run_schedule(bot),           60,   "schedule"))
     asyncio.create_task(_loop(lambda: whale_tracker.check_whales(bot),        120,  "whales"))
     asyncio.create_task(_loop(lambda: digest.send_daily_digest(bot),           60,  "digest"))
+    asyncio.create_task(_loop(lambda: check_expiring_subscriptions(bot),    3600,  "expiry"))
 
     if WEBHOOK_HOST:
         # ── Webhook режим (production) ─────────────────────────────────────────

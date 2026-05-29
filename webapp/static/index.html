@@ -347,6 +347,45 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes typingBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+/* ── Dashboard (home tab) ─────────────────────────────────── */
+#tab-home{padding:10px 10px calc(var(--nav-h)+14px)}
+.dash-fiat-row{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:10px}
+.dash-fiat-row::-webkit-scrollbar{display:none}
+.dash-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--hint);margin:12px 0 6px;display:flex;align-items:center;gap:6px}
+.dash-sec-ts{font-size:10px;color:var(--hint);font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto}
+.dash-plan-bar{background:var(--bg2);border-radius:var(--r);padding:9px 12px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;animation:fadeIn .2s ease}
+.dash-plan-name{font-size:13px;font-weight:700}
+.dash-plan-sub{font-size:10px;color:var(--hint);margin-top:1px}
+.dash-arb{background:linear-gradient(135deg,rgba(67,181,129,.13),rgba(44,165,224,.1));border:1px solid rgba(67,181,129,.25);border-radius:var(--r);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:opacity .12s;animation:fadeIn .2s ease}
+.dash-arb:active{opacity:.82}.dash-arb.no-arb{background:var(--bg2);border-color:rgba(255,255,255,.06);cursor:default}
+.dash-arb-route{font-size:13px;font-weight:700;margin-bottom:2px}
+.dash-arb-hint{font-size:10px;color:var(--hint)}
+.dash-arb-pct{font-size:26px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;flex-shrink:0}
+.dash-ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dash-ex-card{background:var(--bg2);border-radius:var(--r);padding:9px 11px;cursor:pointer;transition:background .12s;animation:fadeIn .2s ease}
+.dash-ex-card:active{background:rgba(255,255,255,.07)}
+.dash-ex-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.dash-ex-name{font-size:12px;font-weight:700}
+.dash-ex-sp{font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px}
+.dash-ex-sp.pos{background:rgba(67,181,129,.18);color:var(--green)}
+.dash-ex-sp.neg{background:rgba(240,71,71,.15);color:var(--red)}
+.dash-ex-sp.none{background:rgba(255,255,255,.07);color:var(--hint)}
+.dash-ex-prices{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.dash-ex-col{text-align:center}
+.dash-ex-lbl{font-size:8px;color:var(--hint);text-transform:uppercase;letter-spacing:.2px}
+.dash-ex-val{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.dash-ex-val.g{color:var(--green)}.dash-ex-val.r{color:var(--red)}
+.dash-tools-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.dash-tool{background:var(--bg2);border-radius:var(--r);padding:9px 6px;text-align:center;cursor:pointer;transition:background .12s;animation:fadeIn .2s ease}
+.dash-tool:active{background:rgba(255,255,255,.07)}
+.dash-tool-cnt{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-bottom:2px}
+.dash-tool-lbl{font-size:9px;color:var(--hint);text-transform:uppercase;letter-spacing:.3px}
+.dash-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.dash-act{padding:10px 8px;background:var(--bg2);color:var(--text);border:none;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:4px;transition:background .12s;text-align:center;line-height:1.35}
+.dash-act:active{background:rgba(255,255,255,.08)}
+.dash-act.cta{background:var(--btn);color:var(--btnt);grid-column:1/-1;font-size:13px;padding:11px 8px}
+.dash-act.cta:active{opacity:.85}
 </style>
 </head>
 <body>
@@ -392,8 +431,74 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
 </div>
 
+<!-- ════════════════════ TAB: ГЛАВНАЯ ════════════════════════ -->
+<div class="tab-panel" id="tab-home">
+  <!-- Fiat pills -->
+  <div class="dash-fiat-row" id="dashFiatRow">
+    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
+    <button class="pill" data-val="RUB">🇷🇺 RUB</button>
+    <button class="pill" data-val="TRY">🇹🇷 TRY</button>
+    <button class="pill" data-val="USD">🇺🇸 USD</button>
+  </div>
+
+  <!-- Plan card -->
+  <div class="dash-plan-bar">
+    <div>
+      <div class="dash-plan-name">P2P Monitor</div>
+      <div class="dash-plan-sub" id="dashPlanSub">Подключение...</div>
+    </div>
+    <span class="sub-plan-badge" id="dashPlanBadge">—</span>
+  </div>
+
+  <!-- Best arbitrage -->
+  <div class="dash-sec">🔥 Лучшая возможность <span class="dash-sec-ts" id="dashTs"></span></div>
+  <div class="dash-arb no-arb" id="dashArbCard" onclick="dashArbClick()">
+    <div>
+      <div class="dash-arb-route" id="dashArbRoute">Загрузка данных...</div>
+      <div class="dash-arb-hint"  id="dashArbHint">Анализируем все биржи</div>
+    </div>
+    <div class="dash-arb-pct" id="dashArbPct"></div>
+  </div>
+
+  <!-- Exchange overview -->
+  <div class="dash-sec">📊 Биржи — <span id="dashPairLbl" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">KZT / USDT</span></div>
+  <div class="dash-ex-grid" id="dashExGrid">
+    <div style="grid-column:1/-1;text-align:center;padding:18px;color:var(--hint);font-size:12px">⏳ Загрузка...</div>
+  </div>
+
+  <!-- Tools summary (shown when uid available) -->
+  <div id="dashToolsSec" style="display:none">
+    <div class="dash-sec">🛠 Ваши инструменты</div>
+    <div class="dash-tools-grid">
+      <div class="dash-tool" onclick="gotoMonitor('alerts')">
+        <div class="dash-tool-cnt" id="dashAlertsCnt">0</div>
+        <div class="dash-tool-lbl">🔔 Алерты</div>
+      </div>
+      <div class="dash-tool" onclick="gotoMonitor('trackers')">
+        <div class="dash-tool-cnt" id="dashTrackersCnt">0</div>
+        <div class="dash-tool-lbl">👁 Трекеры</div>
+      </div>
+      <div class="dash-tool" onclick="gotoMonitor('auto')">
+        <div class="dash-tool-cnt" id="dashRepricerCnt">0</div>
+        <div class="dash-tool-lbl">🔄 Авто-цена</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="dash-sec" style="margin-top:14px">⚡ Действия</div>
+  <div class="dash-actions">
+    <button class="dash-act cta" onclick="switchTab('spread',navBtn('spread'))">🔍 Найти лучший арбитраж</button>
+    <button class="dash-act" onclick="switchTab('book',navBtn('book'))">📊 Стакан</button>
+    <button class="dash-act" onclick="switchTab('maker',navBtn('maker'))">🎯 Мейкер</button>
+    <button class="dash-act" onclick="switchTab('monitor',navBtn('monitor'))">🔔 Монитор</button>
+    <button class="dash-act" onclick="switchTab('ai',navBtn('ai'))">🤖 AI Советник</button>
+    <button class="dash-act" onclick="switchTab('settings',navBtn('settings'))">⭐ Подписка</button>
+  </div>
+</div>
+
 <!-- ════════════════════ TAB: СТАКАН ═════════════════════════ -->
-<div class="tab-panel" id="tab-book">
+<div class="tab-panel hidden" id="tab-book">
   <div class="book-topbar">
     <div class="refresh-ts" id="refreshTs"></div>
     <button class="filter-toggle-btn" id="filterToggle" onclick="toggleFilter()">
@@ -628,12 +733,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ════════════════════ BOTTOM NAV ══════════════════════════ -->
 <nav class="bottom-nav">
-  <button class="nav-btn active" data-tab="book"     onclick="switchTab('book',this)"><span class="nav-icon">📊</span>Стакан</button>
-  <button class="nav-btn"        data-tab="chart"    onclick="switchTab('chart',this)"><span class="nav-icon">📈</span>График</button>
+  <button class="nav-btn active" data-tab="home"     onclick="switchTab('home',this)"><span class="nav-icon">🏠</span>Главная</button>
+  <button class="nav-btn"        data-tab="book"     onclick="switchTab('book',this)"><span class="nav-icon">📊</span>Стакан</button>
   <button class="nav-btn"        data-tab="spread"   onclick="switchTab('spread',this)"><span class="nav-icon">⚡</span>Спред</button>
   <button class="nav-btn"        data-tab="maker"    onclick="switchTab('maker',this)"><span class="nav-icon">🎯</span>Мейкер</button>
   <button class="nav-btn"        data-tab="monitor"  onclick="switchTab('monitor',this)"><span class="nav-icon">🔔</span>Монитор</button>
-  <button class="nav-btn"        data-tab="settings" onclick="switchTab('settings',this)"><span class="nav-icon">⚙️</span>Настройки</button>
+  <button class="nav-btn"        data-tab="settings" onclick="switchTab('settings',this)"><span class="nav-icon">⚙️</span>Кабинет</button>
+  <button class="nav-btn"        data-tab="ai"       onclick="switchTab('ai',this)"><span class="nav-icon">🤖</span>AI</button>
 </nav>
 
 <script>
@@ -765,15 +871,21 @@ function updatePayRow(rowId,exchange,fiat,onSelect){
 /* ══════════════════════════════════════════════════════════
    TAB SWITCHING
 ══════════════════════════════════════════════════════════ */
+function navBtn(tab){ return document.querySelector(`.nav-btn[data-tab="${tab}"]`)||document.querySelector('.nav-btn[data-tab="home"]'); }
 function switchTab(tab,btn){
   clearInterval(bookTimer); bookTimer=null;
   clearInterval(multiTimer); multiTimer=null;
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
-  document.getElementById(`tab-${tab}`).classList.remove('hidden');
+  const panel=document.getElementById(`tab-${tab}`); if(panel) panel.classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); S.tab=tab;
+  if(btn) btn.classList.add('active'); S.tab=tab;
+  // Home tab: hide header selectors and spread bar
+  const isHome=tab==='home';
+  ['exRow','fiatRow','assetRow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden',isHome); });
+  const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=isHome?'none':'';
   document.getElementById('payRow').classList.toggle('hidden',tab!=='book');
   document.getElementById('makerPayRow').classList.toggle('hidden',tab!=='maker');
+  if(tab==='home')     loadDashboard();
   if(tab==='book')     restartBookTimer();
   if(tab==='chart')    loadChart();
   if(tab==='spread')   loadCompare();
@@ -1606,6 +1718,113 @@ document.getElementById('chatInput').addEventListener('input',function(){this.st
 document.getElementById('chatInput').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}});
 
 /* ══════════════════════════════════════════════════════════
+   DASHBOARD (home tab)
+══════════════════════════════════════════════════════════ */
+let dashFiat='KZT', dashLoading=false, dashArbData=null;
+
+// Wire fiat pills inside dashboard
+document.querySelectorAll('#dashFiatRow .pill').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#dashFiatRow .pill').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); dashFiat=btn.dataset.val;
+    document.getElementById('dashPairLbl').textContent=dashFiat+' / USDT';
+    loadDashboard();
+  });
+});
+
+async function loadDashboard(){
+  if(dashLoading)return; dashLoading=true;
+  try{
+    const uid=getUID();
+    const r=await fetch(`/api/dashboard?fiat=${dashFiat}&asset=USDT${uid?'&uid='+uid:''}`);
+    const data=await r.json(); if(data.error)return;
+
+    // Timestamp
+    const ts=new Date(data.ts);
+    document.getElementById('dashTs').textContent=ts.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
+
+    // Exchange grid
+    renderDashExchanges(data.exchanges||[]);
+
+    // Arbitrage banner
+    dashArbData=data.best_arb||null;
+    renderDashArb(dashArbData);
+
+    // Tools
+    if(data.tools&&uid){
+      document.getElementById('dashToolsSec').style.display='block';
+      document.getElementById('dashAlertsCnt').textContent=data.tools.alerts||0;
+      document.getElementById('dashTrackersCnt').textContent=data.tools.trackers||0;
+      document.getElementById('dashRepricerCnt').textContent=data.tools.repricer||0;
+    }
+
+    // Plan badge (async, non-blocking)
+    if(uid) loadDashPlan(uid);
+  }catch(e){console.error('dashboard:',e);}
+  finally{dashLoading=false;}
+}
+
+function renderDashExchanges(exchanges){
+  const grid=document.getElementById('dashExGrid');
+  if(!exchanges.length){grid.innerHTML='<div class="err-box" style="grid-column:1/-1">Нет данных</div>';return;}
+  grid.innerHTML=exchanges.map(ex=>{
+    const sp=ex.spread_pct;
+    const cls=sp==null?'none':sp>0?'pos':'neg';
+    const spTxt=sp==null?'—':(sp>=0?'+':'')+sp.toFixed(2)+'%';
+    return `<div class="dash-ex-card" onclick="dashOpenEx('${esc(ex.id)}')">
+      <div class="dash-ex-top"><span class="dash-ex-name">${esc(ex.icon)} ${esc(ex.name)}</span><span class="dash-ex-sp ${cls}">${spTxt}</span></div>
+      <div class="dash-ex-prices">
+        <div class="dash-ex-col"><div class="dash-ex-lbl">Покупка</div><div class="dash-ex-val g">${ex.buy?fmt(ex.buy):'—'}</div></div>
+        <div class="dash-ex-col" style="text-align:right"><div class="dash-ex-lbl">Продажа</div><div class="dash-ex-val r">${ex.sell?fmt(ex.sell):'—'}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderDashArb(arb){
+  const card=document.getElementById('dashArbCard');
+  const route=document.getElementById('dashArbRoute');
+  const hint=document.getElementById('dashArbHint');
+  const pct=document.getElementById('dashArbPct');
+  if(!arb||arb.pct<=0){
+    card.className='dash-arb no-arb';
+    route.textContent='Арбитражных возможностей нет';
+    hint.textContent='Все биржи торгуются по схожим ценам';
+    pct.textContent=''; return;
+  }
+  card.className='dash-arb';
+  route.textContent=arb.from+' → '+arb.to;
+  hint.textContent='+'+fmt(arb.abs)+' '+dashFiat+' · нажми → Спред';
+  pct.textContent='+'+arb.pct.toFixed(2)+'%';
+}
+
+function dashArbClick(){
+  if(dashArbData&&dashArbData.pct>0) switchTab('spread',navBtn('spread'));
+}
+
+function dashOpenEx(exId){
+  S.exchange=exId; applyStateToUI(); updateHeaderPair();
+  switchTab('book',navBtn('book'));
+}
+
+function gotoMonitor(sub){
+  currentSub=sub||'pairs';
+  switchTab('monitor',navBtn('monitor'));
+}
+
+async function loadDashPlan(uid){
+  try{
+    const r=await fetch(`/api/user/subscription?uid=${uid}`);
+    const data=await r.json(); if(data.error)return;
+    const names={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Team'};
+    const badge=document.getElementById('dashPlanBadge');
+    badge.textContent=names[data.plan]||data.plan;
+    badge.className='sub-plan-badge '+(data.plan||'free');
+    document.getElementById('dashPlanSub').textContent=data.expires_formatted||'Активная подписка';
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════════════════════════
    SUBSCRIPTION & P&L
 ══════════════════════════════════════════════════════════ */
 async function loadSubscription(){
@@ -1676,8 +1895,8 @@ renderPresets();
 updatePayRow('payRow',S.exchange,S.fiat,v=>{S.pay=v;restartBookTimer();});
 updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
 document.getElementById('makerPayRow').classList.add('hidden');
-loadOrderbook();
-bookTimer=setInterval(loadOrderbook,REFRESH_MS);
+// Start on home/dashboard tab
+switchTab('home', document.querySelector('.nav-btn[data-tab="home"]'));
 </script>
 </body>
 </html>

@@ -1,65 +1,47 @@
-import aiohttp
-import json
 from typing import Optional
+from utils.http import post_json
 
 BYBIT_P2P_URL  = "https://api2.bybit.com/fiat/otc/item/online"
 BYBIT_PAY_URL  = "https://api2.bybit.com/fiat/otc/configuration/queryAllPaymentList"
 
-HEADERS = {
+_HEADERS = {
     "Content-Type": "application/json;charset=UTF-8",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer": "https://www.bybit.com/",
+    "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":      "https://www.bybit.com/",
 }
 
 # id → displayName,  normalizedName → id
-_id_to_name:   dict[str, str] = {}
-_name_to_id:   dict[str, str] = {}
+_id_to_name: dict[str, str] = {}
+_name_to_id: dict[str, str] = {}
 
 
 async def _load_payment_map() -> None:
     global _id_to_name, _name_to_id
     if _id_to_name:
         return
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                BYBIT_PAY_URL, json={}, headers=HEADERS,
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                data = await resp.json(content_type=None)
-
-        pay_config = data.get("result", {}).get("paymentConfigVo", [])
-        for p in pay_config:
-            pid  = str(p.get("paymentType", ""))
-            name = p.get("paymentName", "").strip()
-            if pid and name:
-                _id_to_name[pid] = name
-                _name_to_id[name.replace(" ", "").lower()] = pid
-    except Exception:
-        pass
+    data = await post_json(BYBIT_PAY_URL, json={}, headers=_HEADERS)
+    for p in data.get("result", {}).get("paymentConfigVo", []):
+        pid  = str(p.get("paymentType", ""))
+        name = p.get("paymentName", "").strip()
+        if pid and name:
+            _id_to_name[pid] = name
+            _name_to_id[name.replace(" ", "").lower()] = pid
 
 
 def _names_to_ids(pay_names: list[str]) -> list[str]:
-    """Конвертирует ['FreedomBank', 'Kaspi Bank'] → ['549', '150']"""
-    ids = []
-    for name in pay_names:
-        key = name.replace(" ", "").lower()
-        pid = _name_to_id.get(key)
-        if pid:
-            ids.append(pid)
-    return ids
+    return [pid for name in pay_names
+            if (pid := _name_to_id.get(name.replace(" ", "").lower()))]
 
 
 async def get_ads(
-    asset: str = "USDT",
-    fiat:  str = "KZT",
-    side:  str = "1",
+    asset:     str = "USDT",
+    fiat:      str = "KZT",
+    side:      str = "1",
     pay_types: Optional[list] = None,
-    size:  int  = 10,
-    amount: str = "",
+    size:      int = 10,
+    amount:    str = "",
 ) -> list[dict]:
     await _load_payment_map()
-
     pay_ids = _names_to_ids(pay_types) if pay_types else []
 
     payload = {
@@ -69,21 +51,14 @@ async def get_ads(
         "side":       side,
         "size":       str(size),
         "page":       "1",
-        "amount":     amount,   # серверная фильтрация по сумме
+        "amount":     amount,
     }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            BYBIT_P2P_URL, json=payload, headers=HEADERS,
-            timeout=aiohttp.ClientTimeout(total=10)
-        ) as resp:
-            data = await resp.json(content_type=None)
+    data = await post_json(BYBIT_P2P_URL, json=payload, headers=_HEADERS)
 
     ads = []
     for item in data.get("result", {}).get("items", []):
-        raw_pay = item.get("payments", [])
+        raw_pay   = item.get("payments", [])
         pay_names = [_id_to_name.get(str(p), str(p)) for p in raw_pay]
-
         ads.append({
             "price":       float(item.get("price", 0)),
             "min_amount":  float(item.get("minAmount", 0)),

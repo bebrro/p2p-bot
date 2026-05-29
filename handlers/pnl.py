@@ -1,12 +1,12 @@
 """
-P&L Трекер — считает прибыльность P2P торговли по истории ордеров Bybit.
+P&L Трекер — считает прибыльность P2P торговли по истории ордеров.
+Поддерживаемые биржи: Bybit, OKX, Binance.
 Доступно только для подписчиков Pro / Team.
 
 Логика:
-• Забирает последние 20 завершённых сделок (status="50")
-• Группирует по side: 0=покупка крипто, 1=продажа крипто
-• Считает среднюю цену покупки и продажи
-• Оценивает маржу и расчётную прибыль
+• Пользователь выбирает биржу из тех, где есть активный API ключ
+• Забирает последние 20 завершённых сделок
+• Считает среднюю цену покупки и продажи, маржу и прибыль
 """
 import logging
 
@@ -19,26 +19,43 @@ from aiogram.types import (
 
 import db
 from handlers.account_manager import get_account_credentials
-from api import bybit_auth
+from api import bybit_auth, okx_auth, binance_auth
 from utils.subscription import get_plan_key
 
 logger = logging.getLogger(__name__)
 router = Router()
 
+_EX_NAMES = {
+    "bybit":   "🟠 Bybit",
+    "okx":     "🔵 OKX",
+    "binance": "🟡 Binance",
+}
+_EXCHANGE_ORDER = ("bybit", "okx", "binance")
 
-# ─── Handlers ──────────────────────────────────────────────────────────────────
+
+# ─── Entry points ──────────────────────────────────────────────────────────────
 
 @router.message(Command("pnl"))
 async def pnl_command(message: Message):
-    await _show_pnl(message.from_user.id, message)
+    await _show_picker(message.from_user.id, message)
 
 
 @router.callback_query(lambda c: c.data == "pnl:view")
 async def pnl_callback(callback: CallbackQuery):
-    await _show_pnl(callback.from_user.id, callback)
+    await _show_picker(callback.from_user.id, callback)
+    await callback.answer()
 
 
-async def _show_pnl(uid: int, event: Message | CallbackQuery):
+@router.callback_query(lambda c: c.data and c.data.startswith("pnl:ex:"))
+async def pnl_exchange(callback: CallbackQuery):
+    exchange = callback.data.split(":")[2]
+    await _show_pnl(callback.from_user.id, callback, exchange)
+    await callback.answer()
+
+
+# ─── Picker ────────────────────────────────────────────────────────────────────
+
+async def _show_picker(uid: int, event: Message | CallbackQuery):
     is_cb = isinstance(event, CallbackQuery)
 
     # ── Проверка подписки ──────────────────────────────────────────────────────
@@ -49,11 +66,11 @@ async def _show_pnl(uid: int, event: Message | CallbackQuery):
         text = (
             "📊 <b>P&L Трекер</b>\n\n"
             "⭐ Функция доступна в планах <b>Pro</b> и <b>Team</b>.\n\n"
-            "Покажет:\n"
-            "• Историю последних 20 завершённых сделок\n"
+            "Показывает:\n"
+            "• Историю последних сделок с 3 бирж\n"
             "• Среднюю цену покупки и продажи\n"
             "• Маржу и расчётную прибыль\n"
-            "• Разбивку по валютам"
+            "• Разбивку по фиатным валютам"
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⭐ Оформить подписку", callback_data="sub:list")],
@@ -65,65 +82,131 @@ async def _show_pnl(uid: int, event: Message | CallbackQuery):
             await event.answer(text, reply_markup=kb, parse_mode="HTML")
         return
 
-    # ── Загружаем данные ───────────────────────────────────────────────────────
-    wait_msg = None
-    if is_cb:
-        await event.message.edit_text("⏳ Загружаю историю ордеров...")
-    else:
-        wait_msg = await event.answer("⏳ Загружаю историю ордеров...")
+    # ── Доступные биржи (где есть активный API ключ) ───────────────────────────
+    avail = [ex for ex in _EXCHANGE_ORDER
+             if get_account_credentials(uid, ex)[0]]
 
-    api_key, api_secret, _ = get_account_credentials(uid, "bybit")
-
-    if not api_key:
+    if not avail:
         text = (
             "📊 <b>P&L Трекер</b>\n\n"
-            "❌ Нет активного <b>Bybit</b> аккаунта.\n\n"
-            "Подключи API ключ в 🔑 Аккаунты."
+            "❌ Нет подключённых API ключей.\n\n"
+            "Добавь ключ в <b>🔑 Аккаунты</b>.\n\n"
+            "Поддерживается:\n"
+            "🟠 Bybit — P2P ключ\n"
+            "🔵 OKX — Trade (C2C) ключ\n"
+            "🟡 Binance — Read-only ключ"
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔑 Аккаунты", callback_data="acc:list")],
             [InlineKeyboardButton(text="⬅️ Назад",    callback_data="back:main")],
         ])
-        msg = event.message if is_cb else wait_msg
-        await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        if is_cb:
+            await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        else:
+            await event.answer(text, reply_markup=kb, parse_mode="HTML")
         return
 
+    # Если биржа одна — сразу показываем P&L
+    if len(avail) == 1:
+        if is_cb:
+            await _show_pnl(uid, event, avail[0])
+        else:
+            # для Message нужен промежуточный ответ — показываем picker
+            btns = [[InlineKeyboardButton(
+                text=_EX_NAMES[avail[0]],
+                callback_data=f"pnl:ex:{avail[0]}",
+            )]]
+            btns.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")])
+            await event.answer(
+                "📊 <b>P&L Трекер</b>\n\nВыбери биржу:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+                parse_mode="HTML",
+            )
+        return
+
+    # Несколько бирж — показываем picker
+    btns = [
+        [InlineKeyboardButton(text=_EX_NAMES[ex], callback_data=f"pnl:ex:{ex}")]
+        for ex in avail
+    ]
+    btns.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")])
+    kb   = InlineKeyboardMarkup(inline_keyboard=btns)
+    text = "📊 <b>P&L Трекер</b>\n\nВыбери биржу для анализа:"
+
+    if is_cb:
+        await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+# ─── P&L по конкретной бирже ───────────────────────────────────────────────────
+
+async def _show_pnl(uid: int, event: CallbackQuery, exchange: str):
+    ex_label = _EX_NAMES.get(exchange, exchange.title())
+
+    await event.message.edit_text(f"⏳ Загружаю историю {ex_label}...")
+
+    key, secret, extra = get_account_credentials(uid, exchange)
+    if not key:
+        await event.message.edit_text(
+            f"📊 <b>P&L Трекер</b>\n\n"
+            f"❌ Нет активного аккаунта <b>{ex_label}</b>.\n\n"
+            "Подключи API ключ в 🔑 Аккаунты.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔑 Аккаунты", callback_data="acc:list")],
+                [InlineKeyboardButton(text="⬅️ Назад",    callback_data="pnl:view")],
+            ]),
+        )
+        return
+
+    # ── Запрос ордеров ─────────────────────────────────────────────────────────
     try:
-        orders = await bybit_auth.get_p2p_orders(api_key, api_secret, status="50")
+        if exchange == "bybit":
+            orders = await bybit_auth.get_p2p_orders(key, secret, status="50")
+        elif exchange == "okx":
+            orders = await okx_auth.get_p2p_orders(key, secret, extra)
+        elif exchange == "binance":
+            orders = await binance_auth.get_p2p_orders(key, secret)
+        else:
+            orders = []
     except Exception as e:
-        logger.error(f"P&L orders fetch uid={uid}: {e}")
-        text = f"📊 <b>P&L Трекер</b>\n\n❌ Ошибка API:\n<code>{e}</code>"
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Повторить", callback_data="pnl:view")],
-            [InlineKeyboardButton(text="⬅️ Назад",     callback_data="back:main")],
-        ])
-        msg = event.message if is_cb else wait_msg
-        await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        logger.error(f"P&L orders uid={uid} ex={exchange}: {e}")
+        await event.message.edit_text(
+            f"📊 <b>P&L · {ex_label}</b>\n\n"
+            f"❌ Ошибка API:\n<code>{e}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Повторить", callback_data=f"pnl:ex:{exchange}")],
+                [InlineKeyboardButton(text="⬅️ Назад",     callback_data="pnl:view")],
+            ]),
+        )
         return
 
     if not orders:
-        text = "📊 <b>P&L Трекер</b>\n\n📭 Нет завершённых сделок на Bybit."
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")]
-        ])
-        msg = event.message if is_cb else wait_msg
-        await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await event.message.edit_text(
+            f"📊 <b>P&L · {ex_label}</b>\n\n"
+            "📭 Нет завершённых сделок.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="pnl:view")],
+            ]),
+        )
         return
 
     stats = calc_pnl(orders)
-    text  = _format_pnl(stats)
+    text  = _format_pnl(stats, exchange)
     kb    = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Обновить", callback_data="pnl:view")],
-        [InlineKeyboardButton(text="⬅️ Назад",    callback_data="back:main")],
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data=f"pnl:ex:{exchange}")],
+        [InlineKeyboardButton(text="⬅️ Назад",    callback_data="pnl:view")],
     ])
-    msg = event.message if is_cb else wait_msg
-    await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
 
-# ─── Calculations (public — used by server.py too) ─────────────────────────────
+# ─── Вычисления (публичные — используются также в webapp/server.py) ────────────
 
 def calc_pnl(orders: list) -> dict:
-    """Считает P&L статистику из списка ордеров."""
+    """Считает P&L статистику из нормализованного списка ордеров."""
     buy_orders  = [o for o in orders if str(o.get("side", "")) == "0"]
     sell_orders = [o for o in orders if str(o.get("side", "")) == "1"]
 
@@ -141,12 +224,13 @@ def calc_pnl(orders: list) -> dict:
     est_profit  = (avg_sell - avg_buy) * matched_qty if avg_buy and avg_sell else 0
     margin_pct  = (avg_sell - avg_buy) / avg_buy * 100 if avg_buy else 0
 
-    # Группировка по валюте
+    # Группировка по фиатной валюте
     fiats: dict[str, dict] = {}
     for o in orders:
         fiat = o.get("fiat", "?")
         if fiat not in fiats:
-            fiats[fiat] = {"buy_qty": 0, "sell_qty": 0, "buy_amt": 0, "sell_amt": 0, "count": 0}
+            fiats[fiat] = {"buy_qty": 0.0, "sell_qty": 0.0,
+                           "buy_amt": 0.0, "sell_amt": 0.0, "count": 0}
         d = fiats[fiat]
         d["count"] += 1
         if str(o.get("side", "")) == "0":
@@ -173,13 +257,14 @@ def calc_pnl(orders: list) -> dict:
     }
 
 
-def _format_pnl(s: dict) -> str:
+def _format_pnl(s: dict, exchange: str = "bybit") -> str:
     def p(n): return f"{n:,.2f}" if n else "—"
-    sign = "+" if s["est_profit"] >= 0 else ""
+    sign    = "+" if s["est_profit"] >= 0 else ""
+    ex_name = _EX_NAMES.get(exchange, exchange.title())
 
     lines = [
-        "📊 <b>P&L Трекер</b>",
-        f"<i>Последние {s['total']} завершённых сделок · Bybit</i>",
+        f"📊 <b>P&L Трекер · {ex_name}</b>",
+        f"<i>Последние {s['total']} завершённых сделок</i>",
         "",
         f"📥 Покупок:  <b>{s['buy_cnt']}</b>  ({p(s['buy_qty'])} USDT)",
         f"📤 Продаж:   <b>{s['sell_cnt']}</b>  ({p(s['sell_qty'])} USDT)",
@@ -189,23 +274,21 @@ def _format_pnl(s: dict) -> str:
     ]
 
     if s["avg_buy"] and s["avg_sell"]:
+        profit_emoji = "📈" if s["est_profit"] >= 0 else "📉"
         lines += [
             f"Маржа:  <b>{sign}{s['margin_pct']:.3f}%</b>",
-            f"Расч. прибыль:  <b>{sign}{p(s['est_profit'])}</b>",
+            f"Расч. прибыль:  {profit_emoji} <b>{sign}{p(s['est_profit'])}</b>",
         ]
 
     if s["fiats"]:
         lines += ["", "━━━ По валютам ━━━"]
-        for fiat, d in s["fiats"].items():
+        for fiat, d in sorted(s["fiats"].items()):
             avg_b = d["buy_amt"]  / d["buy_qty"]  if d["buy_qty"]  else 0
             avg_s = d["sell_amt"] / d["sell_qty"] if d["sell_qty"] else 0
             lines.append(
-                f"<b>{fiat}</b> ({d['count']} сд)  "
-                f"📥 {p(avg_b)}  📤 {p(avg_s)}"
+                f"<b>{fiat}</b> ({d['count']} сд) · "
+                f"📥 {p(avg_b)} · 📤 {p(avg_s)}"
             )
 
-    lines += [
-        "",
-        "<i>⚠️ Расчёт приблизительный. OKX в разработке.</i>",
-    ]
+    lines.append("\n<i>⚠️ Расчёт приблизительный — на основе публичных данных.</i>")
     return "\n".join(lines)

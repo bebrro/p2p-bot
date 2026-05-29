@@ -18,7 +18,10 @@ from aiogram.types import (
 )
 
 import db
-from keyboards import main_menu
+from keyboards import (
+    main_menu, alerts_submenu, auto_submenu,
+    analytics_submenu, account_submenu,
+)
 from utils.subscription import get_plan_key, PLANS
 
 logger = logging.getLogger(__name__)
@@ -191,6 +194,28 @@ async def back_to_main(callback: CallbackQuery):
     await callback.message.edit_text(
         MAIN_TEXT, reply_markup=main_menu(), parse_mode="HTML",
     )
+    await callback.answer()
+
+
+# ─── Подменю категорий ─────────────────────────────────────────────────────────
+
+_SUBMENU_TEXTS = {
+    "menu:alerts":    ("🔔 <b>Алерты и сигналы</b>\n\nВыбери инструмент:", alerts_submenu),
+    "menu:auto":      ("🤖 <b>Авто-режимы</b>\n\nВыбери инструмент:",      auto_submenu),
+    "menu:analytics": ("📊 <b>Аналитика</b>\n\nВыбери инструмент:",         analytics_submenu),
+    "menu:account":   ("👤 <b>Личный кабинет</b>\n\nВыбери раздел:",        account_submenu),
+}
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("menu:"))
+async def open_submenu(callback: CallbackQuery):
+    key = callback.data
+    if key not in _SUBMENU_TEXTS:
+        await callback.answer()
+        return
+    text, kb_fn = _SUBMENU_TEXTS[key]
+    await callback.message.edit_text(text, reply_markup=kb_fn(), parse_mode="HTML")
+    await callback.answer()
 
 
 # ─── Онбординг: шаги ───────────────────────────────────────────────────────────

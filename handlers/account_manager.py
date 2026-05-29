@@ -13,7 +13,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from api import bybit_auth, okx_auth
+from api import bybit_auth, okx_auth, binance_auth
 from utils.encryption import encrypt, decrypt
 import db
 
@@ -25,7 +25,7 @@ router = Router()
 _accounts: dict[int, list] = {}
 MAX_ACCOUNTS = 5   # per user total (all exchanges)
 
-EXCHANGE_NAMES = {"bybit": "🟠 Bybit", "okx": "🔵 OKX"}
+EXCHANGE_NAMES = {"bybit": "🟠 Bybit", "okx": "🔵 OKX", "binance": "🟡 Binance"}
 
 
 class AccStates(StatesGroup):
@@ -160,7 +160,8 @@ async def acc_security(callback: CallbackQuery):
         "   API ключи никогда не попадают в логи.\n\n"
         "4️⃣ <b>Минимальные права</b>\n"
         "   <b>Bybit:</b> только ✅ P2P, без вывода\n"
-        "   <b>OKX:</b> только ✅ Trade (C2C), без вывода\n\n"
+        "   <b>OKX:</b> только ✅ Trade (C2C), без вывода\n"
+        "   <b>Binance:</b> только ✅ Enable Reading, без вывода\n\n"
         "5️⃣ <b>IP-вайтлист (рекомендуется)</b>\n"
         "   Укажи IP Railway-сервера в настройках ключа.\n\n"
         "⚡ Без права вывода никто не заберёт средства\n"
@@ -183,23 +184,28 @@ async def acc_add_start(callback: CallbackQuery):
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="🟠 Bybit", callback_data="acc:add:bybit"),
-                InlineKeyboardButton(text="🔵 OKX",   callback_data="acc:add:okx"),
+                InlineKeyboardButton(text="🟠 Bybit",   callback_data="acc:add:bybit"),
+                InlineKeyboardButton(text="🔵 OKX",     callback_data="acc:add:okx"),
+            ],
+            [
+                InlineKeyboardButton(text="🟡 Binance", callback_data="acc:add:binance"),
             ],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="acc:list")],
         ]),
     )
 
 
-@router.callback_query(lambda c: c.data in ("acc:add:bybit", "acc:add:okx"))
+@router.callback_query(lambda c: c.data in ("acc:add:bybit", "acc:add:okx", "acc:add:binance"))
 async def acc_add_exchange(callback: CallbackQuery, state: FSMContext):
     exchange = callback.data.split(":")[-1]
     await state.set_state(AccStates.waiting_label)
     await state.update_data(exchange=exchange)
-    ex_name = "Bybit" if exchange == "bybit" else "OKX"
+    ex_names = {"bybit": "Bybit", "okx": "OKX", "binance": "Binance"}
+    ex_name = ex_names.get(exchange, exchange.title())
+    steps = "3" if exchange == "okx" else "3"
     await callback.message.edit_text(
         f"🔑 <b>Добавление {ex_name}</b>\n\n"
-        "Шаг 1/3 — Введи <b>название</b> (например: <code>Основной</code>)",
+        f"Шаг 1/{steps} — Введи <b>название</b> (например: <code>Основной</code>)",
         parse_mode="HTML",
     )
 
@@ -210,14 +216,15 @@ async def acc_got_label(message: Message, state: FSMContext):
     data    = await state.get_data()
     exchange = data.get("exchange", "bybit")
     await state.set_state(AccStates.waiting_key)
+    hints = {
+        "bybit":   "Bybit: Профиль → API → Создать ключ → P2P ✅, вывод ❌",
+        "okx":     "OKX: Профиль → API → Создать → Trade ✅, вывод ❌",
+        "binance": "Binance: Профиль → Управление API → Создать → Enable Reading ✅, вывод ❌",
+    }
+    hint = hints.get(exchange, "")
     await message.answer(
-        f"🔑 Шаг 2/3 — Введи <b>API Key</b>\n\n"
-        + (
-            "Bybit: Профиль → API → Создать ключ → P2P ✅, вывод ❌\n"
-            if exchange == "bybit" else
-            "OKX: Профиль → API → Создать → Trade ✅, вывод ❌\n"
-        )
-        + "\n⚠️ Сообщение удалится сразу после отправки.",
+        f"🔑 Шаг 2/3 — Введи <b>API Key</b>\n\n{hint}\n\n"
+        "⚠️ Сообщение удалится сразу после отправки.",
         parse_mode="HTML",
     )
 
@@ -259,7 +266,7 @@ async def acc_got_secret(message: Message, state: FSMContext):
             parse_mode="HTML",
         )
     else:
-        # Bybit — сразу проверяем
+        # Bybit / Binance — passphrase не нужен, сразу проверяем
         await _finalize_account(message, state, passphrase="")
 
 
@@ -287,8 +294,12 @@ async def _finalize_account(message: Message, state: FSMContext, passphrase: str
     # Верификация
     if exchange == "bybit":
         is_valid, result = await bybit_auth.verify_api_key(raw_key, raw_secret)
-    else:
+    elif exchange == "okx":
         is_valid, result = await okx_auth.verify_api_key(raw_key, raw_secret, passphrase)
+    elif exchange == "binance":
+        is_valid, result = await binance_auth.verify_api_key(raw_key, raw_secret)
+    else:
+        is_valid, result = False, f"Неизвестная биржа: {exchange}"
 
     if not is_valid:
         await wait_msg.edit_text(

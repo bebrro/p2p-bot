@@ -1,18 +1,12 @@
-"""
-Telegram @wallet P2P API (walletbot.me).
-Публичный эндпоинт — авторизация не нужна.
-
-Пара: USDT/TON vs RUB/KZT.
-"""
-import aiohttp
 import logging
 from typing import Optional
+from utils.http import post_json
 
 logger = logging.getLogger(__name__)
 
 WALLET_URL = "https://walletbot.me/api/v1/p2p/order/preview/list"
 
-HEADERS = {
+_HEADERS = {
     "Content-Type": "application/json",
     "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Origin":       "https://walletbot.me",
@@ -23,35 +17,22 @@ HEADERS = {
 async def get_ads(
     asset:     str = "USDT",
     fiat:      str = "RUB",
-    side:      str = "buy",     # "buy" = ты покупаешь, "sell" = ты продаёшь
+    side:      str = "buy",
     pay_types: Optional[list] = None,
     rows:      int = 10,
 ) -> list[dict]:
-    # Wallet API: BUY = мерчант продаёт (ты покупаешь), SELL = мерчант покупает (ты продаёшь)
     wallet_side = "BUY" if side == "buy" else "SELL"
-
     payload = {
-        "baseCurrencyCode":   asset,
-        "quoteCurrencyCode":  fiat,
-        "side":               wallet_side,
-        "paymentMethodType":  pay_types[0] if pay_types else None,
-        "amount":             None,
-        "pageSize":           rows,
-        "page":               0,
+        "baseCurrencyCode":  asset,
+        "quoteCurrencyCode": fiat,
+        "side":              wallet_side,
+        "paymentMethodType": pay_types[0] if pay_types else None,
+        "amount":            None,
+        "pageSize":          rows,
+        "page":              0,
     }
+    data = await post_json(WALLET_URL, json=payload, headers=_HEADERS)
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                WALLET_URL, json=payload, headers=HEADERS,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                data = await resp.json(content_type=None)
-    except Exception as e:
-        logger.error(f"Wallet P2P request error: {e}")
-        return []
-
-    # Обрабатываем ответ — поддерживаем несколько вариантов структуры
     items = (
         data.get("data", {}).get("items")
         or data.get("data", {}).get("orders")
@@ -66,8 +47,7 @@ async def get_ads(
         pay_raw = item.get("paymentMethods") or item.get("paymentMethodTypes") or []
         if isinstance(pay_raw, list):
             pay_names = [
-                (p.get("type") or p.get("name") or str(p))
-                if isinstance(p, dict) else str(p)
+                (p.get("type") or p.get("name") or str(p)) if isinstance(p, dict) else str(p)
                 for p in pay_raw
             ]
         else:

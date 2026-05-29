@@ -172,6 +172,15 @@ async def _create_tables() -> None:
         await c.execute(
             "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS pay VARCHAR(30) DEFAULT ''"
         )
+        # Таблица для дедупликации уведомлений об истечении подписки
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS expiry_notifs (
+            user_id    BIGINT NOT NULL,
+            notif_type VARCHAR(20) NOT NULL,   -- '3d', '1d'
+            sent_at    TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (user_id, notif_type)
+        );
+        """)
 
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
@@ -772,3 +781,58 @@ async def subscription_get_all() -> dict[int, dict]:
     async with _pool.acquire() as c:
         rows = await c.fetch("SELECT user_id, plan, expires_at FROM subscriptions")
     return {r["user_id"]: dict(r) for r in rows}
+
+
+async def subscriptions_expiring_soon(days: int = 3) -> list[dict]:
+    """
+    Подписки, которые истекают через days дней (±12 часов).
+    Возвращает [{user_id, plan, expires_at, days_left}].
+    Lifetime (expires_at IS NULL) не включаются.
+    """
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch("""
+            SELECT user_id, plan, expires_at,
+                   EXTRACT(EPOCH FROM (expires_at - NOW())) / 86400 AS days_left
+            FROM subscriptions
+            WHERE plan != 'free'
+              AND expires_at IS NOT NULL
+              AND expires_at > NOW()
+              AND expires_at < NOW() + make_interval(days => $1) + INTERVAL '12 hours'
+            ORDER BY expires_at
+        """, days)
+    return [dict(r) for r in rows]
+
+
+# ── Expiry notifications ───────────────────────────────────────────────────────
+
+async def expiry_notif_sent(user_id: int, notif_type: str) -> bool:
+    """True если такое уведомление уже было отправлено."""
+    if not ok():
+        return False
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT 1 FROM expiry_notifs WHERE user_id=$1 AND notif_type=$2",
+            user_id, notif_type,
+        )
+    return row is not None
+
+
+async def expiry_notif_mark(user_id: int, notif_type: str) -> None:
+    """Помечает уведомление как отправленное."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute("""
+            INSERT INTO expiry_notifs(user_id, notif_type)
+            VALUES($1, $2) ON CONFLICT DO NOTHING
+        """, user_id, notif_type)
+
+
+async def expiry_notif_clear(user_id: int) -> None:
+    """Сбрасывает флаги уведомлений — вызывать при продлении подписки."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute("DELETE FROM expiry_notifs WHERE user_id=$1", user_id)

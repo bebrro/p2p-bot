@@ -134,6 +134,44 @@ async def update_ad_price(api_key: str, secret: str, passphrase: str,
                        })
 
 
+# ─── История P2P ордеров ──────────────────────────────────────────────────────
+
+async def get_p2p_orders(api_key: str, secret: str, passphrase: str,
+                          rows: int = 20) -> list[dict]:
+    """
+    Получает историю C2C ордеров OKX.
+    Эндпоинт: GET /api/v5/p2p/order  (state=complete)
+
+    Нормализованный формат (тот же что у bybit_auth / binance_auth):
+      side "0" = покупка крипты, "1" = продажа крипты
+    """
+    result: list[dict] = []
+    try:
+        data = await _get(api_key, secret, passphrase, "/api/v5/p2p/order", {
+            "state": "complete",
+            "limit": str(rows),
+        })
+        orders = data.get("data", []) or []
+        for o in orders:
+            # OKX: tradeType "buy" = пользователь покупает крипту
+            side_raw = str(o.get("tradeType", o.get("side", ""))).lower()
+            result.append({
+                "order_id":  o.get("ordId", o.get("id", "")),
+                "side":      "0" if side_raw in ("buy", "0") else "1",
+                "asset":     o.get("ccy", o.get("baseCurrency", "")),
+                "fiat":      o.get("fiatCcy", o.get("quoteCurrency", "")),
+                "price":     float(o.get("price", 0)),
+                "amount":    float(o.get("fiatAmt", o.get("amount", 0))),    # фиат
+                "quantity":  float(o.get("cryptoAmt", o.get("quantity", 0))),# крипта
+                "status":    "50",
+                "nickname":  o.get("nickName", o.get("counterPartNickName", "—")),
+            })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"OKX P2P orders error: {e}")
+    return result
+
+
 # ─── Статистика ────────────────────────────────────────────────────────────────
 
 async def get_p2p_stats(api_key: str, secret: str, passphrase: str) -> dict:

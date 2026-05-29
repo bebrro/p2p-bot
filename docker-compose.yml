@@ -7,13 +7,17 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://p2pbot:${POSTGRES_PASSWORD:-changeme}@postgres:5432/p2pbot
+      REDIS_URL:    redis://redis:6379
     ports:
       - "${WEBAPP_PORT:-8765}:${WEBAPP_PORT:-8765}"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${WEBAPP_PORT:-8765}/health')"]
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:${WEBAPP_PORT:-8765}/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,5 +38,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   pgdata:
+  redisdata:

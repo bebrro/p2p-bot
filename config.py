@@ -19,6 +19,15 @@ CRYPTO_WALLET_TRC20 = os.getenv("CRYPTO_WALLET_TRC20", "")
 # Admin Telegram username (без @) — для кнопки "Написать администратору"
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
 
+# Admin Telegram chat_id — для Telegram-алертов об ошибках.
+# Узнать: отправь боту /start, бот пришлёт твой ID (если ADMIN_USERNAME совпадает).
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
+
+# Redis URL для FSM-хранилища (состояния форм не теряются при рестарте).
+# Если не задан — используется MemoryStorage (для разработки).
+# Docker: redis://redis:6379  |  Railway: берётся из REDIS_URL автоматически
+REDIS_URL = os.getenv("REDIS_URL", "")
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 
