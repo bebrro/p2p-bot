@@ -52,17 +52,24 @@ async def get_ads(
         payload["paymentMethod"] = pay_types[0]
 
     data = await post_json(WALLET_URL, json=payload, headers=headers)
+    logger.info(f"Wallet raw response type={type(data).__name__} keys={list(data.keys()) if isinstance(data, dict) else f'list[{len(data)}]' if isinstance(data, list) else data}")
 
     if not data:
         return []
 
-    # Response format: {"items": [...], "total": N} or {"data": {"items": [...]}}
-    items = (
-        data.get("items")
-        or data.get("data", {}).get("items")
-        or (data.get("data") if isinstance(data.get("data"), list) else [])
-        or []
-    )
+    # API may return a bare list OR a dict with items inside
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        inner = data.get("data")
+        if isinstance(inner, list):
+            items = inner
+        elif isinstance(inner, dict):
+            items = inner.get("items") or []
+        else:
+            items = data.get("items") or []
+    else:
+        items = []
 
     ads = []
     for item in items:
