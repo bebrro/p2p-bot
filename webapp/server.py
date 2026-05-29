@@ -14,10 +14,12 @@ from pathlib import Path
 
 from aiohttp import web
 
+import db
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p, gemini
 from handlers.price_history import get_history
 from handlers.pattern_engine import _compute_patterns
 from handlers.ai_advisor import _build_prompt
+from handlers.tracker import _fetch_trader_ads
 from utils.spread import calc_spread
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 
@@ -360,6 +362,165 @@ async def api_maker(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# ─── User-data helpers ────────────────────────────────────────────────────────
+
+def _uid(request: web.Request) -> int | None:
+    """Извлекает user_id из query string ?uid=xxx."""
+    try:
+        v = request.rel_url.query.get("uid") or "0"
+        return int(v) or None
+    except Exception:
+        return None
+
+
+# ─── Trackers API ──────────────────────────────────────────────────────────────
+
+async def api_trackers_list(request: web.Request) -> web.Response:
+    """GET /api/user/trackers?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    rows = await db.trackers_get(uid)
+    return web.json_response({"trackers": rows})
+
+
+async def api_trackers_add(request: web.Request) -> web.Response:
+    """POST /api/user/trackers  body: {uid, exchange, fiat, asset, nickname}"""
+    try:
+        body     = await request.json()
+        uid      = int(body.get("uid") or 0)
+        exchange = body["exchange"]
+        fiat     = body["fiat"]
+        asset    = body.get("asset", "USDT")
+        nickname = body["nickname"].strip()
+        if not uid or not nickname:
+            return web.json_response({"error": "uid and nickname required"}, status=400)
+
+        existing = await db.trackers_get(uid)
+        if len(existing) >= 5:
+            return web.json_response({"error": "Максимум 5 трекеров"}, status=400)
+
+        ads = await _fetch_trader_ads(exchange, fiat, asset, nickname)
+        if not ads["buy"] and not ads["sell"]:
+            return web.json_response(
+                {"error": f"Трейдер «{nickname}» не найден в топ-50 объявлений"},
+                status=404,
+            )
+
+        buy_p  = ads["buy"]["price"]  if ads["buy"]  else None
+        sell_p = ads["sell"]["price"] if ads["sell"] else None
+        db_id  = await db.trackers_add(uid, exchange, fiat, asset, nickname, buy_p, sell_p)
+
+        def _snap(ad):
+            return {"price": ad["price"], "available": ad.get("available", 0)} if ad else None
+
+        return web.json_response({
+            "id": db_id, "exchange": exchange, "fiat": fiat,
+            "asset": asset, "nickname": nickname,
+            "buy": _snap(ads["buy"]), "sell": _snap(ads["sell"]),
+        })
+    except KeyError as e:
+        return web.json_response({"error": f"Missing field: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_trackers_delete(request: web.Request) -> web.Response:
+    """DELETE /api/user/trackers/{id}?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        tid = int(request.match_info["id"])
+        await db.trackers_delete(uid, tid)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+# ─── Alerts API ───────────────────────────────────────────────────────────────
+
+async def api_alerts_list(request: web.Request) -> web.Response:
+    """GET /api/user/alerts?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    rows = await db.alerts_get(uid)
+    return web.json_response({"alerts": rows})
+
+
+async def api_alerts_add(request: web.Request) -> web.Response:
+    """POST /api/user/alerts  body: {uid, exchange, fiat, asset, threshold, direction, pay}"""
+    try:
+        body      = await request.json()
+        uid       = int(body.get("uid") or 0)
+        exchange  = body["exchange"]
+        fiat      = body["fiat"]
+        asset     = body.get("asset", "USDT")
+        threshold = float(body["threshold"])
+        direction = body.get("direction", "above")
+        pay       = body.get("pay", "")
+        if not uid or threshold <= 0:
+            return web.json_response({"error": "uid and threshold required"}, status=400)
+        await db.alerts_add(uid, exchange, fiat, asset, threshold, direction, pay)
+        return web.json_response({"ok": True})
+    except KeyError as e:
+        return web.json_response({"error": f"Missing field: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_alerts_delete(request: web.Request) -> web.Response:
+    """DELETE /api/user/alerts/{id}?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        aid = int(request.match_info["id"])
+        await db.alerts_delete(uid, aid)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+# ─── Blacklist API ────────────────────────────────────────────────────────────
+
+async def api_blacklist_list(request: web.Request) -> web.Response:
+    """GET /api/user/blacklist?uid=xxx"""
+    uid = _uid(request)
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    bl = await db.blacklist_get(uid)
+    return web.json_response({"blacklist": sorted(list(bl))})
+
+
+async def api_blacklist_add(request: web.Request) -> web.Response:
+    """POST /api/user/blacklist  body: {uid, nickname}"""
+    try:
+        body     = await request.json()
+        uid      = int(body.get("uid") or 0)
+        nickname = (body.get("nickname") or "").strip()
+        if not uid or not nickname:
+            return web.json_response({"error": "uid and nickname required"}, status=400)
+        await db.blacklist_add(uid, nickname)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_blacklist_remove(request: web.Request) -> web.Response:
+    """DELETE /api/user/blacklist/{nick}?uid=xxx"""
+    uid      = _uid(request)
+    nickname = request.match_info["nick"]
+    if not uid:
+        return web.json_response({"error": "uid required"}, status=400)
+    try:
+        await db.blacklist_remove(uid, nickname)
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def api_multi(request: web.Request) -> web.Response:
     """GET /api/multi/{exchange}/{fiat} — USDT/BTC/ETH buy+sell параллельно."""
     exchange = request.match_info["exchange"]
@@ -443,6 +604,16 @@ def create_app() -> web.Application:
     app.router.add_get("/api/maker/{exchange}/{fiat}/{asset}/{side}",   api_maker)
     app.router.add_get("/api/multi/{exchange}/{fiat}",                  api_multi)
     app.router.add_get("/api/status/{fiat}",                            api_status)
+    # User data (trackers / alerts / blacklist)
+    app.router.add_get("/api/user/trackers",                            api_trackers_list)
+    app.router.add_post("/api/user/trackers",                           api_trackers_add)
+    app.router.add_delete("/api/user/trackers/{id}",                    api_trackers_delete)
+    app.router.add_get("/api/user/alerts",                              api_alerts_list)
+    app.router.add_post("/api/user/alerts",                             api_alerts_add)
+    app.router.add_delete("/api/user/alerts/{id}",                      api_alerts_delete)
+    app.router.add_get("/api/user/blacklist",                           api_blacklist_list)
+    app.router.add_post("/api/user/blacklist",                          api_blacklist_add)
+    app.router.add_delete("/api/user/blacklist/{nick}",                 api_blacklist_remove)
     app.router.add_post("/api/ai",                                       api_ai)
     app.router.add_post("/api/chat",                                     api_chat)
 

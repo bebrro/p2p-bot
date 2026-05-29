@@ -112,11 +112,20 @@ async def alerts_get(user_id: int) -> list[dict]:
         return []
     async with _pool.acquire() as c:
         rows = await c.fetch(
-            "SELECT exchange,fiat,asset,threshold,direction,pay FROM alerts "
+            "SELECT id,exchange,fiat,asset,threshold,direction,pay FROM alerts "
             "WHERE user_id=$1 ORDER BY id",
             user_id,
         )
     return [dict(r) for r in rows]
+
+
+async def alerts_delete(user_id: int, alert_id: int) -> None:
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "DELETE FROM alerts WHERE user_id=$1 AND id=$2", user_id, alert_id
+        )
 
 
 async def alerts_add(user_id: int, exchange: str, fiat: str, asset: str,
