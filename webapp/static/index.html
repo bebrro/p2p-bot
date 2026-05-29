@@ -22,7 +22,7 @@ html, body { height: 100%; overscroll-behavior: none; }
   --red:   #f04747;
   --gold:  #faa61a;
   --r:     10px;
-  --nav-h: 54px;
+  --nav-h: 58px;
 }
 
 body {
@@ -51,13 +51,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
 }
-.header-pair {
-  font-size: 11px;
-  color: var(--hint);
-  font-weight: 400;
-}
+.header-pair { font-size: 11px; color: var(--hint); font-weight: 400; }
 
 /* ── Pill rows ────────────────────────────────────────────── */
 .pill-row {
@@ -70,7 +65,7 @@ body {
 }
 .pill-row:last-child { margin-bottom: 0; }
 .pill-row::-webkit-scrollbar { display: none; }
-.pill-row.hidden { display: none; }
+.pill-row.hidden { display: none !important; }
 
 .pill {
   padding: 3px 9px;
@@ -85,12 +80,7 @@ body {
   flex-shrink: 0;
   line-height: 1.5;
 }
-.pill.active {
-  background: var(--btn);
-  color: var(--btnt);
-  border-color: var(--btn);
-  font-weight: 600;
-}
+.pill.active { background: var(--btn); color: var(--btnt); border-color: var(--btn); font-weight: 600; }
 .pill:active { opacity: .75; }
 
 /* ── Spread bar ───────────────────────────────────────────── */
@@ -119,11 +109,7 @@ body {
 .spread-chip.good { background: rgba(67,181,129,.2);  color: var(--green); }
 .spread-chip.mid  { background: rgba(250,166,26,.2);  color: var(--gold);  }
 .spread-chip.bad  { background: rgba(240,71,71,.15);  color: var(--red);   }
-.spread-vol {
-  font-size: 9px;
-  color: var(--hint);
-  margin-top: 1px;
-}
+.spread-vol { font-size: 9px; color: var(--hint); margin-top: 1px; }
 
 /* ── Tab panels ───────────────────────────────────────────── */
 .tab-panel {
@@ -131,32 +117,149 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 8px 8px calc(var(--nav-h) + 4px);
+  padding: 8px 8px calc(var(--nav-h) + 6px);
 }
-.tab-panel.hidden { display: none; }
+.tab-panel.hidden { display: none !important; }
 #tab-ai {
-  padding: 0 0 0;
+  padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-#tab-ai.hidden { display: none; }
+#tab-ai.hidden { display: none !important; }
 
 /* ── Refresh timestamp ────────────────────────────────────── */
-.refresh-ts {
-  font-size: 10px;
-  color: var(--hint);
-  text-align: right;
-  margin-bottom: 5px;
-  height: 14px;
-}
+.refresh-ts { font-size: 10px; color: var(--hint); margin-bottom: 5px; height: 14px; }
 
-/* ── Orderbook ────────────────────────────────────────────── */
-.book-grid {
+/* ── Book topbar (ts + filter toggle) ────────────────────── */
+.book-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 20px;
+  color: var(--hint);
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.filter-toggle-btn.has-filters {
+  background: rgba(44,165,224,.12);
+  border-color: var(--btn);
+  color: var(--btn);
+}
+.filter-toggle-btn:active { opacity: .75; }
+.filter-badge {
+  background: var(--btn);
+  color: var(--btnt);
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  display: none;
+}
+.filter-badge.visible { display: inline-block; }
+
+/* ── Filter Drawer ────────────────────────────────────────── */
+.filter-drawer {
+  background: var(--bg2);
+  border-radius: var(--r);
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .25s ease, margin-bottom .25s ease;
+  margin-bottom: 0;
+}
+.filter-drawer.open { max-height: 350px; margin-bottom: 8px; }
+.filter-drawer-inner { padding: 10px 10px 8px; }
+
+.filter-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
+  margin-bottom: 9px;
 }
+.filter-item { display: flex; flex-direction: column; gap: 4px; }
+.filter-item.full { grid-column: 1 / -1; }
+.filter-lbl { font-size: 10px; color: var(--hint); text-transform: uppercase; letter-spacing: .3px; }
+.filter-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+}
+.filter-input:focus { border-color: var(--btn); }
+.filter-input::placeholder { color: var(--hint); }
+
+.seg-ctrl {
+  display: flex;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.seg-btn {
+  flex: 1;
+  padding: 4px 4px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--hint);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.seg-btn.active { background: var(--btn); color: var(--btnt); font-weight: 600; }
+
+.filter-actions { display: flex; gap: 6px; }
+.filter-apply-btn {
+  flex: 1;
+  padding: 8px;
+  background: var(--btn);
+  color: var(--btnt);
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.filter-apply-btn:active { opacity: .8; }
+.filter-reset-btn {
+  padding: 8px 14px;
+  background: rgba(240,71,71,.12);
+  color: var(--red);
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.filter-reset-btn:active { opacity: .8; }
+
+/* ── Orderbook ────────────────────────────────────────────── */
+.book-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .col-title {
   font-size: 10px;
   font-weight: 700;
@@ -177,33 +280,12 @@ body {
 }
 .buy-col  .ad-card { border-left-color: var(--green); }
 .sell-col .ad-card { border-left-color: var(--red);   }
-
-.ad-price {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 1px;
-  font-variant-numeric: tabular-nums;
-}
+.ad-price { font-size: 13px; font-weight: 700; line-height: 1.2; margin-bottom: 1px; font-variant-numeric: tabular-nums; }
 .buy-col  .ad-price { color: var(--green); }
 .sell-col .ad-price { color: var(--red);   }
-
-.ad-nick {
-  font-size: 10px;
-  color: var(--text);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.ad-nick { font-size: 10px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ad-meta { font-size: 9px; color: var(--hint); line-height: 1.5; }
-.pay-pill {
-  display: inline-block;
-  background: rgba(255,255,255,0.06);
-  border-radius: 3px;
-  padding: 0 3px;
-  margin: 1px 1px 0 0;
-}
+.pay-pill { display: inline-block; background: rgba(255,255,255,0.06); border-radius: 3px; padding: 0 3px; margin: 1px 1px 0 0; }
 .risk-badge { font-size: 9px; }
 
 /* ── Section title ────────────────────────────────────────── */
@@ -217,41 +299,17 @@ body {
 }
 
 /* ── Chart tab ────────────────────────────────────────────── */
-.chart-card {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 10px 10px 8px;
-  margin-bottom: 8px;
-}
-.chart-box { position: relative; height: 180px; }
-.chart-empty {
-  font-size: 12px;
-  color: var(--hint);
-  text-align: center;
-  padding: 50px 20px;
-  line-height: 1.7;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.stat-card {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 9px 11px;
-}
+.chart-card { background: var(--bg2); border-radius: var(--r); padding: 10px 10px 8px; margin-bottom: 8px; }
+.chart-box  { position: relative; height: 180px; }
+.chart-empty { font-size: 12px; color: var(--hint); text-align: center; padding: 50px 20px; line-height: 1.7; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat-card { background: var(--bg2); border-radius: var(--r); padding: 9px 11px; }
 .stat-lbl { font-size: 10px; color: var(--hint); margin-bottom: 2px; }
 .stat-val { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-sub { font-size: 9px;  color: var(--hint); margin-top: 1px; }
+.stat-sub { font-size: 9px; color: var(--hint); margin-top: 1px; }
 
-/* ── Spread compare tab ───────────────────────────────────── */
-.compare-table {
-  background: var(--bg2);
-  border-radius: var(--r);
-  overflow: hidden;
-  margin-bottom: 8px;
-}
+/* ── Spread compare ───────────────────────────────────────── */
+.compare-table { background: var(--bg2); border-radius: var(--r); overflow: hidden; margin-bottom: 8px; }
 .compare-row {
   display: grid;
   grid-template-columns: 90px 1fr 1fr 60px;
@@ -259,273 +317,122 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.04);
   align-items: center;
   gap: 4px;
-  transition: background .1s;
 }
 .compare-row:last-child { border-bottom: none; }
-.compare-row.header-row {
-  font-size: 9px;
-  color: var(--hint);
-  text-transform: uppercase;
-  letter-spacing: .4px;
-  padding: 6px 10px;
-  background: rgba(255,255,255,0.02);
-}
+.compare-row.header-row { font-size: 9px; color: var(--hint); text-transform: uppercase; letter-spacing: .4px; padding: 6px 10px; background: rgba(255,255,255,0.02); }
 .compare-ex   { font-size: 12px; font-weight: 600; }
 .compare-price { font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 500; }
 .compare-buy  { color: var(--green); }
 .compare-sell { color: var(--red);   }
-.compare-spread {
-  font-size: 11px;
-  font-weight: 700;
-  text-align: right;
-}
-.spread-badge {
-  display: inline-block;
-  padding: 2px 5px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 700;
-}
+.compare-spread { font-size: 11px; font-weight: 700; text-align: right; }
+.spread-badge { display: inline-block; padding: 2px 5px; border-radius: 5px; font-size: 10px; font-weight: 700; }
 .spread-badge.best { background: rgba(67,181,129,.2); color: var(--green); }
-.spread-badge.good { background: rgba(250,166,26,.15); color: var(--gold);  }
+.spread-badge.good { background: rgba(250,166,26,.15); color: var(--gold); }
 .compare-row.best-row { background: rgba(67,181,129,.04); }
-
-.arb-card {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 9px 12px;
-  margin-bottom: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.arb-card { background: var(--bg2); border-radius: var(--r); padding: 9px 12px; margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; }
 .arb-route { font-size: 12px; font-weight: 500; }
-.arb-pct {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--green);
-}
+.arb-pct { font-size: 13px; font-weight: 700; color: var(--green); }
 .arb-abs { font-size: 10px; color: var(--hint); }
-
-/* Local pickers inside tab ───────────────────────────────── */
-.tab-pickers {
-  display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  margin-bottom: 8px;
-}
+.tab-pickers { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin-bottom: 8px; }
 .tab-pickers::-webkit-scrollbar { display: none; }
 
-/* ── Maker tab ────────────────────────────────────────────── */
-.side-toggle {
-  display: flex;
-  background: rgba(255,255,255,0.05);
-  border-radius: 8px;
-  padding: 3px;
-  margin-bottom: 8px;
-  gap: 3px;
-}
-.side-btn {
-  flex: 1;
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  background: transparent;
-  color: var(--hint);
-  transition: all .15s;
-}
+/* ── Maker ────────────────────────────────────────────────── */
+.side-toggle { display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; margin-bottom: 8px; gap: 3px; }
+.side-btn { flex: 1; padding: 6px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: var(--hint); transition: all .15s; font-family: inherit; }
 .side-btn.active-buy  { background: rgba(67,181,129,.25);  color: var(--green); }
 .side-btn.active-sell { background: rgba(240,71,71,.25);   color: var(--red);   }
-
-.maker-load-btn {
-  width: 100%;
-  padding: 10px;
-  background: var(--btn);
-  color: var(--btnt);
-  border: none;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  margin-bottom: 10px;
-  transition: opacity .15s, transform .1s;
-}
+.maker-load-btn { width: 100%; padding: 10px; background: var(--btn); color: var(--btnt); border: none; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 10px; transition: opacity .15s, transform .1s; font-family: inherit; }
 .maker-load-btn:active { opacity: .85; transform: scale(.98); }
 .maker-load-btn:disabled { opacity: .45; cursor: default; }
-
-.rec-card {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 10px 13px;
-  margin-bottom: 5px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  animation: fadeIn .2s ease;
-  cursor: pointer;
-  transition: background .1s;
-}
+.rec-card { background: var(--bg2); border-radius: var(--r); padding: 10px 13px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px; animation: fadeIn .2s ease; cursor: pointer; transition: background .1s; }
 .rec-card:active { background: rgba(255,255,255,0.07); }
 .rec-medal { font-size: 20px; flex-shrink: 0; }
 .rec-body  { flex: 1; }
-.rec-price {
-  font-size: 18px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 1px;
-}
+.rec-price { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 1px; }
 .rec-label { font-size: 11px; color: var(--hint); }
 .rec-pos   { font-size: 10px; color: var(--hint); opacity: .6; text-align: right; }
-
-/* Мини-стакан в мейкере */
-.mini-ad-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  font-size: 11px;
-}
+.mini-ad-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 11px; }
 .mini-ad-row:last-child { border-bottom: none; }
 .mini-price { font-weight: 700; font-variant-numeric: tabular-nums; }
 .mini-meta  { color: var(--hint); font-size: 10px; }
-
-/* Калькулятор ────────────────────────────────────────────── */
-.calc-box {
-  background: var(--bg2);
-  border-radius: var(--r);
-  padding: 12px;
-  margin-top: 10px;
-}
-.calc-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  gap: 8px;
-}
+.calc-box { background: var(--bg2); border-radius: var(--r); padding: 12px; margin-top: 10px; }
+.calc-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
 .calc-label { font-size: 12px; color: var(--hint); white-space: nowrap; }
-.calc-input {
-  flex: 1;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 7px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  outline: none;
-  font-family: inherit;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  max-width: 130px;
-}
+.calc-input { flex: 1; background: var(--bg); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; padding: 6px 10px; font-size: 13px; font-weight: 600; outline: none; font-family: inherit; text-align: right; font-variant-numeric: tabular-nums; max-width: 130px; }
 .calc-input:focus { border-color: var(--btn); }
-.calc-result-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 4px;
-}
-.calc-result-card {
-  background: rgba(255,255,255,0.04);
-  border-radius: 8px;
-  padding: 8px 10px;
-  text-align: center;
-}
+.calc-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.calc-result-card { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px 10px; text-align: center; }
 .calc-result-lbl { font-size: 10px; color: var(--hint); margin-bottom: 3px; }
 .calc-result-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* ── Multi-pair tab ───────────────────────────────────────── */
+.multi-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.multi-ex-badge { font-size: 12px; font-weight: 600; background: rgba(255,255,255,.07); border-radius: 6px; padding: 4px 10px; }
+.multi-refresh-btn { background: rgba(44,165,224,.12); border: none; color: var(--btn); font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: opacity .15s; }
+.multi-refresh-btn:active { opacity: .7; }
+.pair-card { background: var(--bg2); border-radius: var(--r); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: background .12s; border-left: 3px solid rgba(255,255,255,.06); animation: fadeIn .2s ease; }
+.pair-card:active { background: rgba(255,255,255,.05); }
+.pair-card.best-spread { border-left-color: var(--green); }
+.pair-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pair-asset { font-size: 16px; font-weight: 700; }
+.pair-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pair-price-lbl { font-size: 9px; color: var(--hint); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 2px; }
+.pair-price-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pair-price-vol { font-size: 9px; color: var(--hint); margin-top: 2px; }
+.pair-price-col.right { text-align: right; }
+.pair-card .green { color: var(--green); }
+.pair-card .red   { color: var(--red);   }
+.pair-tap-hint { font-size: 9px; color: var(--hint); text-align: center; margin-top: 6px; opacity: .6; }
+
+/* ── Settings tab ─────────────────────────────────────────── */
+.settings-section { margin-bottom: 16px; }
+.settings-section-title { font-size: 10px; color: var(--hint); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; padding: 0 2px; }
+.settings-card { background: var(--bg2); border-radius: var(--r); overflow: hidden; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid rgba(255,255,255,.04); gap: 10px; }
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 13px; font-weight: 500; flex: 1; }
+.settings-row-sub { font-size: 10px; color: var(--hint); margin-top: 2px; }
+.settings-row-ctrl { flex-shrink: 0; }
+
+/* Toggle switch */
+.toggle-sw { position: relative; width: 40px; height: 22px; }
+.toggle-sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track { position: absolute; inset: 0; background: rgba(255,255,255,.12); border-radius: 11px; cursor: pointer; transition: background .2s; }
+.toggle-sw input:checked + .toggle-track { background: var(--btn); }
+.toggle-track::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 3px; left: 3px; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.toggle-sw input:checked + .toggle-track::after { transform: translateX(18px); }
+
+/* Speed pills */
+.speed-pills { display: flex; gap: 4px; }
+.speed-pill { padding: 3px 9px; border-radius: 20px; border: 1px solid rgba(255,255,255,.1); background: transparent; color: var(--hint); cursor: pointer; font-size: 11px; transition: all .15s; font-family: inherit; }
+.speed-pill.active { background: var(--btn); color: var(--btnt); border-color: var(--btn); font-weight: 600; }
+
+/* Exchange status */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hint); display: inline-block; flex-shrink: 0; }
+.status-dot.ok   { background: var(--green); }
+.status-dot.fail { background: var(--red); }
+.status-dot.checking { background: var(--gold); animation: pulse 1s infinite; }
+.status-row-label { font-size: 13px; font-weight: 500; flex: 1; }
+.status-row-right { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--hint); }
+
+.check-status-btn { width: 100%; padding: 10px; background: rgba(255,255,255,.05); color: var(--text); border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; font-family: inherit; transition: opacity .15s; }
+.check-status-btn:active { opacity: .7; }
+
 /* ── AI Chat ──────────────────────────────────────────────── */
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding: 10px 10px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.chat-msg {
-  max-width: 86%;
-  padding: 9px 12px;
-  border-radius: 14px;
-  font-size: 13px;
-  line-height: 1.55;
-  word-break: break-word;
-  white-space: pre-wrap;
-  animation: fadeIn .2s ease;
-}
+.chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { max-width: 86%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; animation: fadeIn .2s ease; }
 .chat-msg.user  { align-self: flex-end;  background: var(--btn); color: var(--btnt); border-bottom-right-radius: 4px; }
 .chat-msg.ai    { align-self: flex-start; background: var(--bg2); color: var(--text); border-bottom-left-radius: 4px; }
 .chat-msg.error { align-self: flex-start; background: rgba(240,71,71,.12); color: var(--red); border-bottom-left-radius: 4px; }
-
-.typing-indicator {
-  align-self: flex-start;
-  background: var(--bg2);
-  border-radius: 14px;
-  border-bottom-left-radius: 4px;
-  padding: 11px 15px;
-  display: flex;
-  gap: 5px;
-  align-items: center;
-}
-.typing-dot {
-  width: 7px; height: 7px;
-  background: var(--hint);
-  border-radius: 50%;
-  animation: typingBounce 1.4s ease-in-out infinite;
-}
-.typing-dot:nth-child(1) { animation-delay: 0s;  }
+.typing-indicator { align-self: flex-start; background: var(--bg2); border-radius: 14px; border-bottom-left-radius: 4px; padding: 11px 15px; display: flex; gap: 5px; align-items: center; }
+.typing-dot { width: 7px; height: 7px; background: var(--hint); border-radius: 50%; animation: typingBounce 1.4s ease-in-out infinite; }
+.typing-dot:nth-child(1) { animation-delay: 0s; }
 .typing-dot:nth-child(2) { animation-delay: .2s; }
 .typing-dot:nth-child(3) { animation-delay: .4s; }
-
-.chat-input-bar {
-  flex-shrink: 0;
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  padding: 8px 10px;
-  background: var(--bg2);
-  border-top: 1px solid rgba(255,255,255,0.05);
-  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-}
-#chatInput {
-  flex: 1;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 20px;
-  padding: 8px 13px;
-  font-size: 13px;
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  max-height: 100px;
-  overflow-y: auto;
-  line-height: 1.45;
-}
+.chat-input-bar { flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--bg2); border-top: 1px solid rgba(255,255,255,0.05); }
+#chatInput { flex: 1; background: var(--bg); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 8px 13px; font-size: 13px; font-family: inherit; resize: none; outline: none; max-height: 100px; overflow-y: auto; line-height: 1.45; }
 #chatInput::placeholder { color: var(--hint); }
-.chat-send-btn {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: var(--btn);
-  color: var(--btnt);
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: opacity .15s, transform .1s;
-}
+.chat-send-btn { width: 36px; height: 36px; border-radius: 50%; background: var(--btn); color: var(--btnt); border: none; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .15s, transform .1s; }
 .chat-send-btn:active:not(:disabled) { transform: scale(.92); }
 .chat-send-btn:disabled { opacity: .4; cursor: default; }
 
@@ -537,8 +444,7 @@ body {
   flex-shrink: 0;
   height: var(--nav-h);
   position: fixed;
-  bottom: 0;
-  left: 0; right: 0;
+  bottom: 0; left: 0; right: 0;
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -547,97 +453,61 @@ body {
   background: none;
   border: none;
   color: var(--hint);
-  font-size: 9px;
-  padding: 7px 0;
+  font-size: 8.5px;
+  padding: 6px 0;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   transition: color .15s;
-  letter-spacing: .2px;
+  letter-spacing: .1px;
 }
-.nav-icon { font-size: 19px; line-height: 1; }
+.nav-icon { font-size: 17px; line-height: 1; }
 .nav-btn.active { color: var(--btn); }
 .nav-btn:active { opacity: .7; }
 
-/* ── Shared UI ────────────────────────────────────────────── */
-.spinner {
-  width: 22px; height: 22px;
-  border: 3px solid rgba(255,255,255,0.07);
-  border-top-color: var(--btn);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-  margin: 20px auto;
-}
-.err-box {
-  background: rgba(240,71,71,.1);
-  border: 1px solid rgba(240,71,71,.3);
-  border-radius: var(--r);
-  padding: 10px;
-  color: var(--red);
-  font-size: 12px;
-  text-align: center;
-  margin: 8px 0;
-}
-.empty-hint {
-  text-align: center;
-  color: var(--hint);
-  font-size: 12px;
-  padding: 30px 20px;
-  line-height: 1.7;
-}
-.divider {
-  border: none;
-  border-top: 1px solid rgba(255,255,255,0.05);
-  margin: 10px 0;
-}
+/* ── Shared ───────────────────────────────────────────────── */
+.spinner { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,0.07); border-top-color: var(--btn); border-radius: 50%; animation: spin .7s linear infinite; margin: 30px auto; }
+.err-box { background: rgba(240,71,71,.1); border: 1px solid rgba(240,71,71,.3); border-radius: var(--r); padding: 10px; color: var(--red); font-size: 12px; text-align: center; margin: 8px 0; }
+.empty-hint { text-align: center; color: var(--hint); font-size: 12px; padding: 30px 20px; line-height: 1.7; }
+.divider { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 10px 0; }
 
 @keyframes fadeIn    { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-@keyframes spin      { to   { transform: rotate(360deg); } }
-@keyframes typingBounce {
-  0%,60%,100% { transform: translateY(0);    opacity: .4; }
-  30%         { transform: translateY(-5px); opacity: 1;  }
-}
+@keyframes spin      { to { transform: rotate(360deg); } }
+@keyframes pulse     { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+@keyframes typingBounce { 0%,60%,100%{transform:translateY(0);opacity:.4;} 30%{transform:translateY(-5px);opacity:1;} }
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════ HEADER ══════════════════ -->
+<!-- ═══════════════════════════ HEADER ════════════════════════ -->
 <div class="header">
   <div class="header-title">
     <span>📊 P2P Monitor</span>
     <span class="header-pair" id="headerPair">Binance · KZT · USDT</span>
   </div>
-
-  <!-- Биржа -->
   <div class="pill-row" id="exRow">
     <button class="pill active" data-val="binance">🟡 Binance</button>
     <button class="pill"        data-val="bybit">🟠 Bybit</button>
     <button class="pill"        data-val="okx">🔵 OKX</button>
     <button class="pill"        data-val="wallet">💎 Wallet</button>
   </div>
-
-  <!-- Фиат -->
   <div class="pill-row" id="fiatRow">
     <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
     <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
     <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
     <button class="pill"        data-val="USD">🇺🇸 USD</button>
   </div>
-
-  <!-- Ассет: USDT / BTC / ETH -->
   <div class="pill-row" id="assetRow">
     <button class="pill active" data-val="USDT">USDT</button>
     <button class="pill"        data-val="BTC">BTC</button>
     <button class="pill"        data-val="ETH">ETH</button>
   </div>
-
-  <!-- Банк (динамический) -->
   <div class="pill-row" id="payRow"></div>
 </div>
 
-<!-- ═══════════════════════════ SPREAD BAR ══════════════════ -->
+<!-- ═══════════════════════════ SPREAD BAR ════════════════════ -->
 <div class="spread-bar">
   <div>
     <div class="price-big green" id="buyPrice">—</div>
@@ -652,9 +522,50 @@ body {
   </div>
 </div>
 
-<!-- ═══════════════════════════ TAB: СТАКАН ════════════════ -->
+<!-- ═══════════════════════ TAB: СТАКАН ══════════════════════ -->
 <div class="tab-panel" id="tab-book">
-  <div class="refresh-ts" id="refreshTs"></div>
+
+  <!-- Топбар: таймер + кнопка фильтров -->
+  <div class="book-topbar">
+    <div class="refresh-ts" id="refreshTs"></div>
+    <button class="filter-toggle-btn" id="filterToggle" onclick="toggleFilter()">
+      ⚙️ Фильтры&nbsp;<span id="filterBadge" class="filter-badge">0</span>
+    </button>
+  </div>
+
+  <!-- Фильтр-ящик (скрыт по умолчанию) -->
+  <div class="filter-drawer" id="filterDrawer">
+    <div class="filter-drawer-inner">
+      <div class="filter-grid">
+        <div class="filter-item">
+          <span class="filter-lbl">Мин. сумма</span>
+          <input class="filter-input" id="fMinAmount" type="number" placeholder="0" min="0">
+        </div>
+        <div class="filter-item">
+          <span class="filter-lbl">Мин. сделок</span>
+          <input class="filter-input" id="fMinOrders" type="number" placeholder="0" min="0">
+        </div>
+        <div class="filter-item">
+          <span class="filter-lbl">Мин. % выполн.</span>
+          <input class="filter-input" id="fMinComp" type="number" placeholder="0" min="0" max="100">
+        </div>
+        <div class="filter-item">
+          <span class="filter-lbl">3-е лица</span>
+          <div class="seg-ctrl" id="fThirdParty">
+            <button class="seg-btn active" data-val="">Все</button>
+            <button class="seg-btn"        data-val="yes">✅ Да</button>
+            <button class="seg-btn"        data-val="no">❌ Нет</button>
+          </div>
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button class="filter-apply-btn" onclick="applyFilter()">✓ Применить</button>
+        <button class="filter-reset-btn" onclick="resetFilter()">✕ Сброс</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Стакан -->
   <div class="book-grid">
     <div class="book-col buy-col">
       <div class="col-title">📗 Покупают</div>
@@ -667,14 +578,12 @@ body {
   </div>
 </div>
 
-<!-- ═══════════════════════════ TAB: ГРАФИК ════════════════ -->
+<!-- ═══════════════════════ TAB: ГРАФИК ══════════════════════ -->
 <div class="tab-panel hidden" id="tab-chart">
   <div class="chart-card">
     <div class="chart-box">
       <canvas id="spreadChart"></canvas>
-      <div id="chartEmpty" class="chart-empty" style="display:none;">
-        ⏳ История ещё копится.<br>Данные каждые 30 мин.<br>Зайди позже.
-      </div>
+      <div id="chartEmpty" class="chart-empty" style="display:none;"></div>
     </div>
   </div>
   <div class="stats-grid">
@@ -700,9 +609,8 @@ body {
   </div>
 </div>
 
-<!-- ═══════════════════════════ TAB: СПРЕД ════════════════ -->
+<!-- ═══════════════════════ TAB: СПРЕД ═══════════════════════ -->
 <div class="tab-panel hidden" id="tab-spread">
-  <!-- Локальные пикеры для сравнения (фиат + ассет) -->
   <div class="tab-pickers" id="cmpFiatRow">
     <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
     <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
@@ -714,29 +622,137 @@ body {
     <button class="pill"        data-val="BTC">BTC</button>
     <button class="pill"        data-val="ETH">ETH</button>
   </div>
-
   <div id="cmpContent"><div class="spinner"></div></div>
 </div>
 
-<!-- ═══════════════════════════ TAB: МЕЙКЕР ════════════════ -->
+<!-- ═══════════════════════ TAB: МЕЙКЕР ══════════════════════ -->
 <div class="tab-panel hidden" id="tab-maker">
-  <!-- Переключатель BUY / SELL -->
   <div class="side-toggle">
     <button class="side-btn active-buy" id="makerBuyBtn"  onclick="setMakerSide('buy')">📗 Покупка</button>
     <button class="side-btn"           id="makerSellBtn" onclick="setMakerSide('sell')">📕 Продажа</button>
   </div>
-
-  <!-- Банк для мейкера -->
-  <div class="pill-row" id="makerPayRow"></div>
-
+  <div class="pill-row hidden" id="makerPayRow"></div>
   <button class="maker-load-btn" id="makerLoadBtn" onclick="loadMaker()">
     🎯 Рассчитать оптимальную цену
   </button>
-
   <div id="makerContent"></div>
 </div>
 
-<!-- ═══════════════════════════ TAB: AI ════════════════════ -->
+<!-- ════════════════════ TAB: МУЛЬТИПАРА ═════════════════════ -->
+<div class="tab-panel hidden" id="tab-multi">
+  <div class="multi-header">
+    <span class="multi-ex-badge" id="multiExBadge">🟡 Binance · KZT</span>
+    <button class="multi-refresh-btn" onclick="loadMulti()">↻ Обновить</button>
+  </div>
+  <div id="multiContent"><div class="spinner"></div></div>
+</div>
+
+<!-- ══════════════════════ TAB: НАСТРОЙКИ ════════════════════ -->
+<div class="tab-panel hidden" id="tab-settings">
+
+  <!-- Статус бирж -->
+  <div class="settings-section">
+    <div class="settings-section-title">Статус бирж</div>
+    <div class="settings-card" id="statusCard">
+      <div class="settings-row">
+        <span class="status-row-label">🟡 Binance</span>
+        <div class="status-row-right">
+          <span id="statusTxt_binance">—</span>
+          <span class="status-dot" id="status_binance"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="status-row-label">🟠 Bybit</span>
+        <div class="status-row-right">
+          <span id="statusTxt_bybit">—</span>
+          <span class="status-dot" id="status_bybit"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="status-row-label">🔵 OKX</span>
+        <div class="status-row-right">
+          <span id="statusTxt_okx">—</span>
+          <span class="status-dot" id="status_okx"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="status-row-label">💎 TG Wallet</span>
+        <div class="status-row-right">
+          <span id="statusTxt_wallet">—</span>
+          <span class="status-dot" id="status_wallet"></span>
+        </div>
+      </div>
+    </div>
+    <button class="check-status-btn" onclick="checkExchangeStatus()">🔄 Проверить доступность</button>
+  </div>
+
+  <!-- Автообновление -->
+  <div class="settings-section">
+    <div class="settings-section-title">Стакан — автообновление</div>
+    <div class="settings-card">
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Интервал</div>
+          <div class="settings-row-sub">Как часто обновлять стакан</div>
+        </div>
+        <div class="speed-pills settings-row-ctrl">
+          <button class="speed-pill" data-val="5">5с</button>
+          <button class="speed-pill active" data-val="10">10с</button>
+          <button class="speed-pill" data-val="30">30с</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Отображение -->
+  <div class="settings-section">
+    <div class="settings-section-title">Отображение</div>
+    <div class="settings-card">
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Риск-индикаторы</div>
+          <div class="settings-row-sub">Значки ⚠️ 🔴 у объявлений</div>
+        </div>
+        <label class="toggle-sw settings-row-ctrl">
+          <input type="checkbox" id="riskToggle" checked>
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Мультипара авто</div>
+          <div class="settings-row-sub">Обновлять при входе на вкладку</div>
+        </div>
+        <label class="toggle-sw settings-row-ctrl">
+          <input type="checkbox" id="multiAutoToggle" checked>
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- О приложении -->
+  <div class="settings-section">
+    <div class="settings-section-title">О приложении</div>
+    <div class="settings-card">
+      <div class="settings-row">
+        <span class="settings-row-label">Версия</span>
+        <span style="font-size:12px;color:var(--hint)">2.0.0</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Биржи</span>
+        <span style="font-size:12px;color:var(--hint)">Binance · Bybit · OKX · Wallet</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Пары</span>
+        <span style="font-size:12px;color:var(--hint)">USDT · BTC · ETH</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════ TAB: AI ══════════════════════════ -->
 <div class="tab-panel hidden" id="tab-ai">
   <div class="chat-messages" id="chatMessages"></div>
   <div class="chat-input-bar">
@@ -745,53 +761,79 @@ body {
   </div>
 </div>
 
-<!-- ═══════════════════════════ BOTTOM NAV ═════════════════ -->
+<!-- ═══════════════════════ BOTTOM NAV ═══════════════════════ -->
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="switchTab('book',this)">
+  <button class="nav-btn active" data-tab="book"     onclick="switchTab('book',this)">
     <span class="nav-icon">📊</span>Стакан
   </button>
-  <button class="nav-btn" onclick="switchTab('chart',this)">
+  <button class="nav-btn" data-tab="chart"    onclick="switchTab('chart',this)">
     <span class="nav-icon">📈</span>График
   </button>
-  <button class="nav-btn" onclick="switchTab('spread',this)">
+  <button class="nav-btn" data-tab="spread"   onclick="switchTab('spread',this)">
     <span class="nav-icon">⚡</span>Спред
   </button>
-  <button class="nav-btn" onclick="switchTab('maker',this)">
+  <button class="nav-btn" data-tab="maker"    onclick="switchTab('maker',this)">
     <span class="nav-icon">🎯</span>Мейкер
   </button>
-  <button class="nav-btn" onclick="switchTab('ai',this)">
-    <span class="nav-icon">🤖</span>AI
+  <button class="nav-btn" data-tab="multi"    onclick="switchTab('multi',this)">
+    <span class="nav-icon">📦</span>Мульти
+  </button>
+  <button class="nav-btn" data-tab="settings" onclick="switchTab('settings',this)">
+    <span class="nav-icon">⚙️</span>Настройки
   </button>
 </nav>
 
 <script>
 /* ══════════════════════════════════════════════════════════
-   INIT
+   TELEGRAM INIT
 ══════════════════════════════════════════════════════════ */
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
 /* ══════════════════════════════════════════════════════════
+   SETTINGS (localStorage)
+══════════════════════════════════════════════════════════ */
+const SETTINGS_KEY = 'p2p_mon_v2';
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveSetting(patch) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...patch }));
+}
+
+const _cfg  = loadSettings();
+let REFRESH_MS = (_cfg.refresh_speed || 10) * 1000;
+
+/* ══════════════════════════════════════════════════════════
    STATE
 ══════════════════════════════════════════════════════════ */
 const S = {
-  exchange: 'binance',
-  fiat:     'KZT',
+  exchange: _cfg.default_exchange || 'binance',
+  fiat:     _cfg.default_fiat     || 'KZT',
   asset:    'USDT',
   tab:      'book',
   pay:      '',
 };
-const CM = { fiat: 'KZT', asset: 'USDT' };   // compare-mode state
-const MK = { side: 'buy', pay: '' };          // maker state
+const CM = { fiat: 'KZT', asset: 'USDT' };
+const MK = { side: 'buy', pay: '' };
+// Book filters
+const BF = {
+  min_amount:  0,
+  third_party: '',
+  min_orders:  0,
+  min_comp:    0,
+};
 
-let bookTimer    = null;
-let chartInst    = null;
-let chatHistory  = [];
-let chatLoading  = false;
-let chatInited   = false;
+let bookTimer   = null;
+let multiTimer  = null;
+let chartInst   = null;
+let chatHistory = [];
+let chatLoading = false;
+let chatInited  = false;
 
 /* ══════════════════════════════════════════════════════════
-   PAY METHODS MAP
+   PAY METHODS
 ══════════════════════════════════════════════════════════ */
 const PAY_METHODS = {
   binance: {
@@ -833,22 +875,21 @@ const PAY_METHODS = {
 ══════════════════════════════════════════════════════════ */
 const FMT2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const FMT0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
-
-function fmt(n)  { return FMT2.format(n); }
-function fmt0(n) { return FMT0.format(n); }
+function fmt(n)  { return n != null ? FMT2.format(n) : '—'; }
+function fmt0(n) { return n != null ? FMT0.format(n) : '—'; }
 function fmtK(n) {
   if (!n) return '0';
   if (n >= 1_000_000) return (n/1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return (n/1_000).toFixed(1) + 'k';
-  return n.toFixed(2);
+  return n.toFixed ? n.toFixed(2) : n;
 }
 function esc(s) {
-  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ══════════════════════════════════════════════════════════
-   HEADER PILL WIRING
+   PILL WIRING
 ══════════════════════════════════════════════════════════ */
 function wireGroup(id, key, onChange) {
   document.querySelectorAll(`#${id} .pill`).forEach(btn => {
@@ -860,33 +901,54 @@ function wireGroup(id, key, onChange) {
     });
   });
 }
+function wireLocalGroup(id, stateObj, key, onChange) {
+  document.querySelectorAll(`#${id} .pill`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${id} .pill`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      stateObj[key] = btn.dataset.val;
+      onChange();
+    });
+  });
+}
+
+// Restore saved default exchange/fiat
+function applyStateToUI() {
+  ['exRow','fiatRow','assetRow'].forEach(rowId => {
+    const key = rowId === 'exRow' ? 'exchange' : rowId === 'fiatRow' ? 'fiat' : 'asset';
+    document.querySelectorAll(`#${rowId} .pill`).forEach(b => {
+      b.classList.toggle('active', b.dataset.val === S[key]);
+    });
+  });
+}
 
 wireGroup('exRow',    'exchange', onMainStateChange);
 wireGroup('fiatRow',  'fiat',     onMainStateChange);
 wireGroup('assetRow', 'asset',    onMainStateChange);
+wireLocalGroup('cmpFiatRow',  CM, 'fiat',  loadCompare);
+wireLocalGroup('cmpAssetRow', CM, 'asset', loadCompare);
 
 function onMainStateChange() {
-  // сброс банка при смене биржи/фиата
-  S.pay = '';
-  updatePayRow('payRow',   S.exchange, S.fiat, v => { S.pay = v; restartBookTimer(); });
+  S.pay = ''; MK.pay = '';
+  updatePayRow('payRow',      S.exchange, S.fiat, v => { S.pay  = v; restartBookTimer(); });
   updatePayRow('makerPayRow', S.exchange, S.fiat, v => { MK.pay = v; });
-  MK.pay = '';
   updateHeaderPair();
   restartBookTimer();
   if (S.tab === 'chart') loadChart();
+  if (S.tab === 'multi') loadMulti();
   resetChat();
 }
 
 function updateHeaderPair() {
-  const EX_NAMES = {binance:'Binance', bybit:'Bybit', okx:'OKX', wallet:'Wallet'};
+  const EX = { binance:'Binance', bybit:'Bybit', okx:'OKX', wallet:'Wallet' };
   document.getElementById('headerPair').textContent =
-    `${EX_NAMES[S.exchange]||S.exchange} · ${S.fiat} · ${S.asset}`;
+    `${EX[S.exchange] || S.exchange} · ${S.fiat} · ${S.asset}`;
 }
 
 function updatePayRow(rowId, exchange, fiat, onSelect) {
   const row   = document.getElementById(rowId);
   if (!row) return;
-  const banks = (PAY_METHODS[exchange]||{})[fiat] || [{v:'',lbl:'Все'}];
+  const banks = (PAY_METHODS[exchange] || {})[fiat] || [{v:'',lbl:'Все'}];
   row.innerHTML = banks.map(b =>
     `<button class="pill${b.v===''?' active':''}" data-val="${esc(b.v)}">${esc(b.lbl)}</button>`
   ).join('');
@@ -899,39 +961,82 @@ function updatePayRow(rowId, exchange, fiat, onSelect) {
   });
 }
 
-/* Wire compare-tab local pickers */
-function wireLocalGroup(id, stateObj, key, onChange) {
-  document.querySelectorAll(`#${id} .pill`).forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll(`#${id} .pill`).forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      stateObj[key] = btn.dataset.val;
-      onChange();
-    });
-  });
-}
-wireLocalGroup('cmpFiatRow',  CM, 'fiat',  loadCompare);
-wireLocalGroup('cmpAssetRow', CM, 'asset', loadCompare);
-
 /* ══════════════════════════════════════════════════════════
    TAB SWITCHING
 ══════════════════════════════════════════════════════════ */
 function switchTab(tab, btn) {
+  clearInterval(bookTimer);  bookTimer  = null;
+  clearInterval(multiTimer); multiTimer = null;
+
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   S.tab = tab;
 
-  // Показываем/скрываем банк-пикер только для Стакана и Мейкера
-  const showPay = tab === 'book' || tab === 'maker';
-  document.getElementById('payRow').classList.toggle('hidden', !showPay || tab === 'maker');
+  // Pay rows visibility
+  document.getElementById('payRow').classList.toggle('hidden', tab !== 'book');
   document.getElementById('makerPayRow').classList.toggle('hidden', tab !== 'maker');
 
-  if (tab === 'book')   { restartBookTimer(); }
-  if (tab === 'chart')  { loadChart(); }
-  if (tab === 'spread') { loadCompare(); }
-  if (tab === 'ai')     { initChat(); }
+  if (tab === 'book')     { restartBookTimer(); }
+  if (tab === 'chart')    { loadChart(); }
+  if (tab === 'spread')   { loadCompare(); }
+  if (tab === 'multi')    { startMultiRefresh(); }
+  if (tab === 'settings') { initSettingsTab(); }
+  if (tab === 'ai')       { initChat(); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILTER DRAWER
+══════════════════════════════════════════════════════════ */
+function toggleFilter() {
+  document.getElementById('filterDrawer').classList.toggle('open');
+}
+
+function _countFilters() {
+  return (BF.min_amount > 0 ? 1 : 0) +
+         (BF.third_party   ? 1 : 0) +
+         (BF.min_orders > 0 ? 1 : 0) +
+         (BF.min_comp   > 0 ? 1 : 0);
+}
+
+function updateFilterBadge() {
+  const n     = _countFilters();
+  const badge = document.getElementById('filterBadge');
+  const btn   = document.getElementById('filterToggle');
+  badge.textContent = n;
+  badge.classList.toggle('visible', n > 0);
+  btn.classList.toggle('has-filters', n > 0);
+}
+
+// Wire 3rd-party seg-ctrl
+document.querySelectorAll('#fThirdParty .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#fThirdParty .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    BF.third_party = btn.dataset.val;
+  });
+});
+
+function applyFilter() {
+  BF.min_amount = parseFloat(document.getElementById('fMinAmount').value) || 0;
+  BF.min_orders = parseInt(document.getElementById('fMinOrders').value)   || 0;
+  BF.min_comp   = parseFloat(document.getElementById('fMinComp').value)   || 0;
+  updateFilterBadge();
+  document.getElementById('filterDrawer').classList.remove('open');
+  restartBookTimer();
+}
+
+function resetFilter() {
+  BF.min_amount = 0; BF.third_party = ''; BF.min_orders = 0; BF.min_comp = 0;
+  document.getElementById('fMinAmount').value = '';
+  document.getElementById('fMinOrders').value = '';
+  document.getElementById('fMinComp').value   = '';
+  document.querySelectorAll('#fThirdParty .seg-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === '');
+  });
+  updateFilterBadge();
+  restartBookTimer();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -941,20 +1046,29 @@ function restartBookTimer() {
   clearInterval(bookTimer);
   if (S.tab === 'book') {
     loadOrderbook();
-    bookTimer = setInterval(loadOrderbook, 10_000);
+    bookTimer = setInterval(loadOrderbook, REFRESH_MS);
   }
 }
 
 async function loadOrderbook() {
   const { exchange, fiat, asset, pay } = S;
-  const q = pay ? `?pay=${encodeURIComponent(pay)}` : '';
+  const params = new URLSearchParams();
+  if (pay)              params.set('pay',         pay);
+  if (BF.min_amount>0)  params.set('min_amount',  BF.min_amount);
+  if (BF.third_party)   params.set('third_party', BF.third_party);
+  if (BF.min_orders>0)  params.set('min_orders',  BF.min_orders);
+  if (BF.min_comp>0)    params.set('min_comp',     BF.min_comp);
+  const q = params.toString() ? `?${params}` : '';
+
   try {
     const r    = await fetch(`/api/orderbook/${exchange}/${fiat}/${asset}${q}`);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     renderOrderbook(data);
+    const now = new Date().toLocaleTimeString('ru-RU');
+    const speed = REFRESH_MS / 1000;
     document.getElementById('refreshTs').textContent =
-      `Обновлено ${new Date().toLocaleTimeString('ru-RU')} · авто 10 сек`;
+      `Обновлено ${now} · авто ${speed}с` + (_countFilters() ? ` · 🔍 фильтров: ${_countFilters()}` : '');
   } catch(e) {
     const msg = `<div class="err-box">❌ ${esc(e.message)}</div>`;
     document.getElementById('buyList').innerHTML  = msg;
@@ -965,49 +1079,45 @@ async function loadOrderbook() {
 }
 
 function renderOrderbook({ buy, sell, spread }) {
-  // Spread bar
   if (buy.length) {
     document.getElementById('buyPrice').textContent = fmt(buy[0].price);
-    const buyTotalVol = buy.reduce((s,a) => s + (a.available||0), 0);
-    document.getElementById('buyVol').textContent   = buyTotalVol ? `📦 ${fmtK(buyTotalVol)} ${S.asset}` : '';
+    const vol = buy.reduce((s,a) => s + (a.available||0), 0);
+    document.getElementById('buyVol').textContent = vol ? `📦 ${fmtK(vol)} ${S.asset}` : '';
   }
   if (sell.length) {
     document.getElementById('sellPrice').textContent = fmt(sell[0].price);
-    const sellTotalVol = sell.reduce((s,a) => s + (a.available||0), 0);
-    document.getElementById('sellVol').textContent   = sellTotalVol ? `📦 ${fmtK(sellTotalVol)} ${S.asset}` : '';
+    const vol = sell.reduce((s,a) => s + (a.available||0), 0);
+    document.getElementById('sellVol').textContent = vol ? `📦 ${fmtK(vol)} ${S.asset}` : '';
   }
-
   const chip = document.getElementById('spreadChip');
   if (spread?.spread_pct != null) {
     const pct = spread.spread_pct;
     chip.textContent = `⇔ ${pct}%`;
-    chip.className   = 'spread-chip' + (pct >= 0.5 ? ' good' : pct >= 0.2 ? ' mid' : '');
+    chip.className   = 'spread-chip' + (pct>=0.5?' good':pct>=0.2?' mid':'');
   } else {
     chip.textContent = '—'; chip.className = 'spread-chip';
   }
-
-  document.getElementById('buyList').innerHTML  = renderAdList(buy);
-  document.getElementById('sellList').innerHTML = renderAdList(sell);
+  const showRisk = loadSettings().show_risk !== false;
+  document.getElementById('buyList').innerHTML  = renderAdList(buy, showRisk);
+  document.getElementById('sellList').innerHTML = renderAdList(sell, showRisk);
 }
 
-function renderAdList(ads) {
+function renderAdList(ads, showRisk=true) {
   if (!ads?.length) return '<div class="empty-hint">Нет данных</div>';
   return ads.map(ad => {
-    const pay  = (ad.pay_types||[]).slice(0,2).map(p=>`<span class="pay-pill">${esc(p)}</span>`).join('')||'—';
+    const pay  = (ad.pay_types||[]).slice(0,2).map(p=>`<span class="pay-pill">${esc(p)}</span>`).join('') || '—';
     const vol  = fmtK(ad.available||0);
-    const comp = ad.completion||0;
-    const ord  = ad.orders||0;
-    const risk = ad.risk_badge ? `<span class="risk-badge">${esc(ad.risk_badge)}</span>` : '';
+    const risk = (showRisk && ad.risk_badge) ? `<span class="risk-badge">${esc(ad.risk_badge)}</span>` : '';
     return `<div class="ad-card">
       <div class="ad-price">${fmt(ad.price)}</div>
       <div class="ad-nick">${esc(ad.nickname||'—')}</div>
-      <div class="ad-meta">${vol} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ord} сд · ${comp}% ${risk}<br>${pay}</div>
+      <div class="ad-meta">${vol} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ad.orders||0} сд · ${ad.completion||0}% ${risk}<br>${pay}</div>
     </div>`;
   }).join('');
 }
 
 /* ══════════════════════════════════════════════════════════
-   CHART (ИСТОРИЯ СПРЕДА)
+   CHART
 ══════════════════════════════════════════════════════════ */
 async function loadChart() {
   const canvas = document.getElementById('spreadChart');
@@ -1047,12 +1157,12 @@ function renderChart(points) {
   document.getElementById('maxSpread').textContent  = maxV.toFixed(3) + '%';
   document.getElementById('dataPoints').textContent = points.length;
   const curEl = document.getElementById('curSpread');
-  curEl.textContent  = curV.toFixed(3) + '%';
-  curEl.style.color  = curV >= avg ? 'var(--green)' : 'var(--red)';
+  curEl.textContent = curV.toFixed(3) + '%';
+  curEl.style.color = curV >= avg ? 'var(--green)' : 'var(--red)';
   const diff = curV - avg;
   const vsEl = document.getElementById('curVsAvg');
-  vsEl.textContent  = (diff>=0?'+':'') + diff.toFixed(3) + '% vs avg';
-  vsEl.style.color  = diff >= 0 ? 'var(--green)' : 'var(--red)';
+  vsEl.textContent = (diff>=0?'+':'') + diff.toFixed(3) + '% vs avg';
+  vsEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
 
   if (chartInst) chartInst.destroy();
   const ctx  = canvas.getContext('2d');
@@ -1078,23 +1188,23 @@ function renderChart(points) {
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
-          label: ctx => ctx.datasetIndex === 0
+          label: ctx => ctx.datasetIndex===0
             ? `Спред: ${ctx.parsed.y.toFixed(4)}%`
             : `Avg: ${ctx.parsed.y.toFixed(4)}%`
         }},
       },
       scales: {
-        x: { ticks: { color:'#708499', maxTicksLimit:5, maxRotation:0, font:{size:9} },
-             grid:  { color:'rgba(255,255,255,0.04)' } },
-        y: { ticks: { color:'#708499', font:{size:9}, callback: v => v.toFixed(2)+'%' },
-             grid:  { color:'rgba(255,255,255,0.04)' } },
+        x: { ticks:{ color:'#708499', maxTicksLimit:5, maxRotation:0, font:{size:9} },
+             grid: { color:'rgba(255,255,255,0.04)' } },
+        y: { ticks:{ color:'#708499', font:{size:9}, callback:v => v.toFixed(2)+'%' },
+             grid: { color:'rgba(255,255,255,0.04)' } },
       },
     },
   });
 }
 
 /* ══════════════════════════════════════════════════════════
-   СРАВНЕНИЕ СПРЕДА ПО БИРЖАМ
+   SPREAD COMPARE
 ══════════════════════════════════════════════════════════ */
 async function loadCompare() {
   const box = document.getElementById('cmpContent');
@@ -1110,16 +1220,13 @@ async function loadCompare() {
 }
 
 function renderCompare({ exchanges, arbitrage }) {
-  // Найти лучший спред
-  const valid  = exchanges.filter(e => e.spread_pct != null);
+  const valid   = exchanges.filter(e => e.spread_pct != null);
   const bestPct = valid.length ? Math.max(...valid.map(e => e.spread_pct)) : null;
 
-  // Таблица
   let html = `<div class="compare-table">
     <div class="compare-row header-row">
       <span>Биржа</span><span>📗 Покупка</span><span>📕 Продажа</span><span style="text-align:right">Спред</span>
     </div>`;
-
   exchanges.forEach(ex => {
     const isBest = ex.spread_pct != null && ex.spread_pct === bestPct && bestPct > 0;
     html += `<div class="compare-row${isBest?' best-row':''}">
@@ -1127,7 +1234,7 @@ function renderCompare({ exchanges, arbitrage }) {
       <span class="compare-price compare-buy">${ex.buy ? fmt(ex.buy) : '—'}</span>
       <span class="compare-price compare-sell">${ex.sell ? fmt(ex.sell) : '—'}</span>
       <span class="compare-spread">
-        ${ex.spread_pct != null
+        ${ex.spread_pct!=null
           ? `<span class="spread-badge${isBest?' best':ex.spread_pct>=0.3?' good':''}">${ex.spread_pct}%</span>`
           : '—'}
       </span>
@@ -1135,15 +1242,12 @@ function renderCompare({ exchanges, arbitrage }) {
   });
   html += '</div>';
 
-  // Арбитраж
   if (arbitrage?.length) {
     html += `<div class="section-title">⚡ Арбитраж</div>`;
     arbitrage.forEach(a => {
       html += `<div class="arb-card">
-        <div>
-          <div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div>
-          <div class="arb-abs">${fmt(a.abs)} ${CM.fiat}</div>
-        </div>
+        <div><div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div>
+        <div class="arb-abs">${fmt(a.abs)} ${CM.fiat}</div></div>
         <div class="arb-pct">+${a.pct}%</div>
       </div>`;
     });
@@ -1155,7 +1259,7 @@ function renderCompare({ exchanges, arbitrage }) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   МЕЙКЕР
+   MAKER
 ══════════════════════════════════════════════════════════ */
 function setMakerSide(side) {
   MK.side = side;
@@ -1190,11 +1294,10 @@ async function loadMaker() {
 function renderMaker({ ads, recommendations, step }, fiat, asset, side) {
   if (!ads.length) {
     document.getElementById('makerContent').innerHTML =
-      '<div class="empty-hint">😔 Объявления не найдены.<br>Попробуй другой банк или биржу.</div>';
+      '<div class="empty-hint">😔 Нет объявлений.<br>Попробуй другой банк или биржу.</div>';
     return;
   }
 
-  // Рекомендации
   let html = `<div class="section-title">🎯 Рекомендуемые цены</div>`;
   recommendations.forEach(r => {
     html += `<div class="rec-card" onclick="setCalcPrice(${r.price})">
@@ -1207,25 +1310,23 @@ function renderMaker({ ads, recommendations, step }, fiat, asset, side) {
     </div>`;
   });
 
-  // Мини-стакан
   html += `<div class="section-title">${side==='buy'?'📗':'📕'} Текущий топ-5</div>
   <div style="background:var(--bg2);border-radius:var(--r);padding:8px 10px;margin-bottom:10px;">`;
   ads.forEach((ad, i) => {
-    const sideColor = side==='buy' ? 'var(--green)' : 'var(--red)';
+    const clr = side==='buy' ? 'var(--green)' : 'var(--red)';
     html += `<div class="mini-ad-row">
-      <span class="mini-price" style="color:${sideColor}">${i+1}. ${fmt(ad.price)}</span>
+      <span class="mini-price" style="color:${clr}">${i+1}. ${fmt(ad.price)}</span>
       <span class="mini-meta">${fmtK(ad.available)} · ${ad.orders}сд · ${ad.completion}%</span>
     </div>`;
   });
   html += '</div>';
 
-  // Калькулятор
-  const defaultPrice = recommendations[0]?.price || ads[0]?.price || 0;
+  const defPrice = recommendations[0]?.price || ads[0]?.price || 0;
   html += `<div class="section-title">🧮 Калькулятор</div>
   <div class="calc-box">
     <div class="calc-row">
       <span class="calc-label">Цена (${esc(fiat)})</span>
-      <input class="calc-input" id="calcPrice" type="number" value="${defaultPrice}"
+      <input class="calc-input" id="calcPrice" type="number" value="${defPrice}"
              step="${step}" oninput="updateCalc()">
     </div>
     <div class="calc-row">
@@ -1248,18 +1349,154 @@ function setCalcPrice(price) {
 function updateCalc() {
   const price  = parseFloat(document.getElementById('calcPrice')?.value)  || 0;
   const volume = parseFloat(document.getElementById('calcVolume')?.value) || 0;
-  const total  = price * volume;
   const result = document.getElementById('calcResult');
   if (!result || !price || !volume) return;
   result.innerHTML = `
     <div class="calc-result-card">
       <div class="calc-result-lbl">Объём ${S.fiat}</div>
-      <div class="calc-result-val">${fmt0(total)}</div>
+      <div class="calc-result-val">${fmt0(price * volume)}</div>
     </div>
     <div class="calc-result-card">
       <div class="calc-result-lbl">Объём ${S.asset}</div>
       <div class="calc-result-val">${volume.toFixed(2)}</div>
     </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   МУЛЬТИПАРА
+══════════════════════════════════════════════════════════ */
+function startMultiRefresh() {
+  clearInterval(multiTimer);
+  const autoOn = loadSettings().multi_auto !== false;
+  loadMulti();
+  if (autoOn) multiTimer = setInterval(loadMulti, 15_000);
+}
+
+async function loadMulti() {
+  const EX_ICONS = { binance:'🟡', bybit:'🟠', okx:'🔵', wallet:'💎' };
+  const EX_NAMES = { binance:'Binance', bybit:'Bybit', okx:'OKX', wallet:'Wallet' };
+  document.getElementById('multiExBadge').textContent =
+    `${EX_ICONS[S.exchange]||''} ${EX_NAMES[S.exchange]||S.exchange} · ${S.fiat}`;
+
+  const box = document.getElementById('multiContent');
+  box.innerHTML = '<div class="spinner"></div>';
+  try {
+    const r    = await fetch(`/api/multi/${S.exchange}/${S.fiat}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderMulti(data);
+  } catch(e) {
+    box.innerHTML = `<div class="err-box">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderMulti({ pairs, fiat }) {
+  if (!pairs?.length) {
+    document.getElementById('multiContent').innerHTML = '<div class="empty-hint">Нет данных</div>';
+    return;
+  }
+  const valid   = pairs.filter(p => p.spread_pct != null);
+  const bestPct = valid.length ? Math.max(...valid.map(p => p.spread_pct)) : null;
+
+  let html = pairs.map(p => {
+    const isBest   = p.spread_pct != null && p.spread_pct === bestPct && bestPct > 0;
+    const chipClass = p.spread_pct >= 0.5 ? ' good' : p.spread_pct >= 0.2 ? ' mid' : '';
+    return `<div class="pair-card${isBest?' best-spread':''}" onclick="selectPair('${esc(p.asset)}')">
+      <div class="pair-card-header">
+        <span class="pair-asset">${esc(p.asset)}</span>
+        ${p.spread_pct != null
+          ? `<span class="spread-chip${chipClass}">⇔ ${p.spread_pct}%</span>`
+          : '<span class="spread-chip">—</span>'}
+      </div>
+      <div class="pair-prices">
+        <div class="pair-price-col">
+          <div class="pair-price-lbl">📗 Покупка</div>
+          <div class="pair-price-val green">${p.buy ? fmt(p.buy) : '—'}</div>
+          <div class="pair-price-vol">${p.buy_vol ? '📦 ' + fmtK(p.buy_vol) + ' ' + esc(p.asset) : ''}</div>
+        </div>
+        <div class="pair-price-col right">
+          <div class="pair-price-lbl">📕 Продажа</div>
+          <div class="pair-price-val red">${p.sell ? fmt(p.sell) : '—'}</div>
+          <div class="pair-price-vol">${p.sell_vol ? '📦 ' + fmtK(p.sell_vol) + ' ' + esc(p.asset) : ''}</div>
+        </div>
+      </div>
+      ${isBest ? '<div class="pair-tap-hint">👆 Лучший спред · тап для стакана</div>' : '<div class="pair-tap-hint">👆 Тап для стакана</div>'}
+    </div>`;
+  }).join('');
+
+  document.getElementById('multiContent').innerHTML = html;
+}
+
+function selectPair(asset) {
+  S.asset = asset;
+  applyStateToUI();
+  updatePayRow('payRow', S.exchange, S.fiat, v => { S.pay = v; restartBookTimer(); });
+  updateHeaderPair();
+  const bookBtn = document.querySelector('.nav-btn[data-tab="book"]');
+  switchTab('book', bookBtn);
+}
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS TAB
+══════════════════════════════════════════════════════════ */
+let settingsInited = false;
+
+function initSettingsTab() {
+  const cfg = loadSettings();
+
+  // Refresh speed pills
+  const speed = cfg.refresh_speed || 10;
+  document.querySelectorAll('.speed-pill').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.val) === speed);
+    b.onclick = () => {
+      document.querySelectorAll('.speed-pill').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const ms = parseInt(b.dataset.val) * 1000;
+      REFRESH_MS = ms;
+      saveSetting({ refresh_speed: parseInt(b.dataset.val) });
+      if (bookTimer) restartBookTimer();
+    };
+  });
+
+  // Risk toggle
+  const riskChk = document.getElementById('riskToggle');
+  riskChk.checked = cfg.show_risk !== false;
+  riskChk.onchange = () => saveSetting({ show_risk: riskChk.checked });
+
+  // Multi auto toggle
+  const multiChk = document.getElementById('multiAutoToggle');
+  multiChk.checked = cfg.multi_auto !== false;
+  multiChk.onchange = () => {
+    saveSetting({ multi_auto: multiChk.checked });
+    if (S.tab === 'multi') {
+      clearInterval(multiTimer); multiTimer = null;
+      if (multiChk.checked) multiTimer = setInterval(loadMulti, 15_000);
+    }
+  };
+
+  settingsInited = true;
+}
+
+async function checkExchangeStatus() {
+  const exchanges = ['binance', 'bybit', 'okx', 'wallet'];
+  exchanges.forEach(ex => {
+    document.getElementById(`status_${ex}`).className    = 'status-dot checking';
+    document.getElementById(`statusTxt_${ex}`).textContent = '…';
+  });
+  try {
+    const r    = await fetch(`/api/status/${S.fiat}`);
+    const data = await r.json();
+    exchanges.forEach(ex => {
+      const ok  = !!data[ex];
+      document.getElementById(`status_${ex}`).className    = 'status-dot ' + (ok ? 'ok' : 'fail');
+      document.getElementById(`statusTxt_${ex}`).textContent = ok ? 'онлайн' : 'недоступен';
+    });
+  } catch(e) {
+    exchanges.forEach(ex => {
+      document.getElementById(`status_${ex}`).className    = 'status-dot fail';
+      document.getElementById(`statusTxt_${ex}`).textContent = 'ошибка';
+    });
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1278,13 +1515,12 @@ function showTyping() {
   const box = document.getElementById('chatMessages');
   const el  = document.createElement('div');
   el.className = 'typing-indicator'; el.id = 'typingEl';
-  el.innerHTML  = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
 }
-function hideTyping() {
-  document.getElementById('typingEl')?.remove();
-}
+function hideTyping() { document.getElementById('typingEl')?.remove(); }
+
 async function sendChat(autoMsg) {
   if (chatLoading) return;
   const input   = document.getElementById('chatInput');
@@ -1295,16 +1531,21 @@ async function sendChat(autoMsg) {
   chatLoading = true; sendBtn.disabled = true; showTyping();
   try {
     const r    = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ exchange:S.exchange, fiat:S.fiat, asset:S.asset,
                              history:chatHistory, message:text }),
     });
     const data = await r.json();
     hideTyping();
-    if (data.error) { appendBubble('error','❌ '+data.error); }
+    if (data.error) appendBubble('error', '❌ ' + data.error);
     else { chatHistory = data.history||[]; appendBubble('ai', data.response); }
-  } catch(e) { hideTyping(); appendBubble('error','❌ Ошибка: '+e.message); }
-  finally { chatLoading = false; sendBtn.disabled = false; }
+  } catch(e) {
+    hideTyping();
+    appendBubble('error', '❌ Ошибка: ' + e.message);
+  } finally {
+    chatLoading = false; sendBtn.disabled = false;
+  }
 }
 function initChat() {
   if (chatInited) return;
@@ -1318,22 +1559,24 @@ function resetChat() {
   if (S.tab === 'ai') initChat();
 }
 document.getElementById('chatInput').addEventListener('input', function() {
-  this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 100)+'px';
+  this.style.height = '';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 });
 document.getElementById('chatInput').addEventListener('keydown', function(e) {
-  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
 
 /* ══════════════════════════════════════════════════════════
    BOOT
 ══════════════════════════════════════════════════════════ */
+applyStateToUI();
 updateHeaderPair();
+updateFilterBadge();
 updatePayRow('payRow',      S.exchange, S.fiat, v => { S.pay  = v; restartBookTimer(); });
 updatePayRow('makerPayRow', S.exchange, S.fiat, v => { MK.pay = v; });
-// Прячем makerPayRow по умолчанию (не на вкладке мейкера)
 document.getElementById('makerPayRow').classList.add('hidden');
 loadOrderbook();
-bookTimer = setInterval(loadOrderbook, 10_000);
+bookTimer = setInterval(loadOrderbook, REFRESH_MS);
 </script>
 </body>
 </html>

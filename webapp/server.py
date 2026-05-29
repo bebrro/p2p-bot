@@ -89,19 +89,43 @@ async def api_orderbook(request: web.Request) -> web.Response:
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
     pay   = request.rel_url.query.get("pay", "")
+
+    # Фильтры стакана
+    def _qf(key, cast, default):
+        try: return cast(request.rel_url.query.get(key) or default)
+        except: return default
+
+    min_amount  = _qf("min_amount",  float, 0)
+    third_party = request.rel_url.query.get("third_party", "")   # "yes"/"no"/""
+    min_orders  = _qf("min_orders",  int,   0)
+    min_comp    = _qf("min_comp",    float, 0)
+
+    def _apply_filters(ads: list) -> list:
+        if min_amount:
+            ads = [a for a in ads if (a.get("max_amount") or 0) >= min_amount]
+        if third_party == "yes":
+            ads = [a for a in ads if a.get("third_party")]
+        elif third_party == "no":
+            ads = [a for a in ads if not a.get("third_party")]
+        if min_orders:
+            ads = [a for a in ads if (a.get("orders") or 0) >= min_orders]
+        if min_comp:
+            ads = [a for a in ads if (a.get("completion") or 0) >= min_comp]
+        return ads
+
     try:
         buy_ads, sell_ads = await asyncio.gather(
-            _fetch(ex, fiat, asset, "buy",  10, pay),
-            _fetch(ex, fiat, asset, "sell", 10, pay),
+            _fetch(ex, fiat, asset, "buy",  15, pay),
+            _fetch(ex, fiat, asset, "sell", 15, pay),
         )
-        _enrich(buy_ads)
-        _enrich(sell_ads)
+        buy_ads  = _apply_filters(_enrich(buy_ads))
+        sell_ads = _apply_filters(_enrich(sell_ads))
 
         spread = {}
         if buy_ads and sell_ads:
             spread = calc_spread(buy_ads[0]["price"], sell_ads[0]["price"])
 
-        return web.json_response({"buy": buy_ads, "sell": sell_ads, "spread": spread})
+        return web.json_response({"buy": buy_ads[:10], "sell": sell_ads[:10], "spread": spread})
     except Exception as e:
         logger.error(f"api_orderbook {ex}/{fiat}/{asset}: {e}")
         return web.json_response({"error": str(e)}, status=500)
@@ -336,6 +360,69 @@ async def api_maker(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_multi(request: web.Request) -> web.Response:
+    """GET /api/multi/{exchange}/{fiat} — USDT/BTC/ETH buy+sell параллельно."""
+    exchange = request.match_info["exchange"]
+    fiat     = request.match_info["fiat"]
+    assets   = ["USDT", "BTC", "ETH"]
+    try:
+        coros = [
+            asyncio.gather(
+                _fetch(exchange, fiat, a, "buy",  rows=5),
+                _fetch(exchange, fiat, a, "sell", rows=5),
+                return_exceptions=True,
+            )
+            for a in assets
+        ]
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        pairs = []
+        for i, asset in enumerate(assets):
+            res = results[i]
+            if isinstance(res, Exception):
+                pairs.append({"asset": asset, "buy": None, "sell": None,
+                               "spread_pct": None, "buy_vol": 0, "sell_vol": 0})
+                continue
+            buy_ads, sell_ads = res
+            if isinstance(buy_ads,  Exception): buy_ads  = []
+            if isinstance(sell_ads, Exception): sell_ads = []
+
+            buy_p  = buy_ads[0]["price"]  if buy_ads  else None
+            sell_p = sell_ads[0]["price"] if sell_ads else None
+            sp     = calc_spread(buy_p, sell_p) if buy_p and sell_p else {}
+            pairs.append({
+                "asset":      asset,
+                "buy":        buy_p,
+                "sell":       sell_p,
+                "spread_pct": sp.get("spread_pct"),
+                "spread_abs": sp.get("spread_abs"),
+                "buy_vol":    round(sum(a.get("available", 0) for a in buy_ads),  4),
+                "sell_vol":   round(sum(a.get("available", 0) for a in sell_ads), 4),
+            })
+
+        return web.json_response({"pairs": pairs, "exchange": exchange, "fiat": fiat})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_status(request: web.Request) -> web.Response:
+    """GET /api/status/{fiat} — доступность всех 4 бирж (1 объявление USDT)."""
+    fiat      = request.match_info["fiat"]
+    exchanges = ["binance", "bybit", "okx", "wallet"]
+
+    async def _check(ex: str) -> bool:
+        try:
+            ads = await _fetch(ex, fiat, "USDT", "buy", rows=1)
+            return bool(ads)
+        except Exception:
+            return False
+
+    results = await asyncio.gather(*[_check(ex) for ex in exchanges], return_exceptions=True)
+    status  = {ex: (bool(r) if not isinstance(r, Exception) else False)
+               for ex, r in zip(exchanges, results)}
+    return web.json_response(status)
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 @web.middleware
@@ -354,6 +441,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/history/{exchange}/{fiat}/{asset}",        api_history)
     app.router.add_get("/api/spread_compare/{fiat}/{asset}",            api_spread_compare)
     app.router.add_get("/api/maker/{exchange}/{fiat}/{asset}/{side}",   api_maker)
+    app.router.add_get("/api/multi/{exchange}/{fiat}",                  api_multi)
+    app.router.add_get("/api/status/{fiat}",                            api_status)
     app.router.add_post("/api/ai",                                       api_ai)
     app.router.add_post("/api/chat",                                     api_chat)
 
