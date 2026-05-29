@@ -21,7 +21,7 @@ from aiogram.types import (
 )
 
 import db
-from config import ADMIN_IDS, CRYPTO_WALLET_TRC20
+from config import ADMIN_IDS, CRYPTO_WALLET_TRC20, ADMIN_USERNAME
 from utils.subscription import PLANS, get_plan_key, format_plan_card, format_expires
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,16 @@ async def _verify_trc20(txid: str, wallet: str, min_usdt: float) -> tuple[bool, 
 
 # ─── Keyboard helpers ──────────────────────────────────────────────────────────
 
+def _admin_btn() -> list | None:
+    """Кнопка 'Написать администратору' если ADMIN_USERNAME задан."""
+    if not ADMIN_USERNAME:
+        return None
+    return [InlineKeyboardButton(
+        text="💬 Написать администратору",
+        url=f"https://t.me/{ADMIN_USERNAME.lstrip('@')}",
+    )]
+
+
 def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
     btns = []
     if current_plan != "pro":
@@ -109,6 +119,9 @@ def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
         btns.append([InlineKeyboardButton(
             text="👑 Team — 24.99 USDT / мес", callback_data="sub:pay:team",
         )])
+    admin = _admin_btn()
+    if admin:
+        btns.append(admin)
     btns.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=btns)
 
@@ -192,12 +205,16 @@ async def sub_pay(callback: CallbackQuery):
         f"❓ Проблемы? Напиши /start и обратись в поддержку."
     )
 
+    pay_kb = []
+    admin = _admin_btn()
+    if admin:
+        pay_kb.append(admin)
+    pay_kb.append([InlineKeyboardButton(text="⬅️ К планам", callback_data="sub:list")])
+
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К планам", callback_data="sub:list")],
-        ]),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=pay_kb),
     )
     await callback.answer()
 

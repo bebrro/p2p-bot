@@ -16,6 +16,9 @@ ADMIN_IDS: list[int] = [
 # USDT TRC20 wallet address for receiving subscription payments
 CRYPTO_WALLET_TRC20 = os.getenv("CRYPTO_WALLET_TRC20", "")
 
+# Admin Telegram username (без @) — для кнопки "Написать администратору"
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 
