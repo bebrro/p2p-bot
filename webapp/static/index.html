@@ -400,7 +400,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill active" data-val="binance">🟡 Binance</button>
     <button class="pill"        data-val="bybit">🟠 Bybit</button>
     <button class="pill"        data-val="okx">🔵 OKX</button>
-    <button class="pill"        data-val="wallet">💎 Wallet</button>
+    <button class="pill"        data-val="wallet">💎 TG Wallet</button>
   </div>
   <div class="pill-row" id="fiatRow">
     <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
@@ -500,7 +500,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- ════════════════════ TAB: СТАКАН ═════════════════════════ -->
 <div class="tab-panel hidden" id="tab-book">
   <div class="book-topbar">
-    <div class="refresh-ts" id="refreshTs"></div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div class="refresh-ts" id="refreshTs"></div>
+      <div class="seg-ctrl" style="width:fit-content">
+        <button class="seg-btn active" id="bookMakerBtn" onclick="setBookMode('maker')">🎯 Мейкер</button>
+        <button class="seg-btn" id="bookTakerBtn" onclick="setBookMode('taker')">👤 Тейкер</button>
+      </div>
+    </div>
     <button class="filter-toggle-btn" id="filterToggle" onclick="toggleFilter()">
       ⚙️ Фильтры&thinsp;<span id="filterBadge" class="filter-badge">0</span>
     </button>
@@ -549,11 +555,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- Стакан -->
   <div class="book-grid">
     <div class="book-col buy-col">
-      <div class="col-title">📗 Покупают</div>
+      <div class="col-title" id="buyColTitle">📗 Покупают</div>
       <div id="buyList"><div class="spinner"></div></div>
     </div>
     <div class="book-col sell-col">
-      <div class="col-title">📕 Продают</div>
+      <div class="col-title" id="sellColTitle">📕 Продают</div>
       <div id="sellList"><div class="spinner"></div></div>
     </div>
   </div>
@@ -716,7 +722,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="settings-section-title">О приложении</div>
     <div class="settings-card">
       <div class="settings-row"><span class="settings-row-label">Версия</span><span style="font-size:12px;color:var(--hint)">2.2.0</span></div>
-      <div class="settings-row"><span class="settings-row-label">Биржи</span><span style="font-size:12px;color:var(--hint)">Binance · Bybit · OKX · Wallet</span></div>
+      <div class="settings-row"><span class="settings-row-label">Биржи</span><span style="font-size:12px;color:var(--hint)">Binance · Bybit · OKX · TG Wallet</span></div>
       <div class="settings-row"><span class="settings-row-label">Пары</span><span style="font-size:12px;color:var(--hint)">USDT · BTC · ETH</span></div>
     </div>
   </div>
@@ -772,6 +778,7 @@ const MK = { side:'buy', pay:'' };
 const BF = { min_amount:0, third_party:'', min_orders:0, min_comp:0 };
 
 let bookTimer=null, multiTimer=null, chartInst=null;
+let bookMode=localStorage.getItem("bookMode")||"maker";
 let chatHistory=[], chatLoading=false, chatInited=false;
 let currentSub = 'pairs';
 
@@ -856,7 +863,7 @@ function onMainStateChange(){
   resetChat();
 }
 function updateHeaderPair(){
-  const EX={binance:'Binance',bybit:'Bybit',okx:'OKX',wallet:'Wallet'};
+  const EX={binance:'Binance',bybit:'Bybit',okx:'OKX',wallet:'TG Wallet'};
   document.getElementById('headerPair').textContent=`${EX[S.exchange]||S.exchange} · ${S.fiat} · ${S.asset}`;
 }
 function updatePayRow(rowId,exchange,fiat,onSelect){
@@ -873,6 +880,27 @@ function updatePayRow(rowId,exchange,fiat,onSelect){
    TAB SWITCHING
 ══════════════════════════════════════════════════════════ */
 function navBtn(tab){ return document.querySelector(`.nav-btn[data-tab="${tab}"]`)||document.querySelector('.nav-btn[data-tab="home"]'); }
+function setBookMode(mode){
+  bookMode=mode;
+  localStorage.setItem('bookMode',mode);
+  updateBookModeUI();
+}
+function updateBookModeUI(){
+  const mb=document.getElementById('bookMakerBtn');
+  const tb=document.getElementById('bookTakerBtn');
+  if(mb) mb.classList.toggle('active', bookMode==='maker');
+  if(tb) tb.classList.toggle('active', bookMode==='taker');
+  const bt=document.getElementById('buyColTitle');
+  const st=document.getElementById('sellColTitle');
+  if(!bt||!st) return;
+  if(bookMode==='maker'){
+    bt.textContent='📗 Покупают';
+    st.textContent='📕 Продают';
+  } else {
+    bt.textContent='📗 Купить USDT';
+    st.textContent='📕 Продать USDT';
+  }
+}
 function switchTab(tab,btn){
   clearInterval(bookTimer); bookTimer=null;
   clearInterval(multiTimer); multiTimer=null;
@@ -887,7 +915,7 @@ function switchTab(tab,btn){
   document.getElementById('payRow').classList.toggle('hidden',tab!=='book');
   document.getElementById('makerPayRow').classList.toggle('hidden',tab!=='maker');
   if(tab==='home')     loadDashboard();
-  if(tab==='book')     restartBookTimer();
+  if(tab==='book')     { updateBookModeUI(); restartBookTimer(); }
   if(tab==='chart')    loadChart();
   if(tab==='spread')   loadCompare();
   if(tab==='monitor')  { const sub=document.querySelector('.sub-btn[data-sub="'+currentSub+'"]'); switchMonitor(currentSub,sub); }
@@ -1126,7 +1154,7 @@ function startMultiRefresh(){
 }
 async function loadMulti(){
   const EX_ICONS={binance:'🟡',bybit:'🟠',okx:'🔵',wallet:'💎'};
-  const EX_NAMES={binance:'Binance',bybit:'Bybit',okx:'OKX',wallet:'Wallet'};
+  const EX_NAMES={binance:'Binance',bybit:'Bybit',okx:'OKX',wallet:'TG Wallet'};
   document.getElementById('multiExBadge').textContent=`${EX_ICONS[S.exchange]||''} ${EX_NAMES[S.exchange]||S.exchange} · ${S.fiat}`;
   const box=document.getElementById('multiContent'); box.innerHTML='<div class="spinner"></div>';
   try{ const r=await fetch(`/api/multi/${S.exchange}/${S.fiat}`); const data=await r.json(); if(data.error)throw new Error(data.error); renderMulti(data); }
@@ -1172,7 +1200,7 @@ function renderTrackerForm(){
   return `<div class="monitor-form">
     <div class="section-title" style="margin-top:0">➕ Новый трекер</div>
     <div class="form-pill-row" id="trkExRow">
-      ${['binance','bybit','okx','wallet'].map(ex=>`<button class="pill${ex==='binance'?' active':''}" onclick="trkSet('exchange','${ex}',this,'trkExRow')">${EX_ICONS[ex]} ${ex==='wallet'?'Wallet':ex.charAt(0).toUpperCase()+ex.slice(1)}</button>`).join('')}
+      ${['binance','bybit','okx','wallet'].map(ex=>`<button class="pill${ex==='binance'?' active':''}" onclick="trkSet('exchange','${ex}',this,'trkExRow')">${EX_ICONS[ex]} ${ex==='wallet'?'TG Wallet':ex.charAt(0).toUpperCase()+ex.slice(1)}</button>`).join('')}
     </div>
     <div class="form-pill-row" id="trkFiatRow">
       ${['KZT','RUB','TRY','USD'].map((f,i)=>`<button class="pill${i===0?' active':''}" onclick="trkSet('fiat','${f}',this,'trkFiatRow')">${f}</button>`).join('')}
@@ -1251,7 +1279,7 @@ function renderAlertForm(){
   return `<div class="monitor-form">
     <div class="section-title" style="margin-top:0">➕ Новый алерт</div>
     <div class="form-pill-row" id="alExRow">
-      ${['binance','bybit','okx','wallet'].map(ex=>`<button class="pill${ex==='binance'?' active':''}" onclick="alSet('exchange','${ex}',this,'alExRow')">${EX_ICONS[ex]} ${ex==='wallet'?'Wallet':ex.charAt(0).toUpperCase()+ex.slice(1)}</button>`).join('')}
+      ${['binance','bybit','okx','wallet'].map(ex=>`<button class="pill${ex==='binance'?' active':''}" onclick="alSet('exchange','${ex}',this,'alExRow')">${EX_ICONS[ex]} ${ex==='wallet'?'TG Wallet':ex.charAt(0).toUpperCase()+ex.slice(1)}</button>`).join('')}
     </div>
     <div class="form-pill-row" id="alFiatRow">
       ${['KZT','RUB','TRY','USD'].map((f,i)=>`<button class="pill${i===0?' active':''}" onclick="alSet('fiat','${f}',this,'alFiatRow')">${f}</button>`).join('')}
@@ -1896,6 +1924,8 @@ renderPresets();
 updatePayRow('payRow',S.exchange,S.fiat,v=>{S.pay=v;restartBookTimer();});
 updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
 document.getElementById('makerPayRow').classList.add('hidden');
+// Init book mode toggle from localStorage
+updateBookModeUI();
 // Start on home/dashboard tab
 switchTab('home', document.querySelector('.nav-btn[data-tab="home"]'));
 </script>

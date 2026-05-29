@@ -28,6 +28,9 @@ ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 # Docker: redis://redis:6379  |  Railway: берётся из REDIS_URL автоматически
 REDIS_URL = os.getenv("REDIS_URL", "")
 
+# TG Wallet P2P API key (получить: wallet.tg → P2P → Настройки → API)
+WALLET_P2P_API_KEY = os.getenv("WALLET_P2P_API_KEY", "")
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 

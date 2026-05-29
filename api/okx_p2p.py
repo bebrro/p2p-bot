@@ -1,16 +1,19 @@
 import logging
+import time
 from typing import Optional
-from utils.http import post_json
+from utils.http import get_json
 
 logger = logging.getLogger(__name__)
 
+# OKX v3 C2C endpoint — GET with query params
 OKX_C2C_URL = "https://www.okx.com/v3/c2c/tradingOrders/books"
 
 _HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer":      "https://www.okx.com/p2p-markets/",
-    "Accept":       "application/json",
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer":         "https://www.okx.com/p2p-markets/",
+    "Origin":          "https://www.okx.com",
 }
 
 
@@ -21,25 +24,41 @@ async def get_ads(
     pay_types: Optional[list] = None,
     rows:      int = 10,
 ) -> list[dict]:
-    payload = {
-        "baseCurrency":       asset,
-        "quoteCurrency":      fiat,
-        "side":               side,
-        "paymentMethod":      "all",
-        "userType":           "all",
-        "showTrade":          "false",
-        "showFollow":         "false",
-        "showAlreadyTraded":  "false",
-        "isAbleFilter":       "false",
+    params = {
+        "t":                   str(int(time.time() * 1000)),
+        "quoteCurrency":       fiat,
+        "baseCurrency":        asset,
+        "side":                side,
+        "paymentMethod":       "all",
+        "userType":            "all",
+        "showTrade":           "false",
+        "showFollow":          "false",
+        "showAlreadyTraded":   "false",
+        "isAbleFilter":        "false",
+        "receivingAds":        "false",
+        "urlSource":           "P2P",
     }
-    data = await post_json(OKX_C2C_URL, json=payload, headers=_HEADERS)
+    data = await get_json(OKX_C2C_URL, params=params, headers=_HEADERS)
 
-    if data.get("code") not in ("0", 0):
-        logger.warning(f"OKX P2P error: {data.get('msg', data)}")
+    if not data:
         return []
 
+    code = data.get("code")
+    if code not in ("0", 0, None):
+        logger.warning(f"OKX P2P error code={code}: {data.get('msg', data)}")
+        return []
+
+    # Response: {"code":"0","data":[...]} or {"code":"0","data":{"sell":[...],"buy":[...]}}
+    raw = data.get("data", [])
+    if isinstance(raw, dict):
+        items = raw.get(side, raw.get("sell", raw.get("buy", [])))
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+
     ads = []
-    for item in data.get("data", []):
+    for item in items:
         pay_raw = item.get("paymentMethods") or item.get("paymentMethod") or []
         if isinstance(pay_raw, list):
             pay_names = (
@@ -74,7 +93,6 @@ async def get_ads(
             for pt in pay_list:
                 ptl = pt.lower()
                 for lp in lower_pay:
-                    # "freedom" in "freedom finance"  OR  "kaspibank" in "kaspi bank" (prefix)
                     if lp in ptl or ptl in lp:
                         return True
             return False

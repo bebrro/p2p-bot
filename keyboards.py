@@ -30,7 +30,7 @@ def main_menu() -> InlineKeyboardMarkup:
             _B(text="🟡 Binance", callback_data="exchange:binance"),
             _B(text="🟠 Bybit",   callback_data="exchange:bybit"),
             _B(text="🔵 OKX",    callback_data="exchange:okx"),
-            _B(text="💎 Wallet", callback_data="exchange:wallet"),
+            _B(text="💎 TG Wallet", callback_data="exchange:wallet"),
         ],
         # Категории функций
         [

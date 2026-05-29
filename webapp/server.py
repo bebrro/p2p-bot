@@ -309,7 +309,7 @@ async def api_spread_compare(request: web.Request) -> web.Response:
             {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
             {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
             {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
-            {"id": "wallet",  "name": "Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
+            {"id": "wallet",  "name": "TG Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
         ]
         for ex in exchanges:
             if ex["buy"] and ex["sell"]:
@@ -908,7 +908,7 @@ async def api_dashboard(request: web.Request) -> web.Response:
             {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
             {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
             {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
-            {"id": "wallet",  "name": "Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
+            {"id": "wallet",  "name": "TG Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
         ]
         for ex in exchanges:
             if ex["buy"] and ex["sell"]:

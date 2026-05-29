@@ -38,7 +38,7 @@ _EX_ICONS = {
     "Binance": "🟡",
     "Bybit":   "🟠",
     "OKX":     "🔵",
-    "Wallet":  "💎",
+    "TG Wallet":  "💎",
 }
 
 
@@ -70,8 +70,8 @@ async def _fetch_arb(fiat: str, asset: str) -> dict | None:
         ox_buy,  ox_sell  = _v(results[4]), _v(results[5])
         wl_buy,  wl_sell  = _v(results[6]), _v(results[7])
 
-        buy_map  = {"Binance": bn_buy, "Bybit": bb_buy, "OKX": ox_buy, "Wallet": wl_buy}
-        sell_map = {"Binance": bn_sell, "Bybit": bb_sell, "OKX": ox_sell, "Wallet": wl_sell}
+        buy_map  = {"Binance": bn_buy, "Bybit": bb_buy, "OKX": ox_buy, "TG Wallet": wl_buy}
+        sell_map = {"Binance": bn_sell, "Bybit": bb_sell, "OKX": ox_sell, "TG Wallet": wl_sell}
 
         valid_buy  = {k: v for k, v in buy_map.items()  if v}
         valid_sell = {k: v for k, v in sell_map.items() if v}
@@ -138,7 +138,7 @@ async def arb_list(callback: CallbackQuery):
     text   = (
         "🔍 <b>Smart Арбитраж — 4 биржи</b>\n\n"
         "Ищет расхождение цен между:\n"
-        "🟡 Binance · 🟠 Bybit · 🔵 OKX · 💎 Wallet\n\n"
+        "🟡 Binance · 🟠 Bybit · 🔵 OKX · 💎 TG Wallet\n\n"
         "Находит лучшую точку входа и выхода.\n"
         f"Активных алертов: <b>{len(alerts)}</b>\n"
         "Нажми на алерт чтобы удалить."
@@ -270,7 +270,7 @@ async def arb_scan(callback: CallbackQuery):
             "<b>Все цены:</b>",
             "<code>",
         ]
-        for ex in ["Binance", "Bybit", "OKX", "Wallet"]:
+        for ex in ["Binance", "Bybit", "OKX", "TG Wallet"]:
             b = best["buy_map"].get(ex)
             s = best["sell_map"].get(ex)
             b_str = f"{b:,.2f}" if b else "   —  "
@@ -329,7 +329,7 @@ async def check_arbitrage(bot) -> None:
 
             # Строим детальное сообщение
             lines_all = []
-            for ex in ["Binance", "Bybit", "OKX", "Wallet"]:
+            for ex in ["Binance", "Bybit", "OKX", "TG Wallet"]:
                 b = data["buy_map"].get(ex)
                 s = data["sell_map"].get(ex)
                 if b or s:

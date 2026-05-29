@@ -4,14 +4,18 @@ from utils.http import post_json
 
 logger = logging.getLogger(__name__)
 
-WALLET_URL = "https://walletbot.me/api/v1/p2p/order/preview/list"
+# TG Wallet P2P integration API (требует X-API-Key)
+# Ключ выдаётся бесплатно: wallet.tg → P2P Market → настройки → API
+WALLET_URL = "https://p2p.walletbot.me/p2p/integration-api/v1/item/online"
 
-_HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Origin":       "https://walletbot.me",
-    "Referer":      "https://walletbot.me/",
-}
+
+def _get_api_key() -> str:
+    """Возвращает API-ключ из конфига (lazy import чтобы не было circular)."""
+    try:
+        from config import WALLET_P2P_API_KEY
+        return WALLET_P2P_API_KEY
+    except ImportError:
+        return ""
 
 
 async def get_ads(
@@ -21,40 +25,59 @@ async def get_ads(
     pay_types: Optional[list] = None,
     rows:      int = 10,
 ) -> list[dict]:
-    wallet_side = "BUY" if side == "buy" else "SELL"
-    payload = {
-        "baseCurrencyCode":  asset,
-        "quoteCurrencyCode": fiat,
-        "side":              wallet_side,
-        "paymentMethodType": pay_types[0] if pay_types else None,
-        "amount":            None,
-        "pageSize":          rows,
-        "page":              0,
-    }
-    data = await post_json(WALLET_URL, json=payload, headers=_HEADERS)
+    api_key = _get_api_key()
+    if not api_key:
+        logger.debug("WALLET_P2P_API_KEY не задан — TG Wallet P2P недоступен")
+        return []
 
+    headers = {
+        "Content-Type": "application/json",
+        "Accept":       "application/json",
+        "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-API-Key":    api_key,
+    }
+
+    # API: side "BUY" = merchants selling USDT (taker buys), "SELL" = merchants buying USDT
+    wallet_side = "BUY" if side in ("buy", "BUY") else "SELL"
+
+    payload = {
+        "cryptoCurrency": asset,
+        "fiatCurrency":   fiat,
+        "side":           wallet_side,
+        "page":           1,
+        "pageSize":       rows,
+    }
+    if pay_types:
+        # API принимает один метод оплаты
+        payload["paymentMethod"] = pay_types[0]
+
+    data = await post_json(WALLET_URL, json=payload, headers=headers)
+
+    if not data:
+        return []
+
+    # Response format: {"items": [...], "total": N} or {"data": {"items": [...]}}
     items = (
-        data.get("data", {}).get("items")
-        or data.get("data", {}).get("orders")
-        or data.get("items")
-        or data.get("orders")
+        data.get("items")
+        or data.get("data", {}).get("items")
         or (data.get("data") if isinstance(data.get("data"), list) else [])
         or []
     )
 
     ads = []
     for item in items:
-        pay_raw = item.get("paymentMethods") or item.get("paymentMethodTypes") or []
+        # Payments field
+        pay_raw = item.get("payments") or item.get("paymentMethods") or []
         if isinstance(pay_raw, list):
             pay_names = [
-                (p.get("type") or p.get("name") or str(p)) if isinstance(p, dict) else str(p)
+                (p.get("name") or p.get("type") or str(p)) if isinstance(p, dict) else str(p)
                 for p in pay_raw
             ]
         else:
             pay_names = [str(pay_raw)] if pay_raw else []
 
         try:
-            comp = float(item.get("completionRate") or item.get("successRate") or 0)
+            comp = float(item.get("executeRate") or item.get("completionRate") or 0)
             if 0 < comp <= 1:
                 comp = round(comp * 100, 1)
         except (ValueError, TypeError):
@@ -71,12 +94,23 @@ async def get_ads(
             "max_amount":  float(item.get("maxAmount") or item.get("maxOrderAmount") or 0),
             "available":   float(item.get("availableAmount") or item.get("amount") or 0),
             "pay_types":   pay_names,
-            "nickname":    item.get("userName") or item.get("userId") or "—",
+            "nickname":    item.get("nickname") or item.get("userName") or "—",
             "orders":      int(item.get("completedOrdersCount") or item.get("orderCount") or 0),
             "completion":  comp,
             "description": item.get("comment") or item.get("remark") or "",
-            "ad_no":       str(item.get("id") or item.get("orderId") or ""),
+            "ad_no":       str(item.get("id") or ""),
         })
+
+    if pay_types:
+        lower_pay = [p.lower() for p in pay_types]
+        def _matches(pay_list: list) -> bool:
+            for pt in pay_list:
+                ptl = pt.lower()
+                for lp in lower_pay:
+                    if lp in ptl or ptl in lp:
+                        return True
+            return False
+        ads = [a for a in ads if _matches(a["pay_types"])]
 
     return ads[:rows]
 

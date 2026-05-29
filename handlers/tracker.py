@@ -129,7 +129,7 @@ _EX_LABELS = {
     "binance": "🟡 Binance",
     "bybit":   "🟠 Bybit",
     "okx":     "🔵 OKX",
-    "wallet":  "💎 Wallet",
+    "wallet":  "💎 TG Wallet",
 }
 
 def _ex_label(exchange: str) -> str:

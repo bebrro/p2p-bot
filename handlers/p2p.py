@@ -570,7 +570,7 @@ async def show_spread(callback: CallbackQuery):
         ("🟡 Binance", bn_buy,  bn_sell),
         ("🟠 Bybit",   bb_buy,  bb_sell),
         ("🔵 OKX",     okx_buy, okx_sell),
-        ("💎 Wallet",  wt_buy,  wt_sell),
+        ("💎 TG Wallet",  wt_buy,  wt_sell),
     ]
     for name, buy, sell in exchanges:
         if buy and sell:
@@ -590,8 +590,8 @@ async def show_spread(callback: CallbackQuery):
         ("OKX→Binance",    okx_buy, bn_sell),
         ("Bybit→OKX",      bb_buy,  okx_sell),
         ("OKX→Bybit",      okx_buy, bb_sell),
-        ("Binance→Wallet", bn_buy,  wt_sell),
-        ("Wallet→Binance", wt_buy,  bn_sell),
+        ("Binance→TG Wallet", bn_buy,  wt_sell),
+        ("TG Wallet→Binance", wt_buy,  bn_sell),
     ]
     arb_lines = []
     for label, buy, sell in arb_pairs:

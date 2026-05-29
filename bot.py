@@ -110,7 +110,7 @@ async def check_alerts_task(bot: Bot):
                     "binance": "🟡 Binance",
                     "bybit":   "🟠 Bybit",
                     "okx":     "🔵 OKX",
-                    "wallet":  "💎 Wallet",
+                    "wallet":  "💎 TG Wallet",
                 }
                 if buy and sell:
                     s = calc_spread(buy, sell)
