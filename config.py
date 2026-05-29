@@ -13,6 +13,9 @@ ADMIN_IDS: list[int] = [
     int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()
 ]
 
+# USDT TRC20 wallet address for receiving subscription payments
+CRYPTO_WALLET_TRC20 = os.getenv("CRYPTO_WALLET_TRC20", "")
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 

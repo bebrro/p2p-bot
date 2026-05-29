@@ -126,8 +126,9 @@ async def main():
         BotCommand(command="whale",     description="🐋 Whale Tracker"),
         BotCommand(command="ai",        description="🤖 AI Советник"),
         BotCommand(command="pnl",       description="📊 P&L трекер (Pro/Team)"),
-        BotCommand(command="subscribe", description="⭐ Подписка и тарифы"),
-        BotCommand(command="alerts",    description="🔔 Алерты на спред"),
+        BotCommand(command="subscribe",    description="⭐ Подписка и тарифы"),
+        BotCommand(command="pay_confirm", description="💳 Подтвердить оплату USDT"),
+        BotCommand(command="alerts",      description="🔔 Алерты на спред"),
         BotCommand(command="stopwhale", description="🛑 Экстренно остановить Whale Tracker"),
     ])
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())

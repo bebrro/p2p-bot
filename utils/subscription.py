@@ -21,7 +21,7 @@ PLANS: dict[str, dict] = {
     "pro": {
         "name":            "Pro",
         "emoji":           "⭐",
-        "price_stars":     500,
+        "price_usdt":      9.99,
         "duration_days":   30,
         "repricer_rules":  10,
         "trackers":        20,
@@ -33,7 +33,7 @@ PLANS: dict[str, dict] = {
     "team": {
         "name":            "Team",
         "emoji":           "👑",
-        "price_stars":     1500,
+        "price_usdt":      24.99,
         "duration_days":   30,
         "repricer_rules":  50,
         "trackers":        100,
@@ -107,7 +107,7 @@ def format_plan_card(plan_key: str, is_current: bool = False) -> str:
     if plan_key == "free":
         lines.append("💰 Бесплатно")
     else:
-        lines.append(f"💰 {p['price_stars']} ⭐ / {p['duration_days']} дней")
+        lines.append(f"💰 {p['price_usdt']:.2f} USDT / {p['duration_days']} дней")
     lines += [
         f"  • Репрайсер: до {p['repricer_rules']} правил",
         f"  • Трекеры: до {p['trackers']}",
