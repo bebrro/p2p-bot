@@ -9,12 +9,11 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 
-from aiogram import Router
+from aiogram import Router, Bot
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    Bot,
 )
 
 import db
