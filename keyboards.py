@@ -23,6 +23,10 @@ def main_menu() -> InlineKeyboardMarkup:
 
     rows += [
         [
+            InlineKeyboardButton(text="⭐ Подписка",   callback_data="sub:list"),
+            InlineKeyboardButton(text="📊 P&L трекер", callback_data="pnl:view"),
+        ],
+        [
             InlineKeyboardButton(text="🟡 Binance P2P", callback_data="exchange:binance"),
             InlineKeyboardButton(text="🟠 Bybit P2P",   callback_data="exchange:bybit"),
         ],
