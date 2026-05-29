@@ -196,18 +196,18 @@ async def main():
 
     # ── Команды (кнопка ☰ рядом с полем ввода) ────────────────────────────
     await bot.set_my_commands([
-        BotCommand(command="start",     description="📱 Главное меню"),
-        BotCommand(command="p2p",       description="📊 P2P курсы"),
-        BotCommand(command="calc",      description="🧮 Калькулятор прибыли"),
-        BotCommand(command="whale",     description="🐋 Whale Tracker"),
-        BotCommand(command="ai",        description="🤖 AI Советник"),
-        BotCommand(command="pnl",       description="📊 P&L трекер (Pro/Team)"),
-        BotCommand(command="subscribe",    description="⭐ Подписка и тарифы"),
-        BotCommand(command="pay_confirm", description="💳 Подтвердить оплату USDT"),
+        BotCommand(command="menu",        description="📱 Главное меню"),
+        BotCommand(command="p2p",         description="📊 P2P курсы — все биржи"),
         BotCommand(command="alerts",      description="🔔 Алерты на спред"),
-        BotCommand(command="stopwhale", description="🛑 Экстренно остановить Whale Tracker"),
-        BotCommand(command="ref",        description="👥 Реферальная программа"),
-        BotCommand(command="digest",     description="☀️ Утренний дайджест"),
+        BotCommand(command="ai",          description="🤖 AI Советник"),
+        BotCommand(command="pnl",         description="📊 P&L трекер (Pro/Team)"),
+        BotCommand(command="calc",        description="🧮 Калькулятор прибыли"),
+        BotCommand(command="subscribe",   description="⭐ Подписка и тарифы"),
+        BotCommand(command="ref",         description="👥 Реферальная программа"),
+        BotCommand(command="digest",      description="☀️ Утренний дайджест"),
+        BotCommand(command="whale",       description="🐋 Whale Tracker"),
+        BotCommand(command="stopwhale",   description="🛑 Остановить Whale Tracker"),
+        BotCommand(command="pay_confirm", description="💳 Подтвердить оплату USDT"),
     ])
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 

@@ -239,6 +239,26 @@ async def ob_finish(callback: CallbackQuery):
     await callback.answer()
 
 
+# ─── /menu — главное меню для вернувшихся пользователей ───────────────────────
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message):
+    """Показывает главное меню без онбординга — для всех повторных заходов."""
+    uid = message.from_user.id
+    sub      = await db.subscription_get(uid) if db.ok() else None
+    plan_key = get_plan_key(sub)
+    plan     = PLANS[plan_key]
+    greeting = (
+        f"{plan['emoji']} <b>План: {plan['name']}</b>\n\n"
+        if plan_key != "free" else ""
+    )
+    await message.answer(
+        greeting + MAIN_TEXT,
+        reply_markup=main_menu(),
+        parse_mode="HTML",
+    )
+
+
 # ─── Шорткаты команд из ☰ меню ──────────────────────────────────────────────
 
 @router.message(Command("p2p"))
