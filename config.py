@@ -31,12 +31,13 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 # TG Wallet P2P API key (получить: wallet.tg → P2P → Настройки → API)
 WALLET_P2P_API_KEY = os.getenv("WALLET_P2P_API_KEY", "")
 
-# Временно отключённые биржи (мёртвый API). По умолчанию — OKX (v3 endpoint лёг).
-# Их не дёргаем (не ждём таймаут) и показываем «временно недоступно».
-# Вернуть биржу: задай в Railway DISABLED_EXCHANGES="" (пусто).
+# Временно отключённые биржи (мёртвый/заблокированный API).
+# По умолчанию — НИ ОДНА (все 4 работают с Railway: проверено через /health).
+# Если какая-то биржа начнёт таймаутить — отключи через Railway:
+#   DISABLED_EXCHANGES="okx"  (или несколько через запятую)
 DISABLED_EXCHANGES = {
     x.strip().lower()
-    for x in os.getenv("DISABLED_EXCHANGES", "okx").split(",")
+    for x in os.getenv("DISABLED_EXCHANGES", "").split(",")
     if x.strip()
 }
 

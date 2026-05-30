@@ -457,9 +457,10 @@ def test_pricing_all_garbage_returns_none():
 
 # ─── Отключённые биржи + флаг подозрительного спреда ──────────────────────────
 
-def test_config_disables_okx_by_default():
+def test_config_suspicious_threshold():
     from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
-    assert "okx" in DISABLED_EXCHANGES      # мёртвый API выключен по умолчанию
+    # По умолчанию ни одна биржа не отключена (все 4 работают с Railway)
+    assert isinstance(DISABLED_EXCHANGES, set)
     assert SUSPICIOUS_SPREAD_PCT == 5.0
 
 def test_build_arbitrage_excludes_disabled():
@@ -476,8 +477,13 @@ def test_build_arbitrage_excludes_disabled():
     assert any(a["suspicious"] for a in arb)
 
 def test_disabled_exchange_returns_empty_fast():
-    """okx_p2p.get_ads мгновенно возвращает [] когда биржа отключена."""
+    """get_ads мгновенно возвращает [] когда биржа в DISABLED_EXCHANGES."""
     import asyncio
+    import config
     from api import okx_p2p
-    ads = asyncio.run(okx_p2p.get_ads(asset="USDT", fiat="KZT", side="buy"))
-    assert ads == []
+    config.DISABLED_EXCHANGES.add("okx")          # временно отключаем
+    try:
+        ads = asyncio.run(okx_p2p.get_ads(asset="USDT", fiat="KZT", side="buy"))
+        assert ads == []
+    finally:
+        config.DISABLED_EXCHANGES.discard("okx")  # возвращаем как было
