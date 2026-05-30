@@ -476,6 +476,36 @@ def test_build_arbitrage_excludes_disabled():
     # спред >5% помечен подозрительным
     assert any(a["suspicious"] for a in arb)
 
+def test_channel_post_format():
+    """Пост для канала формируется из готовых строк арбитража."""
+    import handlers.channel as ch
+    rows = [
+        {"fiat": "KZT", "buy_ex": "🟡 Binance", "buy": 510.0,
+         "sell_ex": "🟠 Bybit", "sell": 519.0, "pct": 1.76},
+        {"fiat": "RUB", "buy_ex": "🟠 Bybit", "buy": 90.0,
+         "sell_ex": "🟡 Binance", "sell": 92.0, "pct": 2.22},
+    ]
+    txt = ch._format_post(rows, uname="@Sniper_P2P_Bot")
+    assert "P2P Арбитраж" in txt
+    assert "USDT/RUB" in txt and "USDT/KZT" in txt
+    assert "@Sniper_P2P_Bot" in txt
+    assert "🏆 Лучшее" in txt
+    # сортировка по убыванию спреда — RUB (2.22) первым
+    assert txt.index("USDT/RUB") < txt.index("USDT/KZT")
+
+def test_channel_post_empty():
+    """Нет положительных спредов → None (не постим пустоту)."""
+    import handlers.channel as ch
+    assert ch._format_post([]) is None
+    assert ch._format_post([{"fiat": "KZT", "pct": 0}]) is None
+
+def test_channel_scheduler_dormant_without_id():
+    """Без CHANNEL_ID планировщик спит (no-op)."""
+    import asyncio, handlers.channel as ch
+    # CHANNEL_ID пустой в тестах → ранний выход, без падения
+    asyncio.run(ch.channel_scheduler(None))
+
+
 def test_desc_parser_third_party():
     """Парсер описаний правильно читает «3-е лица» в разных формах."""
     from utils.desc_parser import parse_description as p

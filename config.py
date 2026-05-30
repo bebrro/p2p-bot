@@ -45,6 +45,17 @@ DISABLED_EXCHANGES = {
 # На тонких рынках одиночные заявки-приманки дают фейковые 10-20%.
 SUSPICIOUS_SPREAD_PCT = float(os.getenv("SUSPICIOUS_SPREAD_PCT", "5.0"))
 
+# Канал для автопостинга арбитража (маркетинг + трафик).
+# Пусто = функция спит. Заполни когда создашь канал: CHANNEL_ID=@my_channel
+# (бот должен быть АДМИНОМ канала с правом публикации).
+CHANNEL_ID = os.getenv("CHANNEL_ID", "").strip()
+
+# Часы автопостинга (UTC). По умолчанию 06/12/18 UTC = 09/15/21 МСК.
+CHANNEL_POST_HOURS = {
+    int(x) for x in os.getenv("CHANNEL_POST_HOURS", "6,12,18").split(",")
+    if x.strip().isdigit()
+}
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 
