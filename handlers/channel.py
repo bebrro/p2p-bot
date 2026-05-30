@@ -29,7 +29,12 @@ from config import (
 logger = logging.getLogger(__name__)
 router = Router()
 
-_FIAT_ICON = {"KZT": "🇰🇿", "RUB": "🇷🇺", "TRY": "🇹🇷", "USD": "🇺🇸"}
+_FIAT_ICON = {
+    "KZT": "🇰🇿", "RUB": "🇷🇺", "TRY": "🇹🇷", "USD": "🇺🇸",
+    "THB": "🇹🇭", "IDR": "🇮🇩", "VND": "🇻🇳", "INR": "🇮🇳", "AED": "🇦🇪",
+    "NGN": "🇳🇬", "BRL": "🇧🇷", "GEL": "🇬🇪", "AMD": "🇦🇲", "AZN": "🇦🇿",
+    "UZS": "🇺🇿", "KGS": "🇰🇬",
+}
 
 # (имя, fn_buy, fn_sell, id) — конвенции сторон у бирж разные
 _POST_EX = [

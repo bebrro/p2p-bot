@@ -56,7 +56,15 @@ CHANNEL_POST_HOURS = {
     if x.strip().isdigit()
 }
 
-FIATS = ["KZT", "RUB", "TRY", "USD"]
+# Базовый набор + валюты для треугольников (ЮВА, крупные рынки, СНГ).
+# Можно переопределить через env: FIATS="KZT,RUB,THB,..."
+_DEFAULT_FIATS = (
+    "KZT,RUB,TRY,USD,"          # базовые
+    "THB,IDR,VND,"              # ЮВА
+    "INR,AED,NGN,BRL,"          # крупные рынки
+    "GEL,AMD,AZN,UZS,KGS"       # СНГ
+)
+FIATS = [x.strip().upper() for x in os.getenv("FIATS", _DEFAULT_FIATS).split(",") if x.strip()]
 ASSETS = ["USDT", "BTC", "ETH"]
 
 FIAT_FLAGS = {
@@ -64,6 +72,18 @@ FIAT_FLAGS = {
     "RUB": "🇷🇺 Рубль",
     "TRY": "🇹🇷 Лира",
     "USD": "🇺🇸 Доллар",
+    "THB": "🇹🇭 Бат",
+    "IDR": "🇮🇩 Рупия (ID)",
+    "VND": "🇻🇳 Донг",
+    "INR": "🇮🇳 Рупия (IN)",
+    "AED": "🇦🇪 Дирхам",
+    "NGN": "🇳🇬 Найра",
+    "BRL": "🇧🇷 Реал",
+    "GEL": "🇬🇪 Лари",
+    "AMD": "🇦🇲 Драм",
+    "AZN": "🇦🇿 Манат",
+    "UZS": "🇺🇿 Сум",
+    "KGS": "🇰🇬 Сом",
 }
 
 # Названия методов точно как их принимает API биржи

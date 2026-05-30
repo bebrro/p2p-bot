@@ -110,7 +110,12 @@ async def _gather_exchanges(asset: str, fiat: str) -> list[dict]:
 
 # Референсный оборот по фиатам (≈ $1000) — для демо «сколько бы заработал».
 # Круглые суммы, понятные трейдеру.
-_REF_VOLUME = {"KZT": 500_000, "RUB": 100_000, "TRY": 35_000, "USD": 1_000}
+_REF_VOLUME = {
+    "KZT": 500_000, "RUB": 100_000, "TRY": 35_000, "USD": 1_000,
+    "THB": 33_000, "IDR": 16_000_000, "VND": 25_000_000,
+    "INR": 85_000, "AED": 3_700, "NGN": 1_600_000, "BRL": 5_700,
+    "GEL": 2_700, "AMD": 390_000, "AZN": 1_700, "UZS": 13_000_000, "KGS": 87_000,
+}
 
 
 def _earn_demo(arb: list[dict], fiat: str) -> dict | None:
@@ -503,7 +508,12 @@ async def api_maker(request: web.Request) -> web.Response:
     side     = request.match_info["side"]
     pay      = request.rel_url.query.get("pay", "")
 
-    FIAT_STEP = {"KZT": 0.50, "RUB": 0.05, "TRY": 0.05, "USD": 0.001}
+    FIAT_STEP = {
+        "KZT": 0.50, "RUB": 0.05, "TRY": 0.05, "USD": 0.001,
+        "THB": 0.01, "IDR": 1, "VND": 1, "INR": 0.01, "AED": 0.001,
+        "NGN": 0.1, "BRL": 0.001, "GEL": 0.001, "AMD": 0.1, "AZN": 0.001,
+        "UZS": 1, "KGS": 0.01,
+    }
     step = FIAT_STEP.get(fiat, 0.01)
 
     try:

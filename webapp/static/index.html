@@ -426,6 +426,18 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
     <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
     <button class="pill"        data-val="USD">🇺🇸 USD</button>
+    <button class="pill"        data-val="THB">🇹🇭 THB</button>
+    <button class="pill"        data-val="IDR">🇮🇩 IDR</button>
+    <button class="pill"        data-val="VND">🇻🇳 VND</button>
+    <button class="pill"        data-val="INR">🇮🇳 INR</button>
+    <button class="pill"        data-val="AED">🇦🇪 AED</button>
+    <button class="pill"        data-val="NGN">🇳🇬 NGN</button>
+    <button class="pill"        data-val="BRL">🇧🇷 BRL</button>
+    <button class="pill"        data-val="GEL">🇬🇪 GEL</button>
+    <button class="pill"        data-val="AMD">🇦🇲 AMD</button>
+    <button class="pill"        data-val="AZN">🇦🇿 AZN</button>
+    <button class="pill"        data-val="UZS">🇺🇿 UZS</button>
+    <button class="pill"        data-val="KGS">🇰🇬 KGS</button>
   </div>
   <div class="pill-row" id="assetRow">
     <button class="pill active" data-val="USDT">USDT</button>
@@ -458,6 +470,18 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill" data-val="RUB">🇷🇺 RUB</button>
     <button class="pill" data-val="TRY">🇹🇷 TRY</button>
     <button class="pill" data-val="USD">🇺🇸 USD</button>
+    <button class="pill" data-val="THB">🇹🇭 THB</button>
+    <button class="pill" data-val="IDR">🇮🇩 IDR</button>
+    <button class="pill" data-val="VND">🇻🇳 VND</button>
+    <button class="pill" data-val="INR">🇮🇳 INR</button>
+    <button class="pill" data-val="AED">🇦🇪 AED</button>
+    <button class="pill" data-val="NGN">🇳🇬 NGN</button>
+    <button class="pill" data-val="BRL">🇧🇷 BRL</button>
+    <button class="pill" data-val="GEL">🇬🇪 GEL</button>
+    <button class="pill" data-val="AMD">🇦🇲 AMD</button>
+    <button class="pill" data-val="AZN">🇦🇿 AZN</button>
+    <button class="pill" data-val="UZS">🇺🇿 UZS</button>
+    <button class="pill" data-val="KGS">🇰🇬 KGS</button>
   </div>
 
   <!-- Plan card -->
@@ -1099,7 +1123,7 @@ function renderOrderbook({buy,sell,spread,triangle}){
   document.getElementById('buyList').innerHTML=makerRecCard('buy',buy)+renderAdList(buy,showRisk);
   document.getElementById('sellList').innerHTML=makerRecCard('sell',sell)+renderAdList(sell,showRisk);
 }
-const FIAT_STEP={KZT:0.5,RUB:0.05,TRY:0.05,USD:0.001};
+const FIAT_STEP={KZT:0.5,RUB:0.05,TRY:0.05,USD:0.001,THB:0.01,IDR:1,VND:1,INR:0.01,AED:0.001,NGN:0.1,BRL:0.001,GEL:0.001,AMD:0.1,AZN:0.001,UZS:1,KGS:0.01};
 function makerRecCard(side,ads){
   // Только в мейкер-режиме и если есть лидер
   if(bookMode!=='maker'||!ads?.length) return '';
