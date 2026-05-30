@@ -181,6 +181,16 @@ async def _create_tables() -> None:
             PRIMARY KEY (user_id, notif_type)
         );
         """)
+        # Ожидающие оплаты USDT — переживают рестарт Railway
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS pending_payments (
+            user_id     BIGINT PRIMARY KEY,
+            plan        VARCHAR(20) NOT NULL,
+            amount_usdt FLOAT       NOT NULL,
+            lifetime    BOOLEAN     DEFAULT FALSE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        """)
 
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
@@ -836,3 +846,54 @@ async def expiry_notif_clear(user_id: int) -> None:
         return
     async with _pool.acquire() as c:
         await c.execute("DELETE FROM expiry_notifs WHERE user_id=$1", user_id)
+
+
+# ── Pending payments ───────────────────────────────────────────────────────────
+
+async def pending_payment_set(user_id: int, plan: str,
+                               amount_usdt: float, lifetime: bool) -> None:
+    """Сохраняет ожидающий платёж. created_at обновляется (отсчёт 24ч заново)."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute("""
+            INSERT INTO pending_payments(user_id, plan, amount_usdt, lifetime, created_at)
+            VALUES($1, $2, $3, $4, NOW())
+            ON CONFLICT(user_id) DO UPDATE SET
+                plan=$2, amount_usdt=$3, lifetime=$4, created_at=NOW()
+        """, user_id, plan, amount_usdt, lifetime)
+
+
+async def pending_payment_get(user_id: int) -> dict | None:
+    """
+    Возвращает {plan, amount_usdt, lifetime, created} или None.
+    Платежи старше 24ч автоматически удаляются и считаются отсутствующими.
+    """
+    if not ok():
+        return None
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT plan, amount_usdt, lifetime, "
+            "EXTRACT(EPOCH FROM created_at) AS created, "
+            "EXTRACT(EPOCH FROM (NOW() - created_at)) AS age_sec "
+            "FROM pending_payments WHERE user_id=$1",
+            user_id,
+        )
+        if not row:
+            return None
+        if row["age_sec"] is not None and row["age_sec"] > 86_400:
+            await c.execute("DELETE FROM pending_payments WHERE user_id=$1", user_id)
+            return None
+    return {
+        "plan":        row["plan"],
+        "amount_usdt": row["amount_usdt"],
+        "lifetime":    row["lifetime"],
+        "created":     row["created"],
+    }
+
+
+async def pending_payment_delete(user_id: int) -> None:
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute("DELETE FROM pending_payments WHERE user_id=$1", user_id)

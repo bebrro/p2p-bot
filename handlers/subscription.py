@@ -30,9 +30,38 @@ router = Router()
 # USDT TRC20 contract on TRON network
 USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
-# In-memory pending payments: {user_id: {"plan": "pro", "amount_usdt": 9.99, "created": unix_ts}}
-_pending: dict[int, dict] = {}
+# Pending payments хранятся в PostgreSQL (db.pending_payment_*), чтобы
+# переживать рестарты Railway. _pending_mem — fallback для локальной
+# разработки без БД.
+_pending_mem: dict[int, dict] = {}
 PAYMENT_EXPIRE_SEC = 86_400  # 24 часа
+
+
+async def _pending_set(uid: int, plan: str, amount: float, lifetime: bool) -> None:
+    if db.ok():
+        await db.pending_payment_set(uid, plan, amount, lifetime)
+    else:
+        _pending_mem[uid] = {
+            "plan": plan, "amount_usdt": amount,
+            "lifetime": lifetime, "created": time.time(),
+        }
+
+
+async def _pending_get(uid: int) -> dict | None:
+    if db.ok():
+        return await db.pending_payment_get(uid)
+    p = _pending_mem.get(uid)
+    if p and time.time() - p["created"] > PAYMENT_EXPIRE_SEC:
+        _pending_mem.pop(uid, None)
+        return None
+    return p
+
+
+async def _pending_pop(uid: int) -> None:
+    if db.ok():
+        await db.pending_payment_delete(uid)
+    else:
+        _pending_mem.pop(uid, None)
 
 
 # ─── TronScan verification ─────────────────────────────────────────────────────
@@ -189,13 +218,8 @@ async def sub_pay(callback: CallbackQuery):
     amount = plan["price_lifetime"] if lifetime else plan["price_usdt"]
     wallet = CRYPTO_WALLET_TRC20 or "⚠️ кошелёк не настроен"
 
-    # Сохраняем pending-платёж
-    _pending[uid] = {
-        "plan":        plan_key,
-        "amount_usdt": amount,
-        "lifetime":    lifetime,
-        "created":     time.time(),
-    }
+    # Сохраняем pending-платёж (в БД — переживёт рестарт)
+    await _pending_set(uid, plan_key, amount, lifetime)
 
     if lifetime:
         period_str = "♾ <b>навсегда</b> 🔥"
@@ -253,24 +277,15 @@ async def pay_confirm(message: Message):
 
     txid = parts[1].strip()
 
-    # Проверяем pending
-    pending = _pending.get(uid)
+    # Проверяем pending (БД сама отсекает платежи старше 24ч)
+    pending = await _pending_get(uid)
     if not pending:
         await message.answer(
-            "⚠️ Нет ожидающего платежа.\n"
+            "⚠️ Нет ожидающего платежа (или истёк срок 24ч).\n"
             "Сначала выбери план: /subscribe",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⭐ К подпискам", callback_data="sub:list")],
             ]),
-        )
-        return
-
-    # Проверяем срок действия pending
-    if time.time() - pending["created"] > PAYMENT_EXPIRE_SEC:
-        _pending.pop(uid, None)
-        await message.answer(
-            "⏰ Время ожидания платежа истекло (24 часа).\n"
-            "Начни заново: /subscribe",
         )
         return
 
@@ -310,7 +325,7 @@ async def sub_verify_retry(callback: CallbackQuery):
     uid  = callback.from_user.id
     txid = callback.data[len("sub:verify:"):]
 
-    pending = _pending.get(uid)
+    pending = await _pending_get(uid)
     if not pending:
         await callback.answer("Нет ожидающего платежа. Выбери план заново.", show_alert=True)
         return
@@ -366,7 +381,10 @@ async def _activate_subscription(
         period_line = f"Действует: <b>{days} дней</b>  →  до {expires_at.strftime('%d.%m.%Y')}"
 
     await db.subscription_set(uid, plan_key, expires_at)
-    _pending.pop(uid, None)
+    await _pending_pop(uid)
+    # Сбрасываем флаги "подписка истекает" — при продлении нужно уведомлять заново
+    if db.ok():
+        await db.expiry_notif_clear(uid)
 
     await msg_obj.answer(
         f"🎉 <b>Подписка активирована!</b>\n\n"

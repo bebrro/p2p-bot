@@ -180,3 +180,56 @@ def test_reporter_no_crash_without_bot():
     setup_reporter(None, 0)
     # Создаём event loop и запускаем корутину
     asyncio.run(report_error("test", ValueError("test error")))
+
+
+# ─── Pending payments (in-memory fallback, без БД) ────────────────────────────
+
+import handlers.subscription as subm
+
+def _reset_pending_mem():
+    subm._pending_mem.clear()
+
+def test_pending_set_get_roundtrip():
+    """Без БД pending пишется/читается из памяти."""
+    _reset_pending_mem()
+    asyncio.run(subm._pending_set(123, "pro", 9.99, False))
+    p = asyncio.run(subm._pending_get(123))
+    assert p is not None
+    assert p["plan"] == "pro"
+    assert p["amount_usdt"] == pytest.approx(9.99)
+    assert p["lifetime"] is False
+
+def test_pending_pop_removes():
+    _reset_pending_mem()
+    asyncio.run(subm._pending_set(456, "team", 24.99, True))
+    asyncio.run(subm._pending_pop(456))
+    assert asyncio.run(subm._pending_get(456)) is None
+
+def test_pending_get_missing_returns_none():
+    _reset_pending_mem()
+    assert asyncio.run(subm._pending_get(999)) is None
+
+def test_pending_expires_after_24h():
+    """Платёж старше 24ч считается отсутствующим."""
+    import time as _t
+    _reset_pending_mem()
+    subm._pending_mem[789] = {
+        "plan": "pro", "amount_usdt": 9.99,
+        "lifetime": False, "created": _t.time() - 90_000,  # >24ч назад
+    }
+    assert asyncio.run(subm._pending_get(789)) is None
+
+def test_pending_lifetime_flag_preserved():
+    _reset_pending_mem()
+    asyncio.run(subm._pending_set(111, "pro", 59.0, True))
+    p = asyncio.run(subm._pending_get(111))
+    assert p["lifetime"] is True
+
+def test_pending_overwrite_same_user():
+    """Новый платёж того же юзера перезаписывает старый."""
+    _reset_pending_mem()
+    asyncio.run(subm._pending_set(222, "pro", 9.99, False))
+    asyncio.run(subm._pending_set(222, "team", 24.99, False))
+    p = asyncio.run(subm._pending_get(222))
+    assert p["plan"] == "team"
+    assert p["amount_usdt"] == pytest.approx(24.99)
