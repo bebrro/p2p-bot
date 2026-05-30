@@ -884,6 +884,7 @@ function setBookMode(mode){
   bookMode=mode;
   localStorage.setItem('bookMode',mode);
   updateBookModeUI();
+  if(S.tab==='book') loadOrderbook();   // перерисовать сразу (карточки мейкера)
 }
 function updateBookModeUI(){
   const mb=document.getElementById('bookMakerBtn');
@@ -894,11 +895,11 @@ function updateBookModeUI(){
   const st=document.getElementById('sellColTitle');
   if(!bt||!st) return;
   if(bookMode==='maker'){
-    bt.textContent='📗 Покупают';
-    st.textContent='📕 Продают';
+    bt.textContent='📗 Встать в покупку';
+    st.textContent='📕 Встать в продажу';
   } else {
-    bt.textContent='📗 Купить USDT';
-    st.textContent='📕 Продать USDT';
+    bt.textContent='📗 Купить сейчас';
+    st.textContent='📕 Продать сейчас';
   }
 }
 function switchTab(tab,btn){
@@ -1037,8 +1038,25 @@ function renderOrderbook({buy,sell,spread}){
   if(spread?.spread_pct!=null){ const pct=spread.spread_pct; chip.textContent=`⇔ ${pct}%`; chip.className='spread-chip'+(pct>=0.5?' good':pct>=0.2?' mid':''); }
   else{ chip.textContent='—'; chip.className='spread-chip'; }
   const showRisk=loadSettings().show_risk!==false;
-  document.getElementById('buyList').innerHTML=renderAdList(buy,showRisk);
-  document.getElementById('sellList').innerHTML=renderAdList(sell,showRisk);
+  // Мейкер-режим: в каждую колонку добавляем «твою цену чтобы быть #1»
+  document.getElementById('buyList').innerHTML=makerRecCard('buy',buy)+renderAdList(buy,showRisk);
+  document.getElementById('sellList').innerHTML=makerRecCard('sell',sell)+renderAdList(sell,showRisk);
+}
+const FIAT_STEP={KZT:0.5,RUB:0.05,TRY:0.05,USD:0.001};
+function makerRecCard(side,ads){
+  // Только в мейкер-режиме и если есть лидер
+  if(bookMode!=='maker'||!ads?.length) return '';
+  const step=FIAT_STEP[S.fiat]||0.01;
+  const leader=ads[0].price;
+  // 'buy' = колонка Покупают (биды): чтобы быть #1 — встать ВЫШЕ лидера
+  // 'sell'= колонка Продают (аски): чтобы быть #1 — встать НИЖЕ лидера
+  const my=side==='buy'?leader+step:leader-step;
+  const dir=side==='buy'?'выше':'ниже';
+  return `<div class="ad-card" style="border-left-color:var(--gold);background:rgba(250,166,26,.10)">
+    <div class="ad-price" style="color:var(--gold)">🎯 ${fmt(my)}</div>
+    <div class="ad-nick">твоя цена — будешь #1</div>
+    <div class="ad-meta">на ${step} ${dir} лидера (${fmt(leader)})</div>
+  </div>`;
 }
 function renderAdList(ads,showRisk=true){
   if(!ads?.length) return '<div class="empty-hint">Нет данных</div>';
