@@ -777,7 +777,14 @@ async def arb_alerts_get_all() -> dict[int, list]:
 # ── Subscriptions ──────────────────────────────────────────────────────────────
 
 async def subscription_get(user_id: int) -> dict | None:
-    """Возвращает подписку пользователя или None если нет."""
+    """Возвращает подписку пользователя или None если нет.
+    Владельцы (ADMIN_IDS) ВСЕГДА получают пожизненный Team — даже без БД."""
+    try:
+        from config import ADMIN_IDS
+        if user_id in ADMIN_IDS:
+            return {"plan": "team", "expires_at": None}
+    except Exception:
+        pass
     if not ok():
         return None
     async with _pool.acquire() as c:
