@@ -5,6 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from keyboards import main_menu
 from config import PAYMENT_METHODS_BINANCE, PAYMENT_METHODS_BYBIT, PAYMENT_LABELS
+from utils.limits import check_allowed, upsell_text, upsell_kb
 import db
 
 router = Router()
@@ -75,6 +76,20 @@ async def show_alerts(callback: CallbackQuery):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("alert:add:"))
 async def alert_add_start(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+
+    # Лимит по плану — апселл при упоре
+    current = len(await db.alerts_get(user_id)) if db.ok() else len(_alerts.get(user_id, []))
+    allowed, limit, plan_key = await check_allowed(user_id, "alerts", current)
+    if not allowed:
+        await callback.message.edit_text(
+            upsell_text("alerts", current, limit, plan_key),
+            reply_markup=upsell_kb(manage_cb="alerts:list", manage_text="🗑 Удалить алерт"),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+
     parts    = callback.data.split(":")
     fiat     = parts[2]
     asset    = parts[3] if len(parts) > 3 else "USDT"

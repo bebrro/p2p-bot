@@ -9,14 +9,15 @@
   /give_pro ID DAYS plan — выдать подписку (только ADMIN_IDS)
 """
 import aiohttp
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone, timedelta
 
-from aiogram import Router
+from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import (
-    CallbackQuery, Message,
+    CallbackQuery, Message, PreCheckoutQuery, LabeledPrice,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
 
@@ -197,18 +198,53 @@ async def sub_list(event: Message | CallbackQuery):
         await event.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
-# ─── sub:pay:* ─────────────────────────────────────────────────────────────────
+# ─── sub:pay:* — выбор способа оплаты ──────────────────────────────────────────
 
-_PAY_VARIANTS = {
-    "sub:pay:pro":       ("pro",  False),
-    "sub:pay:pro_life":  ("pro",  True),
-    "sub:pay:team":      ("team", False),
-    "sub:pay:team_life": ("team", True),
-}
+def _parse_variant(suffix: str) -> tuple[str, bool]:
+    """'pro_life' → ('pro', True);  'team' → ('team', False)."""
+    lifetime = suffix.endswith("_life")
+    plan_key = suffix[:-5] if lifetime else suffix
+    return plan_key, lifetime
 
-@router.callback_query(lambda c: c.data in _PAY_VARIANTS)
+
+@router.callback_query(lambda c: c.data and c.data.startswith("sub:pay:"))
 async def sub_pay(callback: CallbackQuery):
-    plan_key, lifetime = _PAY_VARIANTS[callback.data]
+    """Экран выбора способа оплаты: USDT (0%) или Telegram Stars (в 1 тап)."""
+    suffix = callback.data[len("sub:pay:"):]
+    plan_key, lifetime = _parse_variant(suffix)
+    plan = PLANS.get(plan_key)
+    if not plan:
+        await callback.answer("Ошибка плана", show_alert=True)
+        return
+
+    usdt  = plan["price_lifetime"]   if lifetime else plan["price_usdt"]
+    stars = plan["price_stars_life"] if lifetime else plan["price_stars"]
+    period = "♾ навсегда" if lifetime else f"📅 {plan['duration_days']} дней"
+
+    text = (
+        f"💳 <b>Оплата {plan['emoji']} {plan['name']}</b>\n"
+        f"Период: {period}\n\n"
+        f"Выбери способ оплаты:\n\n"
+        f"💵 <b>USDT TRC20</b> — {usdt}$ · комиссия 0%\n"
+        f"   (нужен крипто-кошелёк)\n\n"
+        f"⭐ <b>Telegram Stars</b> — {stars} ⭐ · оплата в 1 тап\n"
+        f"   (прямо в Telegram, мгновенно)"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"💵 USDT — {usdt}$",      callback_data=f"sub:usdt:{suffix}")],
+        [InlineKeyboardButton(text=f"⭐ Stars — {stars}",      callback_data=f"sub:stars:{suffix}")],
+        [InlineKeyboardButton(text="⬅️ К планам",             callback_data="sub:list")],
+    ])
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await callback.answer()
+
+
+# ─── sub:usdt:* — оплата криптой ───────────────────────────────────────────────
+
+@router.callback_query(lambda c: c.data and c.data.startswith("sub:usdt:"))
+async def sub_pay_usdt(callback: CallbackQuery):
+    suffix = callback.data[len("sub:usdt:"):]
+    plan_key, lifetime = _parse_variant(suffix)
     plan   = PLANS.get(plan_key)
     if not plan:
         await callback.answer("Ошибка плана", show_alert=True)
@@ -250,7 +286,10 @@ async def sub_pay(callback: CallbackQuery):
     admin  = _admin_btn()
     if admin:
         pay_kb.append(admin)
-    pay_kb.append([InlineKeyboardButton(text="⬅️ К планам", callback_data="sub:list")])
+    pay_kb.append([
+        InlineKeyboardButton(text="⭐ Лучше оплатить Stars", callback_data=f"sub:stars:{suffix}"),
+    ])
+    pay_kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"sub:pay:{suffix}")])
 
     await callback.message.edit_text(
         text,
@@ -258,6 +297,79 @@ async def sub_pay(callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=pay_kb),
     )
     await callback.answer()
+
+
+# ─── sub:stars:* — оплата Telegram Stars ───────────────────────────────────────
+
+@router.callback_query(lambda c: c.data and c.data.startswith("sub:stars:"))
+async def sub_pay_stars(callback: CallbackQuery, bot: Bot):
+    suffix = callback.data[len("sub:stars:"):]
+    plan_key, lifetime = _parse_variant(suffix)
+    plan = PLANS.get(plan_key)
+    if not plan:
+        await callback.answer("Ошибка плана", show_alert=True)
+        return
+
+    stars  = plan["price_stars_life"] if lifetime else plan["price_stars"]
+    period = "навсегда" if lifetime else f"на {plan['duration_days']} дней"
+    title  = f"{plan['name']} {period}"
+    desc   = (
+        f"Подписка {plan['name']} {period}. "
+        f"Репрайсер, {plan['trackers']} трекеров, Smart Арбитраж, P&L, экспорт."
+    )
+    # payload кодирует план и тип: 'sub:pro:1' (1=lifetime)
+    payload = f"sub:{plan_key}:{1 if lifetime else 0}"
+
+    try:
+        await bot.send_invoice(
+            chat_id=callback.from_user.id,
+            title=title,
+            description=desc,
+            payload=payload,
+            provider_token="",          # пусто = оплата Telegram Stars
+            currency="XTR",             # код валюты Stars
+            prices=[LabeledPrice(label=title, amount=stars)],
+            start_parameter=f"sub_{plan_key}",
+        )
+        await callback.answer("Счёт отправлен ⭐")
+    except Exception as e:
+        logger.error(f"Stars invoice error uid={callback.from_user.id}: {e}")
+        await callback.answer("Не удалось создать счёт. Попробуй USDT.", show_alert=True)
+
+
+# ─── Telegram Stars: pre-checkout + успешная оплата ────────────────────────────
+
+@router.pre_checkout_query()
+async def stars_pre_checkout(pcq: PreCheckoutQuery, bot: Bot):
+    """Подтверждаем все pre-checkout (товар цифровой, всегда в наличии)."""
+    await bot.answer_pre_checkout_query(pcq.id, ok=True)
+
+
+@router.message(F.successful_payment)
+async def stars_successful_payment(message: Message):
+    sp      = message.successful_payment
+    payload = sp.invoice_payload or ""
+    parts   = payload.split(":")
+    if len(parts) != 3 or parts[0] != "sub":
+        logger.warning(f"Unknown Stars payload: {payload}")
+        return
+
+    plan_key = parts[1]
+    lifetime = parts[2] == "1"
+    if plan_key not in PLANS:
+        logger.warning(f"Unknown plan in Stars payload: {plan_key}")
+        return
+
+    await _activate_subscription(
+        message,
+        message.from_user.id,
+        plan_key,
+        amount_confirmed=str(sp.total_amount),
+        txid=sp.telegram_payment_charge_id,
+        lifetime=lifetime,
+        currency="⭐",
+        ref_label="Платёж",
+    )
 
 
 # ─── /pay_confirm TXID ─────────────────────────────────────────────────────────
@@ -368,6 +480,8 @@ async def _activate_subscription(
     amount_confirmed: str,
     txid: str,
     lifetime: bool = False,
+    currency: str = "USDT",
+    ref_label: str = "TXID",
 ) -> None:
     """Записывает подписку в БД, отправляет подтверждение."""
     plan = PLANS[plan_key]
@@ -385,13 +499,20 @@ async def _activate_subscription(
     # Сбрасываем флаги "подписка истекает" — при продлении нужно уведомлять заново
     if db.ok():
         await db.expiry_notif_clear(uid)
+        # Логируем платёж для аналитики выручки
+        try:
+            amount_num = float(amount_confirmed)
+        except (TypeError, ValueError):
+            amount_num = 0.0
+        pay_currency = "XTR" if currency == "⭐" else "USDT"
+        await db.payment_log(uid, plan_key, lifetime, amount_num, pay_currency, txid)
 
     await msg_obj.answer(
         f"🎉 <b>Подписка активирована!</b>\n\n"
         f"План: <b>{plan['emoji']} {plan['name']}</b>\n"
         f"{period_line}\n"
-        f"Оплачено: <b>{amount_confirmed} USDT</b>\n"
-        f"TXID: <code>{txid[:20]}…</code>\n\n"
+        f"Оплачено: <b>{amount_confirmed} {currency}</b>\n"
+        f"{ref_label}: <code>{txid[:24]}…</code>\n\n"
         f"Разблокировано:\n"
         f"✅ Репрайсер до {plan['repricer_rules']} правил\n"
         f"✅ Трекеры до {plan['trackers']}\n"
@@ -439,6 +560,8 @@ async def admin_give_pro(message: Message):
 
     expires_at = datetime.now(timezone.utc) + timedelta(days=days)
     await db.subscription_set(target_uid, plan_key, expires_at)
+    if db.ok():
+        await db.expiry_notif_clear(target_uid)   # сброс флагов истечения/win-back
 
     plan = PLANS[plan_key]
     await message.answer(
@@ -449,3 +572,53 @@ async def admin_give_pro(message: Message):
         parse_mode="HTML",
     )
     logger.info(f"Admin give_pro: uid={target_uid} plan={plan_key} days={days} by={message.from_user.id}")
+
+
+# ─── Win-back: возврат остывших триальщиков ────────────────────────────────────
+
+_WINBACK_TEXT = (
+    "👋 <b>Твой пробный Pro закончился</b>\n\n"
+    "Эти 3 дня ты пользовался полным арсеналом:\n"
+    "🔄 Авто-репрайсер — держал цену лучше конкурентов\n"
+    "🐋 Whale Tracker · 🧠 Pattern Engine\n"
+    "🤖 AI-советник · 📊 P&L · Smart Арбитраж 4 биржи\n\n"
+    "Сейчас ты на <b>Free</b> — большинство фич закрыто. 🔒\n\n"
+    "🎁 <b>Вернись на Pro:</b>\n"
+    "💵 9.99$/мес или 59$ навсегда 🔥\n"
+    "⭐ или 650 Stars — оплата в 1 тап\n\n"
+    "💡 <b>Или бесплатно:</b> пригласи 2 друзей → получи Pro в подарок!"
+)
+
+
+def _winback_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ Вернуть Pro",      callback_data="sub:list")],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data="ref:show")],
+    ])
+
+
+async def check_winback(bot: Bot) -> None:
+    """
+    Фоновая задача (вызывать из bot.py раз в час).
+    Находит триальщиков, у кого подписка истекла за последние 7 дней
+    и кто ни разу не платил, шлёт ОДНО win-back сообщение (с дедупом).
+    """
+    if not db.ok():
+        return
+    candidates = await db.winback_candidates(within_days=7)
+    sent = 0
+    for row in candidates:
+        uid = row["user_id"]
+        if await db.expiry_notif_sent(uid, "winback"):
+            continue
+        try:
+            await bot.send_message(
+                uid, _WINBACK_TEXT, parse_mode="HTML", reply_markup=_winback_kb()
+            )
+            await db.expiry_notif_mark(uid, "winback")
+            sent += 1
+            await asyncio.sleep(0.05)   # ~20 msg/sec, не попасть под flood
+        except Exception as e:
+            logger.warning(f"winback uid={uid}: {e}")
+    if sent:
+        logger.info(f"Win-back sent: {sent} users")

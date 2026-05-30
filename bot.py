@@ -37,7 +37,7 @@ from handlers import (
     whale_tracker, pattern_engine, ai_advisor,
     price_signal,
     subscription, pnl,
-    referral, digest,
+    referral, digest, admin,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -212,7 +212,8 @@ async def main():
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     for r in [
-        subscription.router, pnl.router,           # монетизация и P&L первыми
+        admin.router,                              # админ-команды первыми
+        subscription.router, pnl.router,           # монетизация и P&L
         start.router, maker.router, tracker.router,
         position_monitor.router, calculator.router,
         multipair.router, price_history.router,
@@ -237,6 +238,7 @@ async def main():
     asyncio.create_task(_loop(lambda: whale_tracker.check_whales(bot),        120,  "whales"))
     asyncio.create_task(_loop(lambda: digest.send_daily_digest(bot),           60,  "digest"))
     asyncio.create_task(_loop(lambda: check_expiring_subscriptions(bot),    3600,  "expiry"))
+    asyncio.create_task(_loop(lambda: subscription.check_winback(bot),      3600,  "winback"))
 
     if WEBHOOK_HOST:
         # ── Webhook режим (production) ─────────────────────────────────────────

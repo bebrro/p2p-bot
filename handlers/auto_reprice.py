@@ -15,6 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from api import bybit_p2p, okx_p2p, bybit_auth, okx_auth
 from handlers.account_manager import get_account_credentials, get_active_account, EXCHANGE_NAMES
+from utils.limits import check_allowed, get_limit, upsell_text, upsell_kb
 import db
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ router = Router()
 
 # In-memory зеркало правил: {user_id: [{...}]}
 _repricers: dict[int, list] = {}
-MAX_REPRICERS = 5
+MAX_REPRICERS = 5  # fallback-дефолт; реальный лимит берётся из плана (utils.limits)
 
 # Лог переценок: {user_id: ["[10:30] USDT/KZT 519.5 → 518.8"]}
 _log: dict[int, list] = {}
@@ -87,7 +88,7 @@ def _rule_label(rule: dict) -> str:
     return f"{side_e} {ex} {rule['asset']}/{rule['fiat']} топ-{rule['target_pos']} [{price_s}]"
 
 
-def _repricers_kb(user_id: int) -> InlineKeyboardMarkup:
+def _repricers_kb(user_id: int, limit: int = MAX_REPRICERS) -> InlineKeyboardMarkup:
     rules   = _repricers.get(user_id, [])
     buttons = []
     for i, r in enumerate(rules):
@@ -95,7 +96,7 @@ def _repricers_kb(user_id: int) -> InlineKeyboardMarkup:
             text=_rule_label(r),
             callback_data=f"rp:del:{i}",
         )])
-    if len(rules) < MAX_REPRICERS:
+    if len(rules) < limit:
         buttons.append([InlineKeyboardButton(text="➕ Добавить правило", callback_data="rp:add:start")])
     buttons.append([InlineKeyboardButton(text="📋 Лог переценок", callback_data="rp:log")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад",         callback_data="back:main")])
@@ -108,19 +109,33 @@ def _repricers_kb(user_id: int) -> InlineKeyboardMarkup:
 async def rp_list(callback: CallbackQuery):
     uid  = callback.from_user.id
     rps  = _repricers.get(uid, [])
+    limit, _ = await get_limit(uid, "repricer_rules")
     text = (
         "🔄 <b>Авто-переценка</b>\n\n"
         "Бот автоматически корректирует цену объявлений каждые 60 сек.\n"
         "Поддерживаются: 🟠 Bybit, 🔵 OKX\n\n"
-        f"Активных правил: {len(rps)}/{MAX_REPRICERS}\n"
+        f"Активных правил: {len(rps)}/{limit}\n"
         "Нажми на правило чтобы удалить."
     )
-    await callback.message.edit_text(text, reply_markup=_repricers_kb(uid), parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=_repricers_kb(uid, limit), parse_mode="HTML")
 
 
 @router.callback_query(lambda c: c.data == "rp:add:start")
 async def rp_add_start(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
+
+    # Лимит по плану — апселл при упоре
+    current = len(_repricers.get(uid, []))
+    allowed, limit, plan_key = await check_allowed(uid, "repricer_rules", current)
+    if not allowed:
+        await callback.message.edit_text(
+            upsell_text("repricer_rules", current, limit, plan_key),
+            reply_markup=upsell_kb(manage_cb="rp:list", manage_text="🗑 Удалить правило"),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+
     # Проверяем есть ли хоть один аккаунт (Bybit или OKX)
     has_bybit = get_active_account(uid, "bybit") is not None
     has_okx   = get_active_account(uid, "okx")   is not None
@@ -227,8 +242,13 @@ async def rp_got_params(message: Message, state: FSMContext):
         return
 
     rules = _repricers.setdefault(uid, [])
-    if len(rules) >= MAX_REPRICERS:
-        await wait.edit_text(f"❌ Максимум {MAX_REPRICERS} правил.")
+    _limit, _ = await get_limit(uid, "repricer_rules")
+    if len(rules) >= _limit:
+        await wait.edit_text(
+            upsell_text("repricer_rules", len(rules), _limit, _),
+            reply_markup=upsell_kb(manage_cb="rp:list", manage_text="🗑 Удалить правило"),
+            parse_mode="HTML",
+        )
         return
 
     # Сохраняем в БД

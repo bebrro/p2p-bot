@@ -31,6 +31,19 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 # TG Wallet P2P API key (получить: wallet.tg → P2P → Настройки → API)
 WALLET_P2P_API_KEY = os.getenv("WALLET_P2P_API_KEY", "")
 
+# Временно отключённые биржи (мёртвый API). По умолчанию — OKX (v3 endpoint лёг).
+# Их не дёргаем (не ждём таймаут) и показываем «временно недоступно».
+# Вернуть биржу: задай в Railway DISABLED_EXCHANGES="" (пусто).
+DISABLED_EXCHANGES = {
+    x.strip().lower()
+    for x in os.getenv("DISABLED_EXCHANGES", "okx").split(",")
+    if x.strip()
+}
+
+# Спред выше этого % помечается как подозрительный («проверь ликвидность»).
+# На тонких рынках одиночные заявки-приманки дают фейковые 10-20%.
+SUSPICIOUS_SPREAD_PCT = float(os.getenv("SUSPICIOUS_SPREAD_PCT", "5.0"))
+
 FIATS = ["KZT", "RUB", "TRY", "USD"]
 ASSETS = ["USDT", "BTC", "ETH"]
 

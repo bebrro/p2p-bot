@@ -15,7 +15,7 @@ import time
 from datetime import datetime
 from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from api import binance_p2p, bybit_p2p, gemini
+from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p, gemini
 from handlers.price_history import get_history
 from handlers.pattern_engine import _compute_patterns
 from utils.spread import calc_spread
@@ -29,6 +29,32 @@ COOLDOWN_SEC = 20
 
 DAYS_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 
+# Все поддерживаемые биржи: id → отображаемое имя
+_EX = {
+    "binance": "🟡 Binance",
+    "bybit":   "🟠 Bybit",
+    "okx":     "🔵 OKX",
+    "wallet":  "💎 TG Wallet",
+}
+
+
+def _ad_tasks(exchange: str, asset: str, fiat: str) -> tuple:
+    """Возвращает (buy_ads_coro, sell_ads_coro) для нужной биржи.
+    buy = ты покупаешь asset (мерчанты продают), sell = ты продаёшь."""
+    if exchange == "binance":
+        return (binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="BUY",  rows=8),
+                binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="SELL", rows=8))
+    if exchange == "bybit":
+        return (bybit_p2p.get_ads(asset=asset, fiat=fiat, side="1", size=8),
+                bybit_p2p.get_ads(asset=asset, fiat=fiat, side="0", size=8))
+    if exchange == "okx":
+        return (okx_p2p.get_ads(asset=asset, fiat=fiat, side="buy",  rows=8),
+                okx_p2p.get_ads(asset=asset, fiat=fiat, side="sell", rows=8))
+    if exchange == "wallet":
+        return (wallet_p2p.get_ads(asset=asset, fiat=fiat, side="buy",  rows=8),
+                wallet_p2p.get_ads(asset=asset, fiat=fiat, side="sell", rows=8))
+    return (None, None)
+
 
 # ─── UI ───────────────────────────────────────────────────────────────────────
 
@@ -37,6 +63,10 @@ def _start_kb() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="🟡 Binance", callback_data="ai:ex:binance"),
             InlineKeyboardButton(text="🟠 Bybit",   callback_data="ai:ex:bybit"),
+        ],
+        [
+            InlineKeyboardButton(text="🔵 OKX",       callback_data="ai:ex:okx"),
+            InlineKeyboardButton(text="💎 TG Wallet", callback_data="ai:ex:wallet"),
         ],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")],
     ])
@@ -52,13 +82,16 @@ def _fiat_kb(exchange: str) -> InlineKeyboardMarkup:
 
 
 def _result_kb(exchange: str, fiat: str, asset: str) -> InlineKeyboardMarkup:
-    other   = "bybit" if exchange == "binance" else "binance"
-    other_l = "🟠 Bybit" if other == "bybit" else "🟡 Binance"
+    # Кнопки переключения на 3 другие биржи (та же пара)
+    other_row = [
+        InlineKeyboardButton(text=_EX[ex], callback_data=f"ai:go:{ex}:{fiat}:{asset}")
+        for ex in _EX if ex != exchange
+    ]
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Спросить снова",   callback_data=f"ai:go:{exchange}:{fiat}:{asset}")],
-        [InlineKeyboardButton(text=f"↔️ {other_l}",       callback_data=f"ai:go:{other}:{fiat}:{asset}")],
-        [InlineKeyboardButton(text="🔙 Сменить пару",     callback_data=f"ai:ex:{exchange}")],
-        [InlineKeyboardButton(text="⬅️ Назад",            callback_data="back:main")],
+        [InlineKeyboardButton(text="🔄 Спросить снова", callback_data=f"ai:go:{exchange}:{fiat}:{asset}")],
+        other_row,
+        [InlineKeyboardButton(text="🔙 Сменить пару", callback_data=f"ai:ex:{exchange}")],
+        [InlineKeyboardButton(text="⬅️ Назад",        callback_data="back:main")],
     ])
 
 
@@ -70,7 +103,7 @@ def _build_prompt(
     patterns: dict | None,
 ) -> str:
     now      = datetime.now()
-    ex_label = "Binance" if exchange == "binance" else "Bybit"
+    ex_label = _EX.get(exchange, exchange).split(maxsplit=1)[-1]   # имя без эмодзи
     day_name = DAYS_RU[now.weekday()]
 
     # Форматируем объявления
@@ -168,7 +201,7 @@ async def ai_start(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data and c.data.startswith("ai:ex:"))
 async def ai_choose_fiat(callback: CallbackQuery):
     exchange = callback.data.split(":")[2]
-    ex_label = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+    ex_label = _EX.get(exchange, exchange)
     await callback.message.edit_text(
         f"🤖 AI Советник | {ex_label}\n\nВыбери валютную пару:",
         reply_markup=_fiat_kb(exchange),
@@ -197,13 +230,10 @@ async def ai_go(callback: CallbackQuery):
 
     # Грузим данные параллельно
     try:
-        if exchange == "binance":
-            buy_ads_task  = binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="BUY",  rows=8)
-            sell_ads_task = binance_p2p.get_ads(asset=asset, fiat=fiat, trade_type="SELL", rows=8)
-        else:
-            buy_ads_task  = bybit_p2p.get_ads(asset=asset, fiat=fiat, side="1", size=8)
-            sell_ads_task = bybit_p2p.get_ads(asset=asset, fiat=fiat, side="0", size=8)
-
+        buy_ads_task, sell_ads_task = _ad_tasks(exchange, asset, fiat)
+        if buy_ads_task is None:
+            await callback.message.edit_text("❌ Неизвестная биржа.")
+            return
         buy_ads, sell_ads = await asyncio.gather(buy_ads_task, sell_ads_task)
     except Exception as e:
         await callback.message.edit_text(f"❌ Ошибка загрузки данных: {e}")
@@ -225,7 +255,7 @@ async def ai_go(callback: CallbackQuery):
 
     _cooldowns[uid] = time.time()
 
-    ex_label = "🟡 Binance" if exchange == "binance" else "🟠 Bybit"
+    ex_label = _EX.get(exchange, exchange)
     now_s    = datetime.now().strftime("%H:%M")
 
     header = (

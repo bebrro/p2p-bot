@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from config import FIATS, FIAT_FLAGS
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
+from utils.limits import check_allowed, get_limit, upsell_text, upsell_kb
 import db
 
 router = Router()
@@ -14,8 +15,6 @@ _trackers: dict[int, list[dict]] = {}
 
 # Пользователи, чьи трекеры уже загружены из DB
 _loaded: set[int] = set()
-
-MAX_TRACKERS = 5  # лимит для бесплатных пользователей
 
 
 class TrackerStates(StatesGroup):
@@ -178,9 +177,10 @@ async def tracker_list(callback: CallbackQuery):
     await _ensure_loaded(user_id)
     trackers = _get_trackers(user_id)
     count    = len(trackers)
+    limit, _ = await get_limit(user_id, "trackers")
     text = (
         f"👁 <b>Трекер конкурентов</b>\n\n"
-        f"Активных трекеров: {count}/{MAX_TRACKERS}\n"
+        f"Активных трекеров: {count}/{limit}\n"
         f"Проверка каждые 5 минут. Пришлю уведомление при изменении цены."
     )
     await callback.message.edit_text(text, reply_markup=tracker_menu_kb(user_id), parse_mode="HTML")
@@ -190,8 +190,15 @@ async def tracker_list(callback: CallbackQuery):
 async def tracker_add_start(callback: CallbackQuery):
     user_id = callback.from_user.id
     await _ensure_loaded(user_id)
-    if len(_get_trackers(user_id)) >= MAX_TRACKERS:
-        await callback.answer(f"❌ Максимум {MAX_TRACKERS} трекеров", show_alert=True)
+    current = len(_get_trackers(user_id))
+    allowed, limit, plan_key = await check_allowed(user_id, "trackers", current)
+    if not allowed:
+        await callback.message.edit_text(
+            upsell_text("trackers", current, limit, plan_key),
+            reply_markup=upsell_kb(manage_cb="tracker:list", manage_text="🗑 Удалить трекер"),
+            parse_mode="HTML",
+        )
+        await callback.answer()
         return
     await callback.message.edit_text("👁 Выбери биржу:", reply_markup=tracker_exchange_kb())
 

@@ -1,5 +1,6 @@
 from typing import Optional
 from utils.http import post_json
+from utils.pricing import pick_best_price
 
 BYBIT_P2P_URL  = "https://api2.bybit.com/fiat/otc/item/online"
 BYBIT_PAY_URL  = "https://api2.bybit.com/fiat/otc/configuration/queryAllPaymentList"
@@ -40,7 +41,11 @@ async def get_ads(
     pay_types: Optional[list] = None,
     size:      int = 10,
     amount:    str = "",
+    _force:    bool = False,
 ) -> list[dict]:
+    from config import DISABLED_EXCHANGES
+    if "bybit" in DISABLED_EXCHANGES and not _force:
+        return []
     await _load_payment_map()
     pay_ids = _names_to_ids(pay_types) if pay_types else []
 
@@ -75,5 +80,6 @@ async def get_ads(
 
 
 async def get_best_price(asset: str, fiat: str, side: str) -> Optional[float]:
-    ads = await get_ads(asset=asset, fiat=fiat, side=side, size=1)
-    return ads[0]["price"] if ads else None
+    ads = await get_ads(asset=asset, fiat=fiat, side=side, size=10)
+    # Bybit: side "1" = ты покупаешь крипту, "0" = продаёшь
+    return pick_best_price(ads, buy_side=(side == "1"), fiat=fiat, asset=asset)

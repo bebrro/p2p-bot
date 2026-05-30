@@ -191,6 +191,21 @@ async def _create_tables() -> None:
             created_at  TIMESTAMPTZ DEFAULT NOW()
         );
         """)
+        # Лог успешных платежей — для выручки и аналитики
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id         SERIAL PRIMARY KEY,
+            user_id    BIGINT NOT NULL,
+            plan       VARCHAR(20) NOT NULL,
+            lifetime   BOOLEAN DEFAULT FALSE,
+            amount     FLOAT   NOT NULL,
+            currency   VARCHAR(10) NOT NULL,   -- 'USDT' | 'XTR'
+            txid       TEXT DEFAULT '',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at DESC);
+        """)
 
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
@@ -897,3 +912,122 @@ async def pending_payment_delete(user_id: int) -> None:
         return
     async with _pool.acquire() as c:
         await c.execute("DELETE FROM pending_payments WHERE user_id=$1", user_id)
+
+
+# ── Payments log & admin analytics ─────────────────────────────────────────────
+
+async def winback_candidates(within_days: int = 7) -> list[dict]:
+    """
+    Остывшие триальщики: подписка истекла за последние N дней
+    И пользователь ни разу не платил (нет записей в payments).
+    Возвращает [{user_id, plan, expires_at}].
+    """
+    if not ok():
+        return []
+    async with _pool.acquire() as c:
+        rows = await c.fetch("""
+            SELECT s.user_id, s.plan, s.expires_at
+            FROM subscriptions s
+            WHERE s.plan != 'free'
+              AND s.expires_at IS NOT NULL
+              AND s.expires_at < NOW()
+              AND s.expires_at > NOW() - make_interval(days => $1)
+              AND s.user_id NOT IN (SELECT user_id FROM payments)
+            ORDER BY s.expires_at DESC
+        """, within_days)
+    return [dict(r) for r in rows]
+
+
+async def payment_log(user_id: int, plan: str, lifetime: bool,
+                      amount: float, currency: str, txid: str = "") -> None:
+    """Записывает успешный платёж (USDT или Stars) для аналитики выручки."""
+    if not ok():
+        return
+    async with _pool.acquire() as c:
+        await c.execute(
+            "INSERT INTO payments(user_id, plan, lifetime, amount, currency, txid) "
+            "VALUES($1, $2, $3, $4, $5, $6)",
+            user_id, plan, lifetime, amount, currency, txid,
+        )
+
+
+async def admin_stats() -> dict:
+    """
+    Сводка для админа: воронка пользователей, подписки, выручка, конверсия.
+    Возвращает плоский dict (см. ключи ниже).
+    """
+    if not ok():
+        return {}
+    async with _pool.acquire() as c:
+        total_users = int(await c.fetchval("SELECT COUNT(*) FROM users") or 0)
+        new_24h = int(await c.fetchval(
+            "SELECT COUNT(*) FROM users WHERE first_seen > NOW() - INTERVAL '24 hours'"
+        ) or 0)
+        new_7d = int(await c.fetchval(
+            "SELECT COUNT(*) FROM users WHERE first_seen > NOW() - INTERVAL '7 days'"
+        ) or 0)
+
+        # Активные подписки по планам (expires в будущем ИЛИ lifetime=NULL)
+        sub_rows = await c.fetch("""
+            SELECT plan, COUNT(*) AS cnt
+            FROM subscriptions
+            WHERE plan != 'free'
+              AND (expires_at IS NULL OR expires_at > NOW())
+            GROUP BY plan
+        """)
+        active_by_plan = {r["plan"]: int(r["cnt"]) for r in sub_rows}
+        active_pro  = active_by_plan.get("pro", 0)
+        active_team = active_by_plan.get("team", 0)
+
+        lifetime_cnt = int(await c.fetchval("""
+            SELECT COUNT(*) FROM subscriptions
+            WHERE plan != 'free' AND expires_at IS NULL
+        """) or 0)
+
+        # Платящие = уникальные user_id в payments
+        paid_users = int(await c.fetchval(
+            "SELECT COUNT(DISTINCT user_id) FROM payments"
+        ) or 0)
+
+        # Выручка по валютам
+        rev_usdt = float(await c.fetchval(
+            "SELECT COALESCE(SUM(amount),0) FROM payments WHERE currency='USDT'"
+        ) or 0)
+        rev_stars = float(await c.fetchval(
+            "SELECT COALESCE(SUM(amount),0) FROM payments WHERE currency='XTR'"
+        ) or 0)
+        pay_cnt = int(await c.fetchval("SELECT COUNT(*) FROM payments") or 0)
+        pay_24h = int(await c.fetchval(
+            "SELECT COUNT(*) FROM payments WHERE created_at > NOW() - INTERVAL '24 hours'"
+        ) or 0)
+        rev_usdt_7d = float(await c.fetchval(
+            "SELECT COALESCE(SUM(amount),0) FROM payments "
+            "WHERE currency='USDT' AND created_at > NOW() - INTERVAL '7 days'"
+        ) or 0)
+        rev_stars_7d = float(await c.fetchval(
+            "SELECT COALESCE(SUM(amount),0) FROM payments "
+            "WHERE currency='XTR' AND created_at > NOW() - INTERVAL '7 days'"
+        ) or 0)
+
+    active_paid_subs = active_pro + active_team
+    # Триалы = активные платные подписки у тех, кто НИКОГДА не платил
+    trials = max(0, active_paid_subs - paid_users)
+    conversion = (paid_users / total_users * 100) if total_users else 0.0
+
+    return {
+        "total_users":    total_users,
+        "new_24h":        new_24h,
+        "new_7d":         new_7d,
+        "active_pro":     active_pro,
+        "active_team":    active_team,
+        "lifetime_cnt":   lifetime_cnt,
+        "trials":         trials,
+        "paid_users":     paid_users,
+        "rev_usdt":       round(rev_usdt, 2),
+        "rev_stars":      int(rev_stars),
+        "rev_usdt_7d":    round(rev_usdt_7d, 2),
+        "rev_stars_7d":   int(rev_stars_7d),
+        "pay_cnt":        pay_cnt,
+        "pay_24h":        pay_24h,
+        "conversion":     round(conversion, 1),
+    }

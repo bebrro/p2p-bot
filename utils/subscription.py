@@ -23,6 +23,8 @@ PLANS: dict[str, dict] = {
         "emoji":            "⭐",
         "price_usdt":       9.99,
         "price_lifetime":   59.0,
+        "price_stars":      650,    # ≈ +30% к USDT (покрывает комиссию Apple/Google)
+        "price_stars_life": 3800,
         "duration_days":    30,
         "repricer_rules":   10,
         "trackers":         20,
@@ -36,6 +38,8 @@ PLANS: dict[str, dict] = {
         "emoji":            "👑",
         "price_usdt":       24.99,
         "price_lifetime":   149.0,
+        "price_stars":      1600,
+        "price_stars_life": 9700,
         "duration_days":    30,
         "repricer_rules":   50,
         "trackers":         100,
@@ -113,6 +117,8 @@ def format_plan_card(plan_key: str, is_current: bool = False) -> str:
             f"💰 {p['price_usdt']:.2f} USDT/мес  "
             f"или {p['price_lifetime']:.0f} USDT навсегда 🔥"
         )
+        if p.get("price_stars"):
+            lines.append(f"⭐ или {p['price_stars']} Stars/мес — оплата в 1 тап")
     lines += [
         f"  • Репрайсер: до {p['repricer_rules']} правил",
         f"  • Трекеры: до {p['trackers']}",

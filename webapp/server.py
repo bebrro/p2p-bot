@@ -34,9 +34,99 @@ from utils.spread import calc_spread
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
+from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
 
 logger     = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+# ─── Биржи: единый сбор цен со статусами ──────────────────────────────────────
+
+# id → (имя, иконка, fn_buy(asset,fiat), fn_sell(asset,fiat))
+_EX_META = [
+    ("binance", "Binance",   "🟡",
+     lambda a, f: binance_p2p.get_best_price(a, f, "BUY"),
+     lambda a, f: binance_p2p.get_best_price(a, f, "SELL")),
+    ("bybit",   "Bybit",     "🟠",
+     lambda a, f: bybit_p2p.get_best_price(a, f, "1"),
+     lambda a, f: bybit_p2p.get_best_price(a, f, "0")),
+    ("okx",     "OKX",       "🔵",
+     lambda a, f: okx_p2p.get_best_price(a, f, "buy"),
+     lambda a, f: okx_p2p.get_best_price(a, f, "sell")),
+    ("wallet",  "TG Wallet", "💎",
+     lambda a, f: wallet_p2p.get_best_price(a, f, "buy"),
+     lambda a, f: wallet_p2p.get_best_price(a, f, "sell")),
+]
+
+
+async def _gather_exchanges(asset: str, fiat: str) -> list[dict]:
+    """
+    Собирает цены по всем биржам со статусом каждой.
+    Отключённые (DISABLED_EXCHANGES) НЕ дёргаем — не ждём таймаут мёртвого API.
+
+    status: 'ok' | 'no_data' (жива, но пусто) | 'disabled' (временно выключена)
+    suspicious: True если спред > SUSPICIOUS_SPREAD_PCT (возможны приманки)
+    """
+    tasks, meta = [], []
+    for ex_id, name, icon, buy_fn, sell_fn in _EX_META:
+        if ex_id in DISABLED_EXCHANGES:
+            continue
+        meta.append((ex_id, name, icon))
+        tasks.append(buy_fn(asset, fiat))
+        tasks.append(sell_fn(asset, fiat))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _v(x):
+        return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+    exchanges = []
+    for i, (ex_id, name, icon) in enumerate(meta):
+        buy, sell = _v(results[i * 2]), _v(results[i * 2 + 1])
+        ex = {"id": ex_id, "name": name, "icon": icon, "buy": buy, "sell": sell}
+        if buy and sell:
+            s = calc_spread(buy, sell)
+            ex["spread_pct"] = round(s["spread_pct"], 2)
+            ex["spread_abs"] = round(s["spread_abs"], 2)
+            ex["suspicious"] = s["spread_pct"] > SUSPICIOUS_SPREAD_PCT
+            ex["status"]     = "ok"
+        else:
+            ex["spread_pct"] = ex["spread_abs"] = None
+            ex["suspicious"] = False
+            ex["status"]     = "no_data"
+        exchanges.append(ex)
+
+    # Отключённые биржи — добавляем как «временно недоступно» (UI не покажет «Ошибка»)
+    for ex_id, name, icon, _b, _s in _EX_META:
+        if ex_id in DISABLED_EXCHANGES:
+            exchanges.append({
+                "id": ex_id, "name": name, "icon": icon,
+                "buy": None, "sell": None, "spread_pct": None,
+                "spread_abs": None, "suspicious": False, "status": "disabled",
+            })
+    return exchanges
+
+
+def _build_arbitrage(exchanges: list[dict]) -> list[dict]:
+    """Кросс-биржевой арбитраж только по живым биржам (status='ok')."""
+    live = [e for e in exchanges if e.get("status") == "ok"]
+    arb = []
+    for ex1 in live:
+        for ex2 in live:
+            if ex1["id"] == ex2["id"]:
+                continue
+            if ex1["buy"] and ex2["sell"]:
+                s = calc_spread(ex1["buy"], ex2["sell"])
+                if s["spread_pct"] > 0:
+                    arb.append({
+                        "from": ex1["name"], "to": ex2["name"],
+                        "from_id": ex1["id"], "to_id": ex2["id"],
+                        "pct": round(s["spread_pct"], 2),
+                        "abs": round(s["spread_abs"], 2),
+                        "suspicious": s["spread_pct"] > SUSPICIOUS_SPREAD_PCT,
+                    })
+    arb.sort(key=lambda x: -x["pct"])
+    return arb
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -56,6 +146,9 @@ def _enrich(ads: list) -> list:
 
 async def _fetch(exchange: str, fiat: str, asset: str, side: str,
                  rows: int = 10, pay: str = ""):
+    # Отключённую биржу не дёргаем — мгновенно пусто (без таймаута мёртвого API)
+    if exchange in DISABLED_EXCHANGES:
+        return []
     pay_types = [pay] if pay else None
     if exchange == "binance":
         trade_type = "BUY" if side == "buy" else "SELL"
@@ -292,46 +385,8 @@ async def api_spread_compare(request: web.Request) -> web.Response:
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
     try:
-        results = await asyncio.gather(
-            binance_p2p.get_best_price(asset, fiat, "BUY"),
-            binance_p2p.get_best_price(asset, fiat, "SELL"),
-            bybit_p2p.get_best_price(asset, fiat, "1"),
-            bybit_p2p.get_best_price(asset, fiat, "0"),
-            okx_p2p.get_best_price(asset, fiat, "buy"),
-            okx_p2p.get_best_price(asset, fiat, "sell"),
-            wallet_p2p.get_best_price(asset, fiat, "buy"),
-            wallet_p2p.get_best_price(asset, fiat, "sell"),
-            return_exceptions=True,
-        )
-        def _v(x): return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
-
-        exchanges = [
-            {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
-            {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
-            {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
-            {"id": "wallet",  "name": "TG Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
-        ]
-        for ex in exchanges:
-            if ex["buy"] and ex["sell"]:
-                s = calc_spread(ex["buy"], ex["sell"])
-                ex["spread_pct"] = s["spread_pct"]
-                ex["spread_abs"] = s["spread_abs"]
-            else:
-                ex["spread_pct"] = None
-                ex["spread_abs"] = None
-
-        arb = []
-        for ex1 in exchanges:
-            for ex2 in exchanges:
-                if ex1["id"] == ex2["id"]: continue
-                if ex1["buy"] and ex2["sell"]:
-                    s = calc_spread(ex1["buy"], ex2["sell"])
-                    if s["spread_pct"] > 0:
-                        arb.append({
-                            "from": ex1["name"], "to": ex2["name"],
-                            "pct": s["spread_pct"], "abs": s["spread_abs"],
-                        })
-        arb.sort(key=lambda x: -x["pct"])
+        exchanges = await _gather_exchanges(asset, fiat)
+        arb       = _build_arbitrage(exchanges)
         return web.json_response({"exchanges": exchanges, "arbitrage": arb[:6]})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -891,48 +946,8 @@ async def api_dashboard(request: web.Request) -> web.Response:
     asset = request.rel_url.query.get("asset", "USDT")
     uid   = _uid(request)
     try:
-        results = await asyncio.gather(
-            binance_p2p.get_best_price(asset, fiat, "BUY"),
-            binance_p2p.get_best_price(asset, fiat, "SELL"),
-            bybit_p2p.get_best_price(asset, fiat, "1"),
-            bybit_p2p.get_best_price(asset, fiat, "0"),
-            okx_p2p.get_best_price(asset, fiat, "buy"),
-            okx_p2p.get_best_price(asset, fiat, "sell"),
-            wallet_p2p.get_best_price(asset, fiat, "buy"),
-            wallet_p2p.get_best_price(asset, fiat, "sell"),
-            return_exceptions=True,
-        )
-        def _v(x): return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
-
-        exchanges = [
-            {"id": "binance", "name": "Binance", "icon": "🟡", "buy": _v(results[0]), "sell": _v(results[1])},
-            {"id": "bybit",   "name": "Bybit",   "icon": "🟠", "buy": _v(results[2]), "sell": _v(results[3])},
-            {"id": "okx",     "name": "OKX",     "icon": "🔵", "buy": _v(results[4]), "sell": _v(results[5])},
-            {"id": "wallet",  "name": "TG Wallet",  "icon": "💎", "buy": _v(results[6]), "sell": _v(results[7])},
-        ]
-        for ex in exchanges:
-            if ex["buy"] and ex["sell"]:
-                s = calc_spread(ex["buy"], ex["sell"])
-                ex["spread_pct"] = round(s["spread_pct"], 2)
-                ex["spread_abs"] = round(s["spread_abs"], 2)
-            else:
-                ex["spread_pct"] = None
-                ex["spread_abs"] = None
-
-        arb = []
-        for ex1 in exchanges:
-            for ex2 in exchanges:
-                if ex1["id"] == ex2["id"]: continue
-                if ex1["buy"] and ex2["sell"]:
-                    s = calc_spread(ex1["buy"], ex2["sell"])
-                    if s["spread_pct"] > 0:
-                        arb.append({
-                            "from": ex1["name"], "to": ex2["name"],
-                            "from_id": ex1["id"], "to_id": ex2["id"],
-                            "pct": round(s["spread_pct"], 2),
-                            "abs": round(s["spread_abs"], 2),
-                        })
-        arb.sort(key=lambda x: -x["pct"])
+        exchanges = await _gather_exchanges(asset, fiat)
+        arb       = _build_arbitrage(exchanges)
 
         tools: dict = {}
         if uid and db.ok():

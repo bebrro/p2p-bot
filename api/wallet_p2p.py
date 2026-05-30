@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 from utils.http import post_json
+from utils.pricing import pick_best_price
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,11 @@ async def get_ads(
     side:      str = "buy",
     pay_types: Optional[list] = None,
     rows:      int = 10,
+    _force:    bool = False,
 ) -> list[dict]:
+    from config import DISABLED_EXCHANGES
+    if "wallet" in DISABLED_EXCHANGES and not _force:
+        return []
     api_key = _get_api_key()
     if not api_key:
         logger.debug("WALLET_P2P_API_KEY не задан — TG Wallet P2P недоступен")
@@ -123,5 +128,5 @@ async def get_ads(
 
 
 async def get_best_price(asset: str, fiat: str, side: str) -> Optional[float]:
-    ads = await get_ads(asset=asset, fiat=fiat, side=side, rows=1)
-    return ads[0]["price"] if ads else None
+    ads = await get_ads(asset=asset, fiat=fiat, side=side, rows=10)
+    return pick_best_price(ads, buy_side=(side == "buy"), fiat=fiat, asset=asset)

@@ -2,6 +2,7 @@ import logging
 import time
 from typing import Optional
 from utils.http import get_json
+from utils.pricing import pick_best_price
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,11 @@ async def get_ads(
     side:      str = "buy",
     pay_types: Optional[list] = None,
     rows:      int = 10,
+    _force:    bool = False,
 ) -> list[dict]:
+    from config import DISABLED_EXCHANGES
+    if "okx" in DISABLED_EXCHANGES and not _force:
+        return []   # биржа временно отключена — не ждём таймаут мёртвого API
     params = {
         "t":                   str(int(time.time() * 1000)),
         "quoteCurrency":       fiat,
@@ -102,5 +107,5 @@ async def get_ads(
 
 
 async def get_best_price(asset: str, fiat: str, side: str) -> Optional[float]:
-    ads = await get_ads(asset=asset, fiat=fiat, side=side, rows=1)
-    return ads[0]["price"] if ads else None
+    ads = await get_ads(asset=asset, fiat=fiat, side=side, rows=10)
+    return pick_best_price(ads, buy_side=(side == "buy"), fiat=fiat, asset=asset)

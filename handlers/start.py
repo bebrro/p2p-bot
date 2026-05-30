@@ -21,12 +21,37 @@ from keyboards import (
     main_menu, alerts_submenu, auto_submenu,
     analytics_submenu, account_submenu,
 )
-from utils.subscription import get_plan_key, PLANS
+from utils.subscription import get_plan_key, PLANS, format_expires
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 TRIAL_DAYS = 3
+
+
+# ─── Текст главного меню с баннером статуса подписки ───────────────────────────
+
+async def menu_text(uid: int) -> str:
+    """
+    Собирает текст меню + баннер плана сверху.
+    Free → промо-баннер «открой Pro». Платный/триал → план + остаток дней.
+    """
+    sub      = await db.subscription_get(uid) if db.ok() else None
+    plan_key = get_plan_key(sub)
+
+    if plan_key == "free":
+        banner = (
+            "🆓 <b>План: Free</b>\n"
+            "💡 Открой <b>Pro</b> — репрайсер, 4-биржевой арбитраж,\n"
+            "AI-советник и увеличенные лимиты.\n\n"
+        )
+    else:
+        plan    = PLANS[plan_key]
+        expires = format_expires(sub)
+        tail    = f" · {expires}" if expires else ""
+        banner  = f"{plan['emoji']} <b>План: {plan['name']}</b>{tail}\n\n"
+
+    return banner + MAIN_TEXT
 
 # ─── Тексты ────────────────────────────────────────────────────────────────────
 
@@ -174,15 +199,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
         )
     else:
         # Старый пользователь — сразу меню
-        sub      = await db.subscription_get(uid)
-        plan_key = get_plan_key(sub)
-        plan     = PLANS[plan_key]
-        greeting = (
-            f"{plan['emoji']} <b>План: {plan['name']}</b>\n\n"
-            if plan_key != "free" else ""
-        )
         await message.answer(
-            greeting + MAIN_TEXT,
+            await menu_text(uid),
             reply_markup=main_menu(),
             parse_mode="HTML",
         )
@@ -191,7 +209,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 @router.callback_query(lambda c: c.data == "back:main")
 async def back_to_main(callback: CallbackQuery):
     await callback.message.edit_text(
-        MAIN_TEXT, reply_markup=main_menu(), parse_mode="HTML",
+        await menu_text(callback.from_user.id),
+        reply_markup=main_menu(), parse_mode="HTML",
     )
     await callback.answer()
 
@@ -234,7 +253,8 @@ async def ob_step(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data in ("ob:done", "ob:skip"))
 async def ob_finish(callback: CallbackQuery):
     await callback.message.edit_text(
-        MAIN_TEXT, reply_markup=main_menu(), parse_mode="HTML",
+        await menu_text(callback.from_user.id),
+        reply_markup=main_menu(), parse_mode="HTML",
     )
     await callback.answer()
 
@@ -244,16 +264,8 @@ async def ob_finish(callback: CallbackQuery):
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
     """Показывает главное меню без онбординга — для всех повторных заходов."""
-    uid = message.from_user.id
-    sub      = await db.subscription_get(uid) if db.ok() else None
-    plan_key = get_plan_key(sub)
-    plan     = PLANS[plan_key]
-    greeting = (
-        f"{plan['emoji']} <b>План: {plan['name']}</b>\n\n"
-        if plan_key != "free" else ""
-    )
     await message.answer(
-        greeting + MAIN_TEXT,
+        await menu_text(message.from_user.id),
         reply_markup=main_menu(),
         parse_mode="HTML",
     )

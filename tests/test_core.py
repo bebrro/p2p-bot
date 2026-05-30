@@ -233,3 +233,251 @@ def test_pending_overwrite_same_user():
     p = asyncio.run(subm._pending_get(222))
     assert p["plan"] == "team"
     assert p["amount_usdt"] == pytest.approx(24.99)
+
+
+# ─── utils/limits.py — план-зависимые лимиты + апселл ─────────────────────────
+
+from utils.limits import get_limit, check_allowed, upsell_text, upsell_kb
+from utils.subscription import PLANS as _PLANS
+
+def test_limit_free_alerts():
+    """Без БД (mock ok=False) лимит = Free."""
+    limit, plan = asyncio.run(get_limit(1, "alerts"))
+    assert plan == "free"
+    assert limit == _PLANS["free"]["alerts"]
+
+def test_check_allowed_under_limit():
+    allowed, limit, plan = asyncio.run(check_allowed(1, "trackers", 0))
+    assert allowed is True
+    assert limit == _PLANS["free"]["trackers"]
+
+def test_check_allowed_at_limit():
+    """На границе лимита — не разрешено."""
+    free_trackers = _PLANS["free"]["trackers"]
+    allowed, limit, plan = asyncio.run(check_allowed(1, "trackers", free_trackers))
+    assert allowed is False
+
+def test_check_allowed_over_limit():
+    allowed, _, _ = asyncio.run(check_allowed(1, "alerts", 999))
+    assert allowed is False
+
+def test_upsell_text_mentions_pro_price():
+    txt = upsell_text("alerts", 3, 3, "free")
+    assert "Pro" in txt
+    assert "Лимит достигнут" in txt
+    assert f"{_PLANS['pro']['price_usdt']:.2f}" in txt
+
+def test_upsell_kb_has_upgrade_button():
+    kb  = upsell_kb(manage_cb="alerts:list")
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "sub:list"   in cbs   # кнопка апгрейда
+    assert "alerts:list" in cbs  # кнопка управления
+    assert "back:main"  in cbs
+
+def test_upsell_kb_without_manage():
+    kb  = upsell_kb()
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "sub:list" in cbs
+    assert "back:main" in cbs
+
+
+# ─── Telegram Stars — цены и парсер вариантов ─────────────────────────────────
+
+def test_stars_prices_present():
+    """У платных планов есть цены в Stars."""
+    for key in ("pro", "team"):
+        assert _PLANS[key]["price_stars"] > 0
+        assert _PLANS[key]["price_stars_life"] > 0
+
+def test_stars_markup_over_usdt():
+    """Stars-цена примерно на 30% дороже USDT (покрывает комиссию сторов)."""
+    pro = _PLANS["pro"]
+    # 650 ⭐ при курсе ~$0.02 ≈ $13 vs $9.99 USDT → наценка есть
+    implied_usd = pro["price_stars"] * 0.02
+    assert implied_usd > pro["price_usdt"]
+
+def test_parse_variant():
+    from handlers.subscription import _parse_variant
+    assert _parse_variant("pro")       == ("pro", False)
+    assert _parse_variant("pro_life")  == ("pro", True)
+    assert _parse_variant("team")      == ("team", False)
+    assert _parse_variant("team_life") == ("team", True)
+
+
+# ─── handlers/admin.py — аналитика ────────────────────────────────────────────
+
+import handlers.admin as adminm
+
+_SAMPLE_STATS = {
+    "total_users": 150, "new_24h": 5, "new_7d": 22,
+    "active_pro": 12, "active_team": 3, "lifetime_cnt": 4,
+    "trials": 8, "paid_users": 11,
+    "rev_usdt": 109.89, "rev_stars": 3250,
+    "rev_usdt_7d": 29.97, "rev_stars_7d": 650,
+    "pay_cnt": 14, "pay_24h": 1, "conversion": 7.3,
+}
+
+def test_admin_format_contains_key_metrics():
+    txt = adminm._format_stats(_SAMPLE_STATS)
+    assert "150" in txt                # total users
+    assert "109.89" in txt             # USDT revenue
+    assert "3250" in txt               # Stars revenue
+    assert "7.3%" in txt               # conversion
+    assert "Conversion rate" in txt
+
+def test_admin_format_empty_db():
+    """Без БД — дружелюбное предупреждение, не падает."""
+    txt = adminm._format_stats({})
+    assert "недоступна" in txt.lower() or "database" in txt.lower()
+
+def test_admin_stars_usd_conversion():
+    """Stars пересчитываются в USD по курсу нетто."""
+    txt = adminm._format_stats(_SAMPLE_STATS)
+    # 3250 * 0.013 ≈ 42.25
+    assert "42.2" in txt or "42.3" in txt
+
+def test_admin_is_admin_check():
+    adminm.ADMIN_IDS.clear()
+    adminm.ADMIN_IDS.extend([111, 222])
+    assert adminm._is_admin(111) is True
+    assert adminm._is_admin(999) is False
+
+
+# ─── Win-back ─────────────────────────────────────────────────────────────────
+
+def test_winback_kb_buttons():
+    kb  = subm._winback_kb()
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "sub:list" in cbs    # вернуть Pro
+    assert "ref:show" in cbs    # пригласить друзей
+
+def test_winback_text_has_offer():
+    txt = subm._WINBACK_TEXT
+    assert "Pro" in txt
+    assert "9.99" in txt or "Stars" in txt   # есть оффер
+    assert "друзей" in txt                    # реферальный путь
+
+def test_check_winback_noop_without_db():
+    """Без БД check_winback не падает и просто выходит."""
+    asyncio.run(subm.check_winback(None))   # bot=None, db.ok()=False → ранний return
+
+
+# ─── Баннер меню (task 6) ─────────────────────────────────────────────────────
+
+def test_menu_text_free_banner():
+    """Без БД (free) — баннер зовёт открыть Pro."""
+    import handlers.start as st
+    txt = asyncio.run(st.menu_text(123))
+    assert "Free" in txt
+    assert "Pro" in txt
+    assert "P2P Panel Bot" in txt   # MAIN_TEXT приклеен
+
+
+# ─── Реферал в главном меню (task 7) ──────────────────────────────────────────
+
+def test_main_menu_has_referral():
+    kb  = main_menu()
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "ref:show" in cbs
+
+
+# ─── AI советник: 4 биржи (task 8) ────────────────────────────────────────────
+
+import handlers.ai_advisor as aim
+
+def test_ai_supports_four_exchanges():
+    assert set(aim._EX.keys()) == {"binance", "bybit", "okx", "wallet"}
+
+def test_ai_start_kb_has_all_exchanges():
+    kb  = aim._start_kb()
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    for ex in ("binance", "bybit", "okx", "wallet"):
+        assert f"ai:ex:{ex}" in cbs
+
+def test_ai_result_kb_offers_other_exchanges():
+    """На результате OKX предлагает переключиться на 3 другие биржи."""
+    kb  = aim._result_kb("okx", "KZT", "USDT")
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "ai:go:binance:KZT:USDT" in cbs
+    assert "ai:go:bybit:KZT:USDT"   in cbs
+    assert "ai:go:wallet:KZT:USDT"  in cbs
+    assert "ai:go:okx:KZT:USDT"     in cbs   # «спросить снова»
+
+def test_ai_ad_tasks_unknown_exchange():
+    buy, sell = aim._ad_tasks("nonexistent", "USDT", "KZT")
+    assert buy is None and sell is None
+
+
+# ─── utils/pricing.py — честный выбор цены + де-байтинг ───────────────────────
+
+from utils.pricing import pick_best_price, sane_price
+
+def _ads(*prices):
+    return [{"price": p} for p in prices]
+
+def test_pricing_empty_returns_none():
+    assert pick_best_price([], buy_side=True, fiat="KZT") is None
+
+def test_pricing_rejects_low_bait_on_buy():
+    """Приманка 480 снизу не должна стать 'лучшей ценой покупки'."""
+    ads = _ads(480, 508, 510, 511, 512, 513, 514, 515, 516, 520)
+    buy = pick_best_price(ads, buy_side=True, fiat="KZT")
+    assert buy >= 505   # 480-приманка отброшена
+
+def test_pricing_rejects_high_bait_on_sell():
+    """Приманки 553-557 сверху не должны стать 'лучшей ценой продажи'."""
+    ads = _ads(505, 508, 509, 510, 511, 512, 513, 553, 555, 557)
+    sell = pick_best_price(ads, buy_side=False, fiat="KZT")
+    assert sell <= 520   # высокие приманки отброшены
+
+def test_pricing_clean_book_unchanged():
+    """Чистый стакан без приманок — берём настоящие экстремумы."""
+    ads = _ads(510, 511, 512, 513, 514, 515)
+    assert pick_best_price(ads, buy_side=True,  fiat="KZT") == 510
+    assert pick_best_price(ads, buy_side=False, fiat="KZT") == 515
+
+def test_pricing_sanity_rejects_garbage():
+    """Нулевые и дикие цены отсекаются sane_price."""
+    assert sane_price(0, "KZT") is False
+    assert sane_price(-5, "KZT") is False
+    assert sane_price(50, "KZT") is False      # USDT/KZT не может быть 50
+    assert sane_price(512, "KZT") is True
+    assert sane_price(95, "RUB") is True
+
+def test_pricing_small_list_takes_extreme():
+    """Мало данных (≤3) — отсекать нечего, берём крайнее."""
+    ads = _ads(510, 515)
+    assert pick_best_price(ads, buy_side=True,  fiat="KZT") == 510
+    assert pick_best_price(ads, buy_side=False, fiat="KZT") == 515
+
+def test_pricing_all_garbage_returns_none():
+    ads = _ads(0, -1, 9999)   # всё вне диапазона KZT
+    assert pick_best_price(ads, buy_side=True, fiat="KZT") is None
+
+
+# ─── Отключённые биржи + флаг подозрительного спреда ──────────────────────────
+
+def test_config_disables_okx_by_default():
+    from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
+    assert "okx" in DISABLED_EXCHANGES      # мёртвый API выключен по умолчанию
+    assert SUSPICIOUS_SPREAD_PCT == 5.0
+
+def test_build_arbitrage_excludes_disabled():
+    import webapp.server as srv
+    exs = [
+        {"id": "binance", "name": "Binance", "status": "ok",       "buy": 512, "sell": 525},
+        {"id": "bybit",   "name": "Bybit",   "status": "ok",       "buy": 504, "sell": 556},
+        {"id": "okx",     "name": "OKX",     "status": "disabled", "buy": None, "sell": None},
+    ]
+    arb = srv._build_arbitrage(exs)
+    # disabled биржа не участвует в арбитраже
+    assert all(a["from_id"] != "okx" and a["to_id"] != "okx" for a in arb)
+    # спред >5% помечен подозрительным
+    assert any(a["suspicious"] for a in arb)
+
+def test_disabled_exchange_returns_empty_fast():
+    """okx_p2p.get_ads мгновенно возвращает [] когда биржа отключена."""
+    import asyncio
+    from api import okx_p2p
+    ads = asyncio.run(okx_p2p.get_ads(asset="USDT", fiat="KZT", side="buy"))
+    assert ads == []

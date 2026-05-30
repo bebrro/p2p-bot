@@ -1797,14 +1797,24 @@ function renderDashExchanges(exchanges){
   const grid=document.getElementById('dashExGrid');
   if(!exchanges.length){grid.innerHTML='<div class="err-box" style="grid-column:1/-1">Нет данных</div>';return;}
   grid.innerHTML=exchanges.map(ex=>{
+    // Отключённая биржа (мёртвый API) — честно показываем «временно недоступно»
+    if(ex.status==='disabled'){
+      return `<div class="dash-ex-card" style="opacity:.55">
+        <div class="dash-ex-top"><span class="dash-ex-name">${esc(ex.icon)} ${esc(ex.name)}</span><span class="dash-ex-sp none">⏸</span></div>
+        <div class="dash-ex-prices"><div style="grid-column:1/-1;color:var(--hint);font-size:11px;padding:4px 0">временно недоступно</div></div>
+      </div>`;
+    }
     const sp=ex.spread_pct;
-    const cls=sp==null?'none':sp>0?'pos':'neg';
-    const spTxt=sp==null?'—':(sp>=0?'+':'')+sp.toFixed(2)+'%';
+    const cls=sp==null?'none':ex.suspicious?'mid':sp>0?'pos':'neg';
+    const warn=ex.suspicious?'⚠️':'';
+    const spTxt=sp==null?'—':warn+(sp>=0?'+':'')+sp.toFixed(2)+'%';
+    const susHint=ex.suspicious?'<div style="grid-column:1/-1;color:var(--gold);font-size:9.5px;padding-top:3px">⚠️ проверь ликвидность</div>':'';
     return `<div class="dash-ex-card" onclick="dashOpenEx('${esc(ex.id)}')">
       <div class="dash-ex-top"><span class="dash-ex-name">${esc(ex.icon)} ${esc(ex.name)}</span><span class="dash-ex-sp ${cls}">${spTxt}</span></div>
       <div class="dash-ex-prices">
         <div class="dash-ex-col"><div class="dash-ex-lbl">Покупка</div><div class="dash-ex-val g">${ex.buy?fmt(ex.buy):'—'}</div></div>
         <div class="dash-ex-col" style="text-align:right"><div class="dash-ex-lbl">Продажа</div><div class="dash-ex-val r">${ex.sell?fmt(ex.sell):'—'}</div></div>
+        ${susHint}
       </div>
     </div>`;
   }).join('');

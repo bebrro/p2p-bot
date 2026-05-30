@@ -1,5 +1,6 @@
 from typing import Optional
 from utils.http import post_json
+from utils.pricing import pick_best_price
 
 BINANCE_P2P_URL = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
 
@@ -15,7 +16,11 @@ async def get_ads(
     trade_type: str = "BUY",
     pay_types:  Optional[list] = None,
     rows:       int = 10,
+    _force:     bool = False,
 ) -> list[dict]:
+    from config import DISABLED_EXCHANGES
+    if "binance" in DISABLED_EXCHANGES and not _force:
+        return []
     payload = {
         "asset":         asset,
         "fiat":          fiat,
@@ -48,5 +53,5 @@ async def get_ads(
 
 
 async def get_best_price(asset: str, fiat: str, trade_type: str) -> Optional[float]:
-    ads = await get_ads(asset=asset, fiat=fiat, trade_type=trade_type, rows=1)
-    return ads[0]["price"] if ads else None
+    ads = await get_ads(asset=asset, fiat=fiat, trade_type=trade_type, rows=10)
+    return pick_best_price(ads, buy_side=(trade_type == "BUY"), fiat=fiat, asset=asset)

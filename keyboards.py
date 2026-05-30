@@ -47,6 +47,8 @@ def main_menu() -> InlineKeyboardMarkup:
             _B(text="📊 P&L",     callback_data="pnl:view"),
             _B(text="🤖 AI",      callback_data="ai:start"),
         ],
+        # Реферальная программа — органический рост
+        [_B(text="👥 Пригласить друга → +7 дней Pro 🎁", callback_data="ref:show")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
