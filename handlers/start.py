@@ -22,11 +22,30 @@ from keyboards import (
     analytics_submenu, account_submenu,
 )
 from utils.subscription import get_plan_key, PLANS, format_expires
+from config import ADMIN_IDS
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 TRIAL_DAYS = 3
+
+
+# ─── Владелец: автоматический пожизненный Team ────────────────────────────────
+
+async def ensure_owner_access(uid: int) -> None:
+    """
+    Если пользователь — владелец (uid в ADMIN_IDS), гарантируем ему
+    пожизненный Team (expires_at=None). Вызывается при /start и /menu —
+    владелец никогда ничего не платит и всегда имеет полный доступ.
+    """
+    if uid not in ADMIN_IDS or not db.ok():
+        return
+    sub = await db.subscription_get(uid)
+    # Уже пожизненный Team — ничего не делаем
+    if sub and sub.get("plan") == "team" and sub.get("expires_at") is None:
+        return
+    await db.subscription_set(uid, "team", None)   # None = бессрочно
+    logger.info(f"Owner access granted (lifetime Team): uid={uid}")
 
 
 # ─── Текст главного меню с баннером статуса подписки ───────────────────────────
@@ -190,6 +209,16 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
         except (ValueError, Exception) as e:
             logger.warning(f"Bad ref arg '{ref_arg}': {e}")
 
+    # Владелец — сразу пожизненный Team, без триала
+    if uid in ADMIN_IDS:
+        await ensure_owner_access(uid)
+        await message.answer(
+            await menu_text(uid),
+            reply_markup=main_menu(),
+            parse_mode="HTML",
+        )
+        return
+
     if is_new or await _is_new_user(uid):
         await _give_trial(uid)
         await message.answer(
@@ -264,9 +293,29 @@ async def ob_finish(callback: CallbackQuery):
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
     """Показывает главное меню без онбординга — для всех повторных заходов."""
+    uid = message.from_user.id
+    await ensure_owner_access(uid)   # владельцу — гарантированный полный доступ
     await message.answer(
-        await menu_text(message.from_user.id),
+        await menu_text(uid),
         reply_markup=main_menu(),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("myid"))
+async def cmd_myid(message: Message):
+    """Показывает Telegram ID — нужен чтобы вписать себя в ADMIN_IDS."""
+    uid       = message.from_user.id
+    is_owner  = uid in ADMIN_IDS
+    status    = "✅ ты владелец (полный доступ)" if is_owner else "обычный пользователь"
+    await message.answer(
+        f"🆔 <b>Твой Telegram ID:</b>\n<code>{uid}</code>\n\n"
+        f"Статус: {status}\n\n"
+        + ("" if is_owner else
+           "Чтобы получить полный доступ владельца:\n"
+           "1. Скопируй ID выше\n"
+           "2. Railway → Variables → <code>ADMIN_IDS</code> = твой ID\n"
+           "3. После редеплоя отправь /start"),
         parse_mode="HTML",
     )
 

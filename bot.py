@@ -183,6 +183,14 @@ async def main():
         await auto_reprice.load_from_db()       # Правила репрайсера
         await arbitrage.load_from_db()          # Арбитражные алерты
 
+        # Владельцам (ADMIN_IDS) — пожизненный Team при старте
+        from config import ADMIN_IDS
+        for owner_id in ADMIN_IDS:
+            sub = await db.subscription_get(owner_id)
+            if not (sub and sub.get("plan") == "team" and sub.get("expires_at") is None):
+                await db.subscription_set(owner_id, "team", None)
+                logger.info(f"Owner lifetime Team granted at startup: uid={owner_id}")
+
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=_make_storage())
 
