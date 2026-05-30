@@ -508,6 +508,43 @@ def test_earn_demo_none_when_no_arb():
     assert srv._earn_demo([], "KZT") is None
 
 
+# ─── Связка «без карт» (треугольник посредника) ───────────────────────────────
+
+def test_triangle_requires_third_party():
+    """Объявления, ЯВНО не принимающие 3-х лиц, исключаются из связки."""
+    import webapp.server as srv
+    # покупка USDT (asks) — дешёвый ad запрещает 3-х лиц → не годится
+    buy = [
+        {"price": 500, "third_party": False, "nickname": "no3p", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+        {"price": 505, "third_party": True,  "nickname": "ok3p", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+    ]
+    # продажа USDT (bids)
+    sell = [
+        {"price": 515, "third_party": None, "nickname": "may", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+    ]
+    t = srv._triangle(buy, sell, "KZT")
+    assert t is not None
+    assert t["buy"]["price"] == 505      # 500 отброшен (запретил 3-х лиц)
+    assert t["sell"]["price"] == 515
+    assert t["buy"]["confirm3p"] is True
+    assert t["pct"] > 0
+    assert t["profit"] > 0
+
+def test_triangle_none_without_eligible_legs():
+    import webapp.server as srv
+    buy  = [{"price": 500, "third_party": False, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
+    sell = [{"price": 515, "third_party": None,  "nickname": "y", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
+    # покупка целиком запрещает 3-х лиц → связки нет
+    assert srv._triangle(buy, sell, "KZT") is None
+
+def test_triangle_none_when_no_spread():
+    import webapp.server as srv
+    buy  = [{"price": 515, "third_party": True, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
+    sell = [{"price": 510, "third_party": True, "nickname": "y", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
+    # купить дороже чем продать → положительной связки нет
+    assert srv._triangle(buy, sell, "KZT") is None
+
+
 def test_channel_post_format():
     """Пост для канала формируется из готовых строк арбитража."""
     import handlers.channel as ch

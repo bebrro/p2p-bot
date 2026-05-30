@@ -94,6 +94,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .preset-empty{font-size:10px;color:var(--hint);font-style:italic}
 
 /* ── Orderbook ────────────────────────────────────────────── */
+.tri-card{background:linear-gradient(135deg,rgba(124,77,255,.16),rgba(44,165,224,.10));border:1px solid rgba(124,77,255,.35);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;animation:fadeIn .2s ease}
+.tri-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.tri-title{font-size:12px;font-weight:700}
+.tri-pct{font-size:15px;font-weight:800;color:var(--green)}
+.tri-pct.warn{color:var(--gold)}
+.tri-legs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
+.tri-leg{background:rgba(0,0,0,.18);border-radius:7px;padding:6px 8px}
+.tri-leg-lbl{font-size:9px;color:var(--hint);text-transform:uppercase;letter-spacing:.3px}
+.tri-leg-price{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.tri-leg-nick{font-size:10px;color:var(--hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tri-leg-3p{font-size:9px;font-weight:600}
+.tri-leg-3p.ok{color:var(--green)}.tri-leg-3p.maybe{color:var(--hint)}
+.tri-profit{font-size:11px;text-align:center;color:var(--text)}
+.tri-profit b{color:var(--green)}
+.tri-warn{font-size:9.5px;color:var(--gold);text-align:center;margin-top:3px}
 .book-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .col-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .buy-col .col-title{color:var(--green)}.sell-col .col-title{color:var(--red)}
@@ -562,6 +577,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </div>
     </div>
   </div>
+
+  <!-- Связка «без карт» (треугольник посредника) -->
+  <div class="tri-card" id="triBanner" style="display:none"></div>
 
   <!-- Стакан -->
   <div class="book-grid">
@@ -1042,7 +1060,35 @@ async function loadOrderbook(){
     document.getElementById('spreadChip').className='spread-chip bad';
   }
 }
-function renderOrderbook({buy,sell,spread}){
+function renderTriangle(t){
+  const el=document.getElementById('triBanner');
+  if(!t){ el.style.display='none'; return; }
+  el.style.display='block';
+  const warn=t.suspicious;
+  const tag=l=>l.confirm3p
+    ?'<span class="tri-leg-3p ok">✅ 3-е лица</span>'
+    :'<span class="tri-leg-3p maybe">• не запрещены</span>';
+  const leg=(l,lbl)=>`<div class="tri-leg">
+      <div class="tri-leg-lbl">${lbl}</div>
+      <div class="tri-leg-price">${fmt(l.price)}</div>
+      <div class="tri-leg-nick">${esc(l.nickname)}</div>
+      ${tag(l)}
+    </div>`;
+  el.innerHTML=`
+    <div class="tri-head">
+      <span class="tri-title">🔺 Связка без карт</span>
+      <span class="tri-pct${warn?' warn':''}">+${t.pct.toFixed(2)}%</span>
+    </div>
+    <div class="tri-legs">
+      ${leg(t.buy,'📥 Купить USDT')}
+      ${leg(t.sell,'📤 Продать USDT')}
+    </div>
+    <div class="tri-profit">На обороте ${fmtK(t.amount)} ${t.fiat} → <b>+${fmt(t.profit)} ${t.fiat}</b></div>
+    ${warn?'<div class="tri-warn">⚠️ проверь ликвидность и лимиты — возможны приманки</div>':''}
+  `;
+}
+function renderOrderbook({buy,sell,spread,triangle}){
+  renderTriangle(triangle||null);
   if(buy.length){ document.getElementById('buyPrice').textContent=fmt(buy[0].price); const v=buy.reduce((s,a)=>s+(a.available||0),0); document.getElementById('buyVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
   if(sell.length){ document.getElementById('sellPrice').textContent=fmt(sell[0].price); const v=sell.reduce((s,a)=>s+(a.available||0),0); document.getElementById('sellVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
   const chip=document.getElementById('spreadChip');

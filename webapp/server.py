@@ -132,6 +132,53 @@ def _earn_demo(arb: list[dict], fiat: str) -> dict | None:
     }
 
 
+def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
+    """
+    «Связка без карт» (посредник): купить USDT дёшево (лучший ask) и продать
+    дорого (лучший bid) на одной бирже. ОБЕ ноги обязаны принимать третьих
+    лиц — иначе схема (платёж контрагент→контрагент) не работает.
+
+    buy_ads  = объявления где ТЫ покупаешь USDT (продавцы/asks)
+    sell_ads = объявления где ТЫ продаёшь USDT (покупатели/bids)
+    """
+    def ok(a):  # не принимает 3-х лиц → связка невозможна
+        return a.get("third_party") is not False
+
+    buys  = [a for a in buy_ads  if ok(a) and (a.get("price") or 0) > 0]
+    sells = [a for a in sell_ads if ok(a) and (a.get("price") or 0) > 0]
+    if not buys or not sells:
+        return None
+
+    bb = min(buys,  key=lambda a: a["price"])   # купить дешевле
+    bs = max(sells, key=lambda a: a["price"])   # продать дороже
+    sp = calc_spread(bb["price"], bs["price"])
+    if sp["spread_pct"] <= 0:
+        return None   # положительной связки нет
+
+    vol = _REF_VOLUME.get(fiat, 1_000)
+
+    def _leg(a):
+        return {
+            "nickname":  a.get("nickname", "—"),
+            "price":     a["price"],
+            "min":       a.get("min_amount", 0),
+            "max":       a.get("max_amount", 0),
+            "pay":       (a.get("pay_types") or [])[:2],
+            "confirm3p": a.get("third_party") is True,   # явно написал «3-е лица ок»
+        }
+
+    return {
+        "buy":        _leg(bb),
+        "sell":       _leg(bs),
+        "pct":        sp["spread_pct"],
+        "abs":        sp["spread_abs"],
+        "profit":     round(vol * sp["spread_pct"] / 100),
+        "amount":     vol,
+        "fiat":       fiat,
+        "suspicious": sp["spread_pct"] > SUSPICIOUS_SPREAD_PCT,
+    }
+
+
 def _build_arbitrage(exchanges: list[dict]) -> list[dict]:
     """Кросс-биржевой арбитраж только по живым биржам (status='ok')."""
     live = [e for e in exchanges if e.get("status") == "ok"]
@@ -272,14 +319,23 @@ async def api_orderbook(request: web.Request) -> web.Response:
             _fetch(ex, fiat, asset, "buy",  15, pay),
             _fetch(ex, fiat, asset, "sell", 15, pay),
         )
-        buy_ads  = _apply_filters(_enrich(buy_ads))
-        sell_ads = _apply_filters(_enrich(sell_ads))
+        buy_en  = _enrich(buy_ads)
+        sell_en = _enrich(sell_ads)
+
+        # Связка «без карт» — считаем из всех объявлений (своё условие по 3-м лицам)
+        triangle = _triangle(buy_en, sell_en, fiat)
+
+        buy_ads  = _apply_filters(buy_en)
+        sell_ads = _apply_filters(sell_en)
 
         spread = {}
         if buy_ads and sell_ads:
             spread = calc_spread(buy_ads[0]["price"], sell_ads[0]["price"])
 
-        return web.json_response({"buy": buy_ads[:10], "sell": sell_ads[:10], "spread": spread})
+        return web.json_response({
+            "buy": buy_ads[:10], "sell": sell_ads[:10],
+            "spread": spread, "triangle": triangle,
+        })
     except Exception as e:
         logger.error(f"api_orderbook {ex}/{fiat}/{asset}: {e}")
         return web.json_response({"error": str(e)}, status=500)
