@@ -108,6 +108,30 @@ async def _gather_exchanges(asset: str, fiat: str) -> list[dict]:
     return exchanges
 
 
+# Референсный оборот по фиатам (≈ $1000) — для демо «сколько бы заработал».
+# Круглые суммы, понятные трейдеру.
+_REF_VOLUME = {"KZT": 500_000, "RUB": 100_000, "TRY": 35_000, "USD": 1_000}
+
+
+def _earn_demo(arb: list[dict], fiat: str) -> dict | None:
+    """
+    «Момент вау»: сколько бы заработал на референсном обороте по лучшему
+    РЕАЛИСТИЧНОМУ (не подозрительному) спреду. None если нет возможностей.
+    """
+    # предпочитаем не-подозрительный арб (credible число), иначе лучший
+    credible = next((a for a in arb if not a.get("suspicious")), arb[0] if arb else None)
+    if not credible or credible.get("pct", 0) <= 0:
+        return None
+    vol = _REF_VOLUME.get(fiat, 1_000)
+    return {
+        "amount": vol,
+        "profit": round(vol * credible["pct"] / 100),
+        "pct":    credible["pct"],
+        "fiat":   fiat,
+        "route":  f'{credible["from"]} → {credible["to"]}',
+    }
+
+
 def _build_arbitrage(exchanges: list[dict]) -> list[dict]:
     """Кросс-биржевой арбитраж только по живым биржам (status='ok')."""
     live = [e for e in exchanges if e.get("status") == "ok"]
@@ -991,6 +1015,7 @@ async def api_dashboard(request: web.Request) -> web.Response:
             "asset":     asset,
             "exchanges": exchanges,
             "best_arb":  arb[0] if arb else None,
+            "earn":      _earn_demo(arb, fiat),
             "tools":     tools,
             "ts":        datetime.now(timezone.utc).isoformat(),
         })

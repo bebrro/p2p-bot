@@ -476,6 +476,38 @@ def test_build_arbitrage_excludes_disabled():
     # спред >5% помечен подозрительным
     assert any(a["suspicious"] for a in arb)
 
+def test_earn_demo_wow():
+    """«Момент вау»: считает заработок на референсном обороте."""
+    import webapp.server as srv
+    arb = [
+        {"from": "Binance", "to": "Bybit", "from_id": "binance", "to_id": "bybit",
+         "pct": 2.0, "abs": 10.0, "suspicious": False},
+    ]
+    earn = srv._earn_demo(arb, "KZT")
+    assert earn is not None
+    # 500000 KZT × 2% = 10000
+    assert earn["profit"] == 10_000
+    assert earn["amount"] == 500_000
+    assert earn["fiat"] == "KZT"
+
+def test_earn_demo_prefers_credible():
+    """Подозрительный спред не берётся для вау-числа, если есть нормальный."""
+    import webapp.server as srv
+    arb = [
+        {"from": "A", "to": "B", "from_id": "a", "to_id": "b",
+         "pct": 15.0, "abs": 75.0, "suspicious": True},     # фейк-спред
+        {"from": "C", "to": "D", "from_id": "c", "to_id": "d",
+         "pct": 1.5, "abs": 7.5, "suspicious": False},      # реальный
+    ]
+    earn = srv._earn_demo(arb, "USD")
+    assert earn["pct"] == 1.5            # взял реальный, не 15%
+    assert earn["profit"] == 15         # 1000 × 1.5%
+
+def test_earn_demo_none_when_no_arb():
+    import webapp.server as srv
+    assert srv._earn_demo([], "KZT") is None
+
+
 def test_channel_post_format():
     """Пост для канала формируется из готовых строк арбитража."""
     import handlers.channel as ch

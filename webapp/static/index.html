@@ -357,6 +357,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .dash-plan-bar{background:var(--bg2);border-radius:var(--r);padding:9px 12px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;animation:fadeIn .2s ease}
 .dash-plan-name{font-size:13px;font-weight:700}
 .dash-plan-sub{font-size:10px;color:var(--hint);margin-top:1px}
+.dash-earn{background:linear-gradient(135deg,rgba(250,166,26,.18),rgba(67,181,129,.12));border:1px solid rgba(250,166,26,.35);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;text-align:center;animation:fadeIn .25s ease}
+.dash-earn-lbl{font-size:11px;color:var(--gold);font-weight:600;letter-spacing:.2px}
+.dash-earn-val{font-size:26px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;line-height:1.15;margin:2px 0}
+.dash-earn-sub{font-size:10px;color:var(--hint);line-height:1.35}
 .dash-arb{background:linear-gradient(135deg,rgba(67,181,129,.13),rgba(44,165,224,.1));border:1px solid rgba(67,181,129,.25);border-radius:var(--r);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:opacity .12s;animation:fadeIn .2s ease}
 .dash-arb:active{opacity:.82}.dash-arb.no-arb{background:var(--bg2);border-color:rgba(255,255,255,.06);cursor:default}
 .dash-arb-route{font-size:13px;font-weight:700;margin-bottom:2px}
@@ -448,6 +452,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="dash-plan-sub" id="dashPlanSub">Подключение...</div>
     </div>
     <span class="sub-plan-badge" id="dashPlanBadge">—</span>
+  </div>
+
+  <!-- WOW: потенциальный заработок сегодня -->
+  <div class="dash-earn" id="dashEarnCard" style="display:none">
+    <div class="dash-earn-lbl">💰 СЕГОДНЯ МОЖНО ЗАРАБОТАТЬ</div>
+    <div class="dash-earn-val" id="dashEarnVal">—</div>
+    <div class="dash-earn-sub" id="dashEarnSub"></div>
   </div>
 
   <!-- Best arbitrage -->
@@ -1793,6 +1804,9 @@ async function loadDashboard(){
     // Exchange grid
     renderDashExchanges(data.exchanges||[]);
 
+    // Момент вау: потенциальный заработок
+    renderDashEarn(data.earn||null);
+
     // Arbitrage banner
     dashArbData=data.best_arb||null;
     renderDashArb(dashArbData);
@@ -1838,6 +1852,14 @@ function renderDashExchanges(exchanges){
   }).join('');
 }
 
+function renderDashEarn(earn){
+  const card=document.getElementById('dashEarnCard');
+  if(!earn||earn.profit<=0){ card.style.display='none'; return; }
+  card.style.display='block';
+  document.getElementById('dashEarnVal').textContent='+'+fmt(earn.profit)+' '+earn.fiat;
+  document.getElementById('dashEarnSub').textContent=
+    `на обороте ${fmtK(earn.amount)} ${earn.fiat} · ${earn.route} +${earn.pct.toFixed(2)}%`;
+}
 function renderDashArb(arb){
   const card=document.getElementById('dashArbCard');
   const route=document.getElementById('dashArbRoute');
