@@ -476,6 +476,23 @@ def test_build_arbitrage_excludes_disabled():
     # спред >5% помечен подозрительным
     assert any(a["suspicious"] for a in arb)
 
+def test_orderbook_amount_filter():
+    """Фильтр суммы: показывает только объявления, где сумму реально сделать."""
+    import webapp.server as srv
+    # объявление с минималкой 200k — нельзя сделать 500
+    big = {"min_amount": 200_000, "max_amount": 5_000_000}
+    assert srv._tradeable_at(big, 500) is False        # 500 < min 200k → скрыть
+    # обычное объявление 1k..50k
+    normal = {"min_amount": 1_000, "max_amount": 50_000}
+    assert srv._tradeable_at(normal, 5_000) is True    # 5000 в диапазоне → показать
+    assert srv._tradeable_at(normal, 500) is False     # 500 < min 1k → скрыть
+    assert srv._tradeable_at(normal, 99_000) is False  # больше max → скрыть
+    # нет данных о максимуме — проверяем только нижнюю границу
+    no_max = {"min_amount": 1_000, "max_amount": 0}
+    assert srv._tradeable_at(no_max, 5_000) is True
+    assert srv._tradeable_at(no_max, 500) is False
+
+
 def test_disabled_exchange_returns_empty_fast():
     """get_ads мгновенно возвращает [] когда биржа в DISABLED_EXCHANGES."""
     import asyncio

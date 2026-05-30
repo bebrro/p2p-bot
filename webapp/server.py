@@ -144,6 +144,19 @@ def _enrich(ads: list) -> list:
     return ads
 
 
+def _tradeable_at(ad: dict, amount: float) -> bool:
+    """
+    True если сумму `amount` (в фиате) реально можно сделать в этом объявлении:
+    она попадает в лимит [min_amount .. max_amount].
+    Если max неизвестен (0) — проверяем только нижнюю границу.
+    """
+    lo = ad.get("min_amount") or 0
+    hi = ad.get("max_amount") or 0
+    if hi <= 0:
+        return lo <= amount
+    return lo <= amount <= hi
+
+
 async def _fetch(exchange: str, fiat: str, asset: str, side: str,
                  rows: int = 10, pay: str = ""):
     # Отключённую биржу не дёргаем — мгновенно пусто (без таймаута мёртвого API)
@@ -209,7 +222,9 @@ async def api_orderbook(request: web.Request) -> web.Response:
 
     def _apply_filters(ads: list) -> list:
         if min_amount:
-            ads = [a for a in ads if (a.get("max_amount") or 0) >= min_amount]
+            # Показываем объявления, где сумму РЕАЛЬНО можно сделать:
+            # лимит [min_ad .. max_ad] включает твою сумму.
+            ads = [a for a in ads if _tradeable_at(a, min_amount)]
         if third_party == "yes":
             ads = [a for a in ads if a.get("third_party")]
         elif third_party == "no":
