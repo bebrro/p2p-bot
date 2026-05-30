@@ -34,6 +34,7 @@ from utils.spread import calc_spread
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
+from utils.desc_parser import parse_description
 from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
 
 logger     = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ def _build_arbitrage(exchanges: list[dict]) -> list[dict]:
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _enrich(ads: list) -> list:
-    """Добавляет поля риска и нормализует completion."""
+    """Добавляет поля риска, парсит описание (3-е лица и пр.), нормализует completion."""
     for ad in ads:
         ad["risk_score"]   = risk_score(ad)
         ad["risk_badge"]   = risk_badge(ad)
@@ -141,6 +142,11 @@ def _enrich(ads: list) -> list:
         if isinstance(c, float) and 0 < c <= 1:
             ad["completion"] = round(c * 100, 1)
         ad["pay_types"] = list(dict.fromkeys(ad.get("pay_types", [])))
+        # Парсим описание: 3-е лица, точная сумма, ограничения времени и т.д.
+        info = parse_description(ad.get("description", ""))
+        ad["third_party"]  = info["third_party"]    # True | False | None
+        ad["exact_amount"] = info["exact_amount"]
+        ad["smart_flags"]  = info["flags"]
     return ads
 
 
@@ -226,9 +232,11 @@ async def api_orderbook(request: web.Request) -> web.Response:
             # лимит [min_ad .. max_ad] включает твою сумму.
             ads = [a for a in ads if _tradeable_at(a, min_amount)]
         if third_party == "yes":
-            ads = [a for a in ads if a.get("third_party")]
+            # «принимает 3-х лиц»: прячем только тех, кто ЯВНО написал «не принимаю»
+            ads = [a for a in ads if a.get("third_party") is not False]
         elif third_party == "no":
-            ads = [a for a in ads if not a.get("third_party")]
+            # «без 3-х лиц»: прячем только тех, кто ЯВНО принимает
+            ads = [a for a in ads if a.get("third_party") is not True]
         if min_orders:
             ads = [a for a in ads if (a.get("orders") or 0) >= min_orders]
         if min_comp:

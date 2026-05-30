@@ -476,6 +476,35 @@ def test_build_arbitrage_excludes_disabled():
     # спред >5% помечен подозрительным
     assert any(a["suspicious"] for a in arb)
 
+def test_desc_parser_third_party():
+    """Парсер описаний правильно читает «3-е лица» в разных формах."""
+    from utils.desc_parser import parse_description as p
+    # НЕ принимает
+    for txt in ("не принимаю от третьих лиц", "третьи лица не принимаю",
+                "без третьих лиц", "только свои переводы", "3 лица не принимаю"):
+        assert p(txt)["third_party"] is False, txt
+    # принимает
+    for txt in ("принимаю от третьих лиц", "3 лица ок",
+                "третьи лица допускаю", "от третьих лиц можно"):
+        assert p(txt)["third_party"] is True, txt
+    # не упомянуто
+    for txt in ("оплата картой сбербанк", "перевод ровно 5000", ""):
+        assert p(txt)["third_party"] is None, txt
+
+def test_enrich_sets_third_party():
+    """_enrich парсит описание и проставляет third_party на объявление."""
+    import webapp.server as srv
+    ads = [
+        {"description": "не принимаю от третьих лиц", "completion": 0, "pay_types": []},
+        {"description": "принимаю от 3 лиц ок",        "completion": 0, "pay_types": []},
+        {"description": "просто оплата",               "completion": 0, "pay_types": []},
+    ]
+    out = srv._enrich(ads)
+    assert out[0]["third_party"] is False
+    assert out[1]["third_party"] is True
+    assert out[2]["third_party"] is None
+
+
 def test_orderbook_amount_filter():
     """Фильтр суммы: показывает только объявления, где сумму реально сделать."""
     import webapp.server as srv
