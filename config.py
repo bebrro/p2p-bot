@@ -60,9 +60,9 @@ CHANNEL_POST_HOURS = {
 # Можно переопределить через env: FIATS="KZT,RUB,THB,..."
 _DEFAULT_FIATS = (
     "KZT,RUB,TRY,USD,"          # базовые
-    "THB,IDR,VND,"              # ЮВА
+    "IDR,VND,"                  # ЮВА (THB убран — нет P2P на Binance/Bybit)
     "INR,AED,NGN,BRL,"          # крупные рынки
-    "GEL,AMD,AZN,UZS,KGS"       # СНГ
+    "GEL,AMD,AZN,KGS"           # СНГ (UZS убран — нет P2P)
 )
 FIATS = [x.strip().upper() for x in os.getenv("FIATS", _DEFAULT_FIATS).split(",") if x.strip()]
 ASSETS = ["USDT", "BTC", "ETH"]
