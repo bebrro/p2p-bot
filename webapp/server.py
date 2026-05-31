@@ -148,8 +148,11 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
     sell_ads = объявления где ТЫ продаёшь USDT (покупатели/bids)
     """
     def ok(a):
-        # не принимает 3-х лиц → связка невозможна
-        if a.get("third_party") is False:
+        # Связка ВСЯ держится на третьих лицах → берём только тех, кто ЯВНО
+        # подтвердил их приём (third_party is True). «Не указано» (None) —
+        # недостаточно: на Binance описаний нет вообще, а многие по факту
+        # запрещают 3-х лиц. Лучше пусто, чем нерабочая связка.
+        if a.get("third_party") is not True:
             return False
         # помеченные скамеры/ловушки — НЕ предлагаем в связке
         if a.get("scam_recruit") or a.get("trap"):
