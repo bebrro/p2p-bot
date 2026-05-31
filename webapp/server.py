@@ -224,6 +224,7 @@ def _enrich(ads: list) -> list:
         ad["exact_amount"] = info["exact_amount"]
         ad["smart_flags"]  = info["flags"]
         ad["scam_recruit"] = info.get("scam_recruit", False)
+        ad["trap"]         = info.get("trap", False)
     return ads
 
 

@@ -645,6 +645,20 @@ def test_enrich_sets_scam_recruit():
     out = srv._enrich(ads)
     assert out[0]["scam_recruit"] is True
 
+def test_desc_parser_trap_and_exact_amount():
+    """Ловушка для спора + фикс ложного «ровно 1»."""
+    from utils.desc_parser import parse_description as p
+    ad = ('Принимаю только 1 ПЛАТЕЖОМ. После оплаты чек на почту от имени банка. '
+          'Пишите: "отправлю и со всем согласен"')
+    r = p(ad)
+    assert r["trap"] is True               # фраза-согласие + чек на почту
+    assert r["exact_amount"] is None       # «только 1» — это НЕ сумма (не «ровно 1»)
+    # реальная сумма ≥100 всё ещё ловится
+    assert p("оплата ровно 5000 руб")["exact_amount"] == 5000
+    # легитимные — без ловушки
+    for txt in ("Kaspi оплата сразу", "работаю строго с 1 лицами", ""):
+        assert p(txt)["trap"] is False, txt
+
 
 def test_enrich_sets_third_party():
     """_enrich парсит описание и проставляет third_party на объявление."""

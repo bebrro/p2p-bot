@@ -59,6 +59,20 @@ _EXACT_AMOUNT = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# ── Подозрительные условия / ловушка для спора ───────────────────────────────
+# Скамеры: заставляют написать фразу-«согласие» (скринят для апелляции),
+# требуют «чек на почту от имени банка» (готовят развод).
+_TRAP = re.compile(
+    r'('
+    r'со\s+вс[ёе]м\s+соглас'                       # «со всем согласен» (скрипт-фраза)
+    r'|пиш\w+[:\s«"]+[^"»\n]{0,40}соглас'           # «пишите: ... согласен»
+    r'|напиш\w+\s+(?:фраз|следующ|это|мне)\b'       # «напишите фразу...»
+    r'|чек\w*\s+(?:на\s+почт|от\s+имени\s+банк)'    # «чек на почту / от имени банка»
+    r'|скрин\w*\s+чек'                              # «скрин чека»
+    r')',
+    re.IGNORECASE | re.UNICODE,
+)
+
 # ── Временные ограничения ─────────────────────────────────────────────────────
 _TIME_LIMIT = re.compile(
     r'('
@@ -140,7 +154,7 @@ def parse_description(text: str) -> dict:
     """
     if not text or not text.strip():
         return {"third_party": None, "exact_amount": None,
-                "scam_recruit": False, "flags": []}
+                "scam_recruit": False, "trap": False, "flags": []}
 
     t = text.strip()
     flags: list[str] = []
@@ -162,12 +176,15 @@ def parse_description(text: str) -> dict:
         third_party = None   # не упомянуто
 
     # ── Точная сумма ──────────────────────────────────────────────────────────
+    # Порог ≥100: «только 1 ПЛАТЕЖОМ» / «1 лицо» — это НЕ сумма, а кол-во.
     exact_amount: int | None = None
     m = _EXACT_AMOUNT.search(t)
     if m:
         try:
-            exact_amount = int(m.group(1).replace(" ", ""))
-            flags.append(f"⚠️ ровно {exact_amount:,}".replace(",", " "))
+            val = int(m.group(1).replace(" ", ""))
+            if val >= 100:
+                exact_amount = val
+                flags.append(f"⚠️ ровно {exact_amount:,}".replace(",", " "))
         except ValueError:
             pass
 
@@ -184,6 +201,11 @@ def parse_description(text: str) -> dict:
     if bm:
         flags.append(f"🏦 {bm.group(0)}")
 
+    # ── Подозрительные условия / ловушка для спора ────────────────────────────
+    trap = bool(_TRAP.search(t))
+    if trap:
+        flags.insert(0, "⚠️ СТРАННЫЕ УСЛОВИЯ — возможна ловушка")
+
     # ── Вербовка / скам ───────────────────────────────────────────────────────
     # Ловим и по ключевым фразам, и по обходу фильтров (латиница+кириллица в слове)
     scam_recruit = bool(_SCAM_RECRUIT.search(t)) or _has_mixed_script(t)
@@ -194,6 +216,7 @@ def parse_description(text: str) -> dict:
         "third_party":  third_party,
         "exact_amount": exact_amount,
         "scam_recruit": scam_recruit,
+        "trap":         trap,
         "flags":        flags,
     }
 
