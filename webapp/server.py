@@ -341,6 +341,12 @@ async def api_orderbook(request: web.Request) -> web.Response:
         buy_ads  = _apply_filters(buy_en)
         sell_ads = _apply_filters(sell_en)
 
+        # Помеченные (скам/ловушка) — вниз списка, чтобы не ломали топ-цену стакана
+        def _sink_flagged(ads):
+            return sorted(ads, key=lambda a: 1 if (a.get("scam_recruit") or a.get("trap")) else 0)
+        buy_ads  = _sink_flagged(buy_ads)
+        sell_ads = _sink_flagged(sell_ads)
+
         spread = {}
         if buy_ads and sell_ads:
             spread = calc_spread(buy_ads[0]["price"], sell_ads[0]["price"])
