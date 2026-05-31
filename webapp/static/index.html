@@ -1167,6 +1167,8 @@ function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){
   if(spread?.spread_pct!=null){ const pct=spread.spread_pct; chip.textContent=`⇔ ${pct}%`; chip.className='spread-chip'+(pct>=0.5?' good':pct>=0.2?' mid':''); }
   else{ chip.textContent='—'; chip.className='spread-chip'; }
   const showRisk=loadSettings().show_risk!==false;
+  // Перекошенный рынок: топ-бид (L[0], сторона покупки мейкера) ≥ низ-аск (R[0])
+  __makerCrossed = bookMode==='maker' && L.length && R.length && (L[0].price >= R[0].price);
   __book={buy:L,sell:R};   // для тапа по объявлению (с учётом инверсии)
   // Методы оплаты — из реальных объявлений (все способы, любая биржа/валюта)
   mergePayMethods('payRow',L.concat(R),S.pay,v=>{S.pay=v;restartBookTimer();});
@@ -1175,9 +1177,17 @@ function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){
   document.getElementById('sellList').innerHTML=makerRecCard('sell',R)+renderAdList(R,showRisk,'sell');
 }
 const FIAT_STEP={KZT:0.5,RUB:0.05,TRY:0.05,USD:0.001,THB:0.01,IDR:1,VND:1,INR:0.01,AED:0.001,NGN:0.1,BRL:0.001,GEL:0.001,AMD:0.1,AZN:0.001,UZS:1,KGS:0.01};
+let __makerCrossed=false;
 function makerRecCard(side,ads){
   // Только в мейкер-режиме и если есть лидер
   if(bookMode!=='maker'||!ads?.length) return '';
+  // Перекошенный рынок (биды ≥ асков) — это ТЕЙКЕР-связка, не мейкинг.
+  if(__makerCrossed){
+    return `<div class="ad-card" style="border-left-color:var(--red);background:rgba(240,71,71,.10)">
+      <div class="ad-nick" style="color:var(--red);font-weight:700">⚠️ Рынок перекошен</div>
+      <div class="ad-meta">биды выше асков — это <b>тейкер-связка</b> (купи дёшево / продай дорого сейчас). Мейкеру невыгодно: купишь дороже чем продашь. Переключись на 👤 Тейкер.</div>
+    </div>`;
+  }
   const step=FIAT_STEP[S.fiat]||0.01;
   const leader=ads[0].price;
   // 'buy' = колонка Покупают (биды): чтобы быть #1 — встать ВЫШЕ лидера
