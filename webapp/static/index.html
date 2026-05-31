@@ -32,6 +32,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .pill-row:last-child{margin-bottom:0}
 .pill-row::-webkit-scrollbar,.form-pill-row::-webkit-scrollbar{display:none}
 .pill-row.hidden{display:none!important}
+.sel-row.hidden{display:none!important}
 .pill{padding:3px 9px;border-radius:20px;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--hint);cursor:pointer;font-size:11px;white-space:nowrap;transition:all .15s;flex-shrink:0;line-height:1.5}
 .pill.active{background:var(--btn);color:var(--btnt);border-color:var(--btn);font-weight:600}
 .pill:active{opacity:.75}
@@ -473,28 +474,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- ════════════════════ TAB: ГЛАВНАЯ ════════════════════════ -->
 <div class="tab-panel" id="tab-home">
   <!-- Fiat pills -->
-  <div class="dash-fiat-row" id="dashFiatRow">
-    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
-    <button class="pill" data-val="RUB">🇷🇺 RUB</button>
-    <button class="pill" data-val="TRY">🇹🇷 TRY</button>
-    <button class="pill" data-val="USD">🇺🇸 USD</button>
-    <button class="pill" data-val="IDR">🇮🇩 IDR</button>
-    <button class="pill" data-val="VND">🇻🇳 VND</button>
-    <button class="pill" data-val="INR">🇮🇳 INR</button>
-    <button class="pill" data-val="AED">🇦🇪 AED</button>
-    <button class="pill" data-val="NGN">🇳🇬 NGN</button>
-    <button class="pill" data-val="BRL">🇧🇷 BRL</button>
-    <button class="pill" data-val="GEL">🇬🇪 GEL</button>
-    <button class="pill" data-val="AMD">🇦🇲 AMD</button>
-    <button class="pill" data-val="AZN">🇦🇿 AZN</button>
-    <button class="pill" data-val="KGS">🇰🇬 KGS</button>
-  </div>
-
-  <!-- Crypto pills -->
-  <div class="dash-fiat-row" id="dashAssetRow">
-    <button class="pill active" data-val="USDT">USDT</button>
-    <button class="pill" data-val="BTC">₿ BTC</button>
-    <button class="pill" data-val="ETH">Ξ ETH</button>
+  <div class="sel-row" style="margin-bottom:9px">
+    <button class="sel-btn" id="dSelFiat"  onclick="openSelector('dfiat')"><span id="dSelFiatTxt">🇰🇿 KZT</span> <span class="sel-caret">▾</span></button>
+    <button class="sel-btn" id="dSelAsset" onclick="openSelector('dasset')"><span id="dSelAssetTxt">USDT</span> <span class="sel-caret">▾</span></button>
   </div>
 
   <!-- Plan card -->
@@ -957,10 +939,16 @@ function mergePayMethods(ads){
   __payMethods=[...seen].sort((a,b)=>a.localeCompare(b)).map(m=>({v:m,l:m.length>22?m.slice(0,21)+'…':m}));
   updateSelLabels();
 }
+function updateDashSelLabels(){
+  const f=document.getElementById('dSelFiatTxt'); if(f) f.textContent=_labFrom(FIATS_UI,dashFiat);
+  const a=document.getElementById('dSelAssetTxt'); if(a) a.textContent=_labFrom(ASSETS_UI,dashAsset);
+}
 function openSelector(type){
   let opts,cur,title;
   if(type==='fiat'){ opts=FIATS_UI.map(x=>({v:x[0],l:x[1]})); cur=S.fiat; title='Валюта'; }
   else if(type==='asset'){ opts=ASSETS_UI.map(x=>({v:x[0],l:x[1]})); cur=S.asset; title='Криптовалюта'; }
+  else if(type==='dfiat'){ opts=FIATS_UI.map(x=>({v:x[0],l:x[1]})); cur=dashFiat; title='Валюта'; }
+  else if(type==='dasset'){ opts=ASSETS_UI.map(x=>({v:x[0],l:x[1]})); cur=dashAsset; title='Криптовалюта'; }
   else { opts=[{v:'',l:'💳 Все'}].concat(__payMethods); cur=S.pay; title='Способ оплаты'; }
   __selOpts=opts; __selType=type;
   document.getElementById('selModalBody').innerHTML=`<div class="sel-modal-title">${title}</div><div class="sel-grid">`+
@@ -972,6 +960,8 @@ function pickSel(i){
   const o=__selOpts[i], type=__selType; closeSelector();
   if(type==='fiat'){ if(o.v!==S.fiat){ S.fiat=o.v; S.pay=''; onMainStateChange(); } }
   else if(type==='asset'){ if(o.v!==S.asset){ S.asset=o.v; updateHeaderPair(); restartBookTimer(); } }
+  else if(type==='dfiat'){ if(o.v!==dashFiat){ dashFiat=o.v; document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset; updateDashSelLabels(); loadDashboard(); } }
+  else if(type==='dasset'){ if(o.v!==dashAsset){ dashAsset=o.v; document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset; updateDashSelLabels(); loadDashboard(); } }
   else { S.pay=o.v; restartBookTimer(); }
   updateSelLabels();
 }
@@ -2169,6 +2159,7 @@ renderPresets();
 updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
 document.getElementById('makerPayRow').classList.add('hidden');
 updateSelLabels();   // подписи кнопок-селекторов
+updateDashSelLabels();
 // Init book mode toggle from localStorage
 updateBookModeUI();
 // Start on home/dashboard tab
