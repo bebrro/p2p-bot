@@ -119,6 +119,21 @@ _DEFER_PAY = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# ── Принимает с ЛЮБОГО банка ─────────────────────────────────────────────────
+# «переводите с любого банка», «любая карта» — банк-агностик, можно связать
+# с любой второй ногой (общий банк не требуется).
+_ANY_BANK = re.compile(
+    r'('
+    r'любо\w*\s+банк'                         # любой/любого банка
+    r'|с\s+любо\w*\s+(?:банк|карт)'           # с любого банка / с любой карты
+    r'|любо\w*\s+карт'                        # любая карта / любой картой
+    r'|не\s*важно\s+(?:какой\s+|с\s+какого\s+)?банк'  # не важно какой банк
+    r'|все\s+банк'                            # все банки
+    r'|any\s+bank'
+    r')',
+    re.IGNORECASE | re.UNICODE,
+)
+
 # ── Запрет ИП / юрлиц ────────────────────────────────────────────────────────
 _NO_BUSINESS = re.compile(
     r'('
@@ -191,7 +206,7 @@ def parse_description(text: str) -> dict:
     """
     if not text or not text.strip():
         return {"third_party": None, "exact_amount": None,
-                "scam_recruit": False, "trap": False, "flags": []}
+                "scam_recruit": False, "trap": False, "any_bank": False, "flags": []}
 
     t = text.strip()
     flags: list[str] = []
@@ -262,6 +277,7 @@ def parse_description(text: str) -> dict:
         "exact_amount": exact_amount,
         "scam_recruit": scam_recruit,
         "trap":         trap,
+        "any_bank":     bool(_ANY_BANK.search(t)),
         "flags":        flags,
     }
 

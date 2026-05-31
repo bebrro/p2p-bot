@@ -217,8 +217,9 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
         for s in S:
             if s["price"] <= b["price"]:
                 continue
-            if not (bn & _bank_set(s)):
-                continue                       # нет общего банка
+            # Общий банк нужен, КРОМЕ случая когда хоть одна нога принимает любой банк
+            if not (bn & _bank_set(s)) and not b.get("any_bank") and not s.get("any_bank"):
+                continue
             lo = max(bmin, s.get("min_amount") or 0)
             hi = min(bmax if bmax > 0 else INF, (s.get("max_amount") or 0) or INF)
             if hi <= 0 or lo > hi:
@@ -234,6 +235,16 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
     bb, bs = best["b"], best["s"]
     lo, hi = best["lo"], best["hi"]
     vol    = hi if hi < INF else max(lo, _REF_VOLUME.get(fiat, 1_000))
+
+    # Какой банк показать (учитывая «любой банк»)
+    if bb.get("any_bank") and bs.get("any_bank"):
+        banks = ["любой банк"]
+    elif bb.get("any_bank"):
+        banks = (bs.get("pay_types") or [])[:3] or ["любой банк"]
+    elif bs.get("any_bank"):
+        banks = (bb.get("pay_types") or [])[:3] or ["любой банк"]
+    else:
+        banks = _common_bank_labels(bb, bs)
 
     def _leg(a):
         return {
@@ -256,7 +267,7 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
         "amount":     round(vol),
         "lo":         round(lo),
         "hi":         round(hi) if hi < INF else None,
-        "banks":      _common_bank_labels(bb, bs),
+        "banks":      banks,
         "cross":      bool(bb.get("exchange") and bs.get("exchange")
                           and bb.get("exchange") != bs.get("exchange")),
         "fiat":       fiat,
@@ -310,6 +321,7 @@ def _enrich(ads: list) -> list:
         ad["smart_flags"]  = info["flags"]
         ad["scam_recruit"] = info.get("scam_recruit", False)
         ad["trap"]         = info.get("trap", False)
+        ad["any_bank"]     = info.get("any_bank", False)
     return ads
 
 

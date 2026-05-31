@@ -616,6 +616,29 @@ def test_triangle_requires_common_bank():
     t = srv._triangle(buy, sell2, "KZT")
     assert t is not None and t["banks"] == ["Kaspi Bank"]
 
+def test_any_bank_relaxes_common_bank():
+    """Если нога пишет «любой банк» — общий банк не требуется."""
+    import webapp.server as srv
+    buy  = [{"price": 504, "third_party": True, "any_bank": True, "nickname": "A",
+             "min_amount": 1000, "max_amount": 500000, "pay_types": ["Freedom"]}]
+    sell = [{"price": 515, "third_party": True, "nickname": "B", "min_amount": 5000,
+             "max_amount": 300000, "pay_types": ["Halyk"]}]   # другой банк
+    t = srv._find_link(buy, sell, "KZT")
+    assert t is not None
+    assert t["banks"] == ["Halyk"]          # показываем банк конкретной ноги
+    buy2 = [{"price": 504, "third_party": True, "nickname": "A", "min_amount": 1000,
+             "max_amount": 500000, "pay_types": ["Freedom"]}]
+    assert srv._find_link(buy2, sell, "KZT") is None
+
+
+def test_any_bank_detection():
+    from utils.desc_parser import parse_description as p
+    assert p("Переводите с ЛЮБОГО банка!")["any_bank"] is True
+    assert p("принимаю с любой карты")["any_bank"] is True
+    assert p("не важно какой банк")["any_bank"] is True
+    assert p("Kaspi только")["any_bank"] is False
+
+
 def test_cross_exchange_link():
     """Межбиржевая связка: купить на одной, продать на другой, общий банк."""
     import webapp.server as srv
