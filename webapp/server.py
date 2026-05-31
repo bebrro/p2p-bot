@@ -213,15 +213,16 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
     for b in B:
         bn   = _bank_set(b)
         bmin = b.get("min_amount") or 0
-        bmax = b.get("max_amount") or 0
+        bmax = b.get("eff_max") or b.get("max_amount") or 0   # реальный потолок (с учётом запаса)
         for s in S:
             if s["price"] <= b["price"]:
                 continue
             # Общий банк нужен, КРОМЕ случая когда хоть одна нога принимает любой банк
             if not (bn & _bank_set(s)) and not b.get("any_bank") and not s.get("any_bank"):
                 continue
+            smax = s.get("eff_max") or s.get("max_amount") or 0
             lo = max(bmin, s.get("min_amount") or 0)
-            hi = min(bmax if bmax > 0 else INF, (s.get("max_amount") or 0) or INF)
+            hi = min(bmax if bmax > 0 else INF, smax or INF)
             if hi <= 0 or lo > hi:
                 continue                       # лимиты не пересекаются
             sp = calc_spread(b["price"], s["price"])
@@ -251,7 +252,7 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
             "nickname":  a.get("nickname", "—"),
             "price":     a["price"],
             "min":       a.get("min_amount", 0),
-            "max":       a.get("max_amount", 0),
+            "max":       a.get("eff_max") or a.get("max_amount", 0),
             "pay":       (a.get("pay_types") or [])[:3],
             "confirm3p": a.get("third_party") is True,
             "ex_name":   a.get("ex_name"),
@@ -314,6 +315,19 @@ def _enrich(ads: list) -> list:
         if isinstance(c, float) and 0 < c <= 1:
             ad["completion"] = round(c * 100, 1)
         ad["pay_types"] = list(dict.fromkeys(ad.get("pay_types", [])))
+        # Реальный максимум = min(заявленный лимит, доступный объём × цена).
+        # Мерчант может писать «до 8 млн», а в наличии всего 378 USDT —
+        # тогда реально максимум ≈ 378×цена. Так же считает сам Binance.
+        avail = ad.get("available") or 0
+        price = ad.get("price") or 0
+        stated = ad.get("max_amount") or 0
+        cap = avail * price if (avail > 0 and price > 0) else 0
+        if cap > 0 and (stated <= 0 or cap < stated):
+            ad["eff_max"]      = round(cap, 2)
+            ad["max_capped"]   = stated > 0 and cap < stated  # лимит урезан запасом
+        else:
+            ad["eff_max"]      = stated
+            ad["max_capped"]   = False
         # Парсим описание: 3-е лица, точная сумма, ограничения времени и т.д.
         info = parse_description(ad.get("description", ""))
         ad["third_party"]  = info["third_party"]    # True | False | None
@@ -332,7 +346,7 @@ def _tradeable_at(ad: dict, amount: float) -> bool:
     Если max неизвестен (0) — проверяем только нижнюю границу.
     """
     lo = ad.get("min_amount") or 0
-    hi = ad.get("max_amount") or 0
+    hi = ad.get("eff_max") or ad.get("max_amount") or 0
     if hi <= 0:
         return lo <= amount
     return lo <= amount <= hi

@@ -1206,7 +1206,7 @@ function renderAdList(ads,showRisk=true,side='buy'){
     const risk=(showRisk&&ad.risk_badge)?`<span class="risk-badge">${esc(ad.risk_badge)}</span>`:'';
     const tp=ad.third_party===true?' 🤝':(ad.third_party===false?' 🚫':'');
     const scam=ad.scam_recruit?'<span style="color:var(--red)"> 🚩</span>':(ad.trap?'<span style="color:var(--gold)"> ⚠️</span>':'');
-    return `<div class="ad-card${ad.scam_recruit?' scam':''}" style="cursor:pointer" onclick="showAd('${side}',${i})"><div class="ad-price">${fmt(ad.price)}${tp}${scam}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
+    return `<div class="ad-card${ad.scam_recruit?' scam':''}" style="cursor:pointer" onclick="showAd('${side}',${i})"><div class="ad-price">${fmt(ad.price)}${tp}${scam}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.eff_max||ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
   }).join('');
 }
 
@@ -1234,7 +1234,7 @@ function showAd(side,idx){
     ${scamWarn}
     <div class="ad-modal-price">${fmt(ad.price)} ${S.fiat}</div>
     <div class="ad-modal-row"><span class="k">Сторона</span><span>${sideLabel}</span></div>
-    <div class="ad-modal-row"><span class="k">Лимиты</span><span>${fmtK(ad.min_amount||0)} – ${fmtK(ad.max_amount||0)} ${S.fiat}</span></div>
+    <div class="ad-modal-row"><span class="k">Лимиты</span><span>${fmtK(ad.min_amount||0)} – ${fmtK(ad.eff_max||ad.max_amount||0)} ${S.fiat}${ad.max_capped?` <span style="color:var(--hint);font-size:10px">(заявлено ${fmtK(ad.max_amount||0)}, ограничено запасом)</span>`:''}</span></div>
     <div class="ad-modal-row"><span class="k">Доступно</span><span>${fmtK(ad.available||0)} ${S.asset}</span></div>
     <div class="ad-modal-row"><span class="k">Сделок · %</span><span>${ad.orders||0} · ${ad.completion||0}%</span></div>
     ${flagsHtml}

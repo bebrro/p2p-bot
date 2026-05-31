@@ -631,6 +631,42 @@ def test_any_bank_relaxes_common_bank():
     assert srv._find_link(buy2, sell, "KZT") is None
 
 
+def test_eff_max_capped_by_inventory():
+    """Лимит «до 8 млн» при наличии 378 USDT режется до ≈ доступно×цена."""
+    import webapp.server as srv
+    ad = {"price": 577, "min_amount": 4500, "max_amount": 8_000_000,
+          "available": 378.62, "pay_types": ["Kaspi"], "description": ""}
+    srv._enrich([ad])
+    assert ad["max_capped"] is True
+    assert abs(ad["eff_max"] - 378.62 * 577) < 1      # ≈ 218 464
+    assert ad["eff_max"] < ad["max_amount"]
+
+
+def test_eff_max_not_capped_when_enough_inventory():
+    """Если запаса хватает — eff_max = заявленный лимит, флага нет."""
+    import webapp.server as srv
+    ad = {"price": 577, "min_amount": 4500, "max_amount": 100_000,
+          "available": 5000, "pay_types": ["Kaspi"], "description": ""}
+    srv._enrich([ad])
+    assert ad["max_capped"] is False
+    assert ad["eff_max"] == 100_000
+
+
+def test_triangle_uses_eff_max_for_overlap():
+    """Связка считает перекрытие по реальному запасу, а не по фейк-лимиту."""
+    import webapp.server as srv
+    # buy: заявлен 8М, но в наличии 100 USDT × 500 = 50k реального потолка
+    buy  = [{"price": 500, "third_party": True, "nickname": "A", "min_amount": 1000,
+             "max_amount": 8_000_000, "available": 100, "pay_types": ["Kaspi"],
+             "description": ""}]
+    # sell: минимум 60k — выше реального потолка покупателя → пересечения нет
+    sell = [{"price": 515, "third_party": True, "nickname": "B", "min_amount": 60_000,
+             "max_amount": 300_000, "available": 10000, "pay_types": ["Kaspi"],
+             "description": ""}]
+    srv._enrich(buy); srv._enrich(sell)
+    assert srv._find_link(buy, sell, "KZT") is None
+
+
 def test_any_bank_detection():
     from utils.desc_parser import parse_description as p
     assert p("Переводите с ЛЮБОГО банка!")["any_bank"] is True
