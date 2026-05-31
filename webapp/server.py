@@ -249,7 +249,7 @@ def _tradeable_at(ad: dict, amount: float) -> bool:
 
 
 async def _fetch(exchange: str, fiat: str, asset: str, side: str,
-                 rows: int = 10, pay: str = ""):
+                 rows: int = 10, pay: str = "", amount: float = 0):
     # Отключённую биржу не дёргаем — мгновенно пусто (без таймаута мёртвого API)
     if exchange in DISABLED_EXCHANGES:
         return []
@@ -258,13 +258,14 @@ async def _fetch(exchange: str, fiat: str, asset: str, side: str,
         trade_type = "BUY" if side == "buy" else "SELL"
         return await binance_p2p.get_ads(
             asset=asset, fiat=fiat, trade_type=trade_type,
-            rows=rows, pay_types=pay_types,
+            rows=rows, pay_types=pay_types, amount=amount,
         )
     elif exchange == "bybit":
         bb_side = "1" if side == "buy" else "0"
         return await bybit_p2p.get_ads(
             asset=asset, fiat=fiat, side=bb_side,
             size=rows, pay_types=pay_types,
+            amount=(str(int(amount)) if amount and amount > 0 else ""),
         )
     elif exchange == "okx":
         return await okx_p2p.get_ads(
@@ -330,8 +331,8 @@ async def api_orderbook(request: web.Request) -> web.Response:
 
     try:
         buy_ads, sell_ads = await asyncio.gather(
-            _fetch(ex, fiat, asset, "buy",  15, pay),
-            _fetch(ex, fiat, asset, "sell", 15, pay),
+            _fetch(ex, fiat, asset, "buy",  15, pay, min_amount),
+            _fetch(ex, fiat, asset, "sell", 15, pay, min_amount),
         )
         buy_en  = _enrich(buy_ads)
         sell_en = _enrich(sell_ads)

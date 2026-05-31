@@ -16,6 +16,7 @@ async def get_ads(
     trade_type: str = "BUY",
     pay_types:  Optional[list] = None,
     rows:       int = 10,
+    amount:     float = 0,
     _force:     bool = False,
 ) -> list[dict]:
     from config import DISABLED_EXCHANGES
@@ -31,6 +32,9 @@ async def get_ads(
         "rows":          rows,
         "tradeType":     trade_type,
     }
+    if amount and amount > 0:
+        # Binance сам отдаст объявления, принимающие эту сумму (как в UI)
+        payload["transAmount"] = str(int(amount)) if amount == int(amount) else str(amount)
     data = await post_json(BINANCE_P2P_URL, json=payload, headers=_HEADERS)
 
     ads = []
