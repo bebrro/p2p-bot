@@ -161,13 +161,34 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
     if not buys or not sells:
         return None
 
-    bb = min(buys,  key=lambda a: a["price"])   # купить дешевле
-    bs = max(sells, key=lambda a: a["price"])   # продать дороже
-    sp = calc_spread(bb["price"], bs["price"])
-    if sp["spread_pct"] <= 0:
-        return None   # положительной связки нет
+    INF = 1e18
+    # Ищем ИСПОЛНИМУЮ пару: лимиты ног должны пересекаться (один объём на обеих),
+    # иначе связка нерабочая (купи макс 8.5k, продай мин 50k — не свяжешь).
+    best = None
+    for b in buys:
+        bmin = b.get("min_amount") or 0
+        bmax = b.get("max_amount") or 0
+        for s in sells:
+            if s["price"] <= b["price"]:
+                continue                      # нужен положительный спред
+            smin = s.get("min_amount") or 0
+            smax = s.get("max_amount") or 0
+            lo = max(bmin, smin)
+            hi = min(bmax if bmax > 0 else INF, smax if smax > 0 else INF)
+            if hi <= 0 or lo > hi:
+                continue                      # лимиты НЕ пересекаются → невыполнимо
+            sp = calc_spread(b["price"], s["price"])
+            if best is None or sp["spread_pct"] > best["pct"]:
+                best = {"pct": sp["spread_pct"], "abs": sp["spread_abs"],
+                        "b": b, "s": s, "lo": lo, "hi": hi}
 
-    vol = _REF_VOLUME.get(fiat, 1_000)
+    if best is None:
+        return None   # нет исполнимой связки (положительной + с пересечением лимитов)
+
+    bb, bs = best["b"], best["s"]
+    lo, hi = best["lo"], best["hi"]
+    # Оборот для профита — макс исполнимый объём (в пределах пересечения лимитов)
+    vol = hi if hi < INF else max(lo, _REF_VOLUME.get(fiat, 1_000))
 
     def _leg(a):
         return {
@@ -176,18 +197,20 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
             "min":       a.get("min_amount", 0),
             "max":       a.get("max_amount", 0),
             "pay":       (a.get("pay_types") or [])[:2],
-            "confirm3p": a.get("third_party") is True,   # явно написал «3-е лица ок»
+            "confirm3p": a.get("third_party") is True,
         }
 
     return {
         "buy":        _leg(bb),
         "sell":       _leg(bs),
-        "pct":        sp["spread_pct"],
-        "abs":        sp["spread_abs"],
-        "profit":     round(vol * sp["spread_pct"] / 100),
-        "amount":     vol,
+        "pct":        best["pct"],
+        "abs":        best["abs"],
+        "profit":     round(vol * best["pct"] / 100),
+        "amount":     round(vol),
+        "lo":         round(lo),
+        "hi":         round(hi) if hi < INF else None,
         "fiat":       fiat,
-        "suspicious": sp["spread_pct"] > SUSPICIOUS_SPREAD_PCT,
+        "suspicious": best["pct"] > SUSPICIOUS_SPREAD_PCT,
     }
 
 

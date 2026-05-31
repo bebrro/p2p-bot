@@ -1148,7 +1148,8 @@ function renderTriangle(t){
       ${leg(t.sell,'📤 Продать USDT')}
     </div>
     <div class="tri-profit">На обороте ${fmtK(t.amount)} ${t.fiat} → <b>+${fmt(t.profit)} ${t.fiat}</b></div>
-    ${warn?'<div class="tri-warn">⚠️ проверь ликвидность и лимиты — возможны приманки</div>':''}
+    <div class="tri-profit" style="font-size:10px;color:var(--hint)">✅ Исполнимый объём: ${fmtK(t.lo)}${t.hi?'–'+fmtK(t.hi):'+'} ${t.fiat} (лимиты пересекаются)</div>
+    ${warn?'<div class="tri-warn">⚠️ проверь ликвидность — возможны приманки</div>':''}
   `;
 }
 function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){

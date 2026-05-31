@@ -583,6 +583,24 @@ def test_triangle_none_without_eligible_legs():
     # покупка целиком запрещает 3-х лиц → связки нет
     assert srv._triangle(buy, sell, "KZT") is None
 
+def test_triangle_requires_overlapping_limits():
+    """Связка невыполнима если лимиты ног не пересекаются (8.5k vs 50k)."""
+    import webapp.server as srv
+    buy  = [{"price": 46.88, "third_party": True, "nickname": "Xpay",
+             "min_amount": 8500, "max_amount": 8500, "pay_types": []}]
+    sell = [{"price": 53.53, "third_party": True, "nickname": "Flash",
+             "min_amount": 50000, "max_amount": 50000, "pay_types": []}]
+    assert srv._triangle(buy, sell, "TRY") is None     # лимиты не пересекаются
+    # совместимые лимиты → связка есть, с диапазоном пересечения
+    buy2  = [{"price": 46.88, "third_party": True, "nickname": "A",
+              "min_amount": 5000, "max_amount": 100000, "pay_types": []}]
+    sell2 = [{"price": 53.53, "third_party": True, "nickname": "B",
+              "min_amount": 10000, "max_amount": 80000, "pay_types": []}]
+    t = srv._triangle(buy2, sell2, "TRY")
+    assert t is not None
+    assert t["lo"] == 10000 and t["hi"] == 80000       # пересечение лимитов
+
+
 def test_triangle_none_when_no_spread():
     import webapp.server as srv
     buy  = [{"price": 515, "third_party": True, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
