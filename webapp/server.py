@@ -10,6 +10,7 @@ Mini App HTTP-сервер (aiohttp.web).
 """
 import asyncio
 import logging
+import re
 import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -138,60 +139,101 @@ def _earn_demo(arb: list[dict], fiat: str) -> dict | None:
     }
 
 
-def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
-    """
-    «Связка без карт» (посредник): купить USDT дёшево (лучший ask) и продать
-    дорого (лучший bid) на одной бирже. ОБЕ ноги обязаны принимать третьих
-    лиц — иначе схема (платёж контрагент→контрагент) не работает.
+# Канонизация банков для сопоставления (Kaspi / KaspiBank / Каспи → kaspi).
+# Без общего банка платёж контрагент→контрагенту невозможен.
+_BANK_CANON = {
+    "kaspi": "kaspi", "каспи": "kaspi",
+    "halyk": "halyk", "халык": "halyk", "халик": "halyk",
+    "jusan": "jusan", "жусан": "jusan",
+    "forte": "forte", "форте": "forte",
+    "freedom": "freedom", "фридом": "freedom", "фрідом": "freedom",
+    "altyn": "altyn", "алтын": "altyn",
+    "centercredit": "bcc", "bcc": "bcc", "центркредит": "bcc",
+    "sber": "sber", "сбер": "sber",
+    "tinkoff": "tinkoff", "тинь": "tinkoff", "тинк": "tinkoff",
+    "tbank": "tinkoff", "тбанк": "tinkoff",
+    "raiffeisen": "raif", "райф": "raif",
+    "alfa": "alfa", "альфа": "alfa", "vtb": "vtb", "втб": "vtb",
+    "sbp": "sbp", "сбп": "sbp", "fps": "sbp",
+    "ziraat": "ziraat", "garanti": "garanti", "akbank": "akbank",
+    "papara": "papara", "vakif": "vakif", "ininal": "ininal",
+}
 
-    buy_ads  = объявления где ТЫ покупаешь USDT (продавцы/asks)
-    sell_ads = объявления где ТЫ продаёшь USDT (покупатели/bids)
+
+def _norm_bank(name: str) -> str:
+    s = re.sub(r"[^0-9a-zа-яё]", "", (name or "").lower())
+    # Сначала ищем алиас по полной строке («тбанк» → tinkoff, «каспибанк» → kaspi)
+    for k, v in _BANK_CANON.items():
+        if k in s:
+            return v
+    # Фолбэк: чистим служебные слова
+    s2 = s.replace("bank", "").replace("банк", "").replace("finance", "").replace("финанс", "")
+    return s2 or s or "?"
+
+
+def _bank_set(a: dict) -> set:
+    return {_norm_bank(x) for x in (a.get("pay_types") or []) if x}
+
+
+def _common_bank_labels(a: dict, b: dict) -> list:
+    nb = _bank_set(b)
+    out, seen = [], set()
+    for x in (a.get("pay_types") or []):
+        n = _norm_bank(x)
+        if x and n in nb and n not in seen:
+            seen.add(n)
+            out.append(x)
+    return out[:3]
+
+
+def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
+    """
+    Ищет ИСПОЛНИМУЮ связку «без карт». Работает и внутри биржи, и МЕЖ биржами
+    (если у ног проставлен exchange). Требования к обеим ногам:
+      • явно принимают 3-х лиц (third_party is True)
+      • не скам/ловушка
+      • положительный спред (продать дороже чем купить)
+      • лимиты пересекаются (один объём на обеих)
+      • есть ОБЩИЙ банк (иначе платёж контрагент→контрагенту не провести)
     """
     def ok(a):
-        # Связка ВСЯ держится на третьих лицах → берём только тех, кто ЯВНО
-        # подтвердил их приём (third_party is True). «Не указано» (None) —
-        # недостаточно: на Binance описаний нет вообще, а многие по факту
-        # запрещают 3-х лиц. Лучше пусто, чем нерабочая связка.
         if a.get("third_party") is not True:
             return False
-        # помеченные скамеры/ловушки — НЕ предлагаем в связке
         if a.get("scam_recruit") or a.get("trap"):
             return False
         return (a.get("price") or 0) > 0
 
-    buys  = [a for a in buy_ads  if ok(a)]
-    sells = [a for a in sell_ads if ok(a)]
-    if not buys or not sells:
+    B = [a for a in buys if ok(a)]
+    S = [a for a in sells if ok(a)]
+    if not B or not S:
         return None
 
     INF = 1e18
-    # Ищем ИСПОЛНИМУЮ пару: лимиты ног должны пересекаться (один объём на обеих),
-    # иначе связка нерабочая (купи макс 8.5k, продай мин 50k — не свяжешь).
     best = None
-    for b in buys:
+    for b in B:
+        bn   = _bank_set(b)
         bmin = b.get("min_amount") or 0
         bmax = b.get("max_amount") or 0
-        for s in sells:
+        for s in S:
             if s["price"] <= b["price"]:
-                continue                      # нужен положительный спред
-            smin = s.get("min_amount") or 0
-            smax = s.get("max_amount") or 0
-            lo = max(bmin, smin)
-            hi = min(bmax if bmax > 0 else INF, smax if smax > 0 else INF)
+                continue
+            if not (bn & _bank_set(s)):
+                continue                       # нет общего банка
+            lo = max(bmin, s.get("min_amount") or 0)
+            hi = min(bmax if bmax > 0 else INF, (s.get("max_amount") or 0) or INF)
             if hi <= 0 or lo > hi:
-                continue                      # лимиты НЕ пересекаются → невыполнимо
+                continue                       # лимиты не пересекаются
             sp = calc_spread(b["price"], s["price"])
             if best is None or sp["spread_pct"] > best["pct"]:
                 best = {"pct": sp["spread_pct"], "abs": sp["spread_abs"],
                         "b": b, "s": s, "lo": lo, "hi": hi}
 
     if best is None:
-        return None   # нет исполнимой связки (положительной + с пересечением лимитов)
+        return None
 
     bb, bs = best["b"], best["s"]
     lo, hi = best["lo"], best["hi"]
-    # Оборот для профита — макс исполнимый объём (в пределах пересечения лимитов)
-    vol = hi if hi < INF else max(lo, _REF_VOLUME.get(fiat, 1_000))
+    vol    = hi if hi < INF else max(lo, _REF_VOLUME.get(fiat, 1_000))
 
     def _leg(a):
         return {
@@ -199,8 +241,10 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
             "price":     a["price"],
             "min":       a.get("min_amount", 0),
             "max":       a.get("max_amount", 0),
-            "pay":       (a.get("pay_types") or [])[:2],
+            "pay":       (a.get("pay_types") or [])[:3],
             "confirm3p": a.get("third_party") is True,
+            "ex_name":   a.get("ex_name"),
+            "ex_icon":   a.get("ex_icon"),
         }
 
     return {
@@ -212,9 +256,17 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
         "amount":     round(vol),
         "lo":         round(lo),
         "hi":         round(hi) if hi < INF else None,
+        "banks":      _common_bank_labels(bb, bs),
+        "cross":      bool(bb.get("exchange") and bs.get("exchange")
+                          and bb.get("exchange") != bs.get("exchange")),
         "fiat":       fiat,
         "suspicious": best["pct"] > SUSPICIOUS_SPREAD_PCT,
     }
+
+
+def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
+    """Связка внутри одной биржи (для стакана)."""
+    return _find_link(buy_ads, sell_ads, fiat)
 
 
 def _build_arbitrage(exchanges: list[dict]) -> list[dict]:
@@ -1100,6 +1152,43 @@ async def api_pnl(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_xtriangle(request: web.Request) -> web.Response:
+    """GET /api/xtriangle/{fiat}/{asset} — МЕЖБИРЖЕВАЯ связка без карт.
+    Собирает объявления со всех живых бирж, ищет лучшую исполнимую пару
+    (купить на одной, продать на другой) с совпадением 3-х лиц + банка + лимитов."""
+    fiat  = request.match_info["fiat"]
+    asset = request.match_info["asset"]
+    try:
+        tasks, meta = [], []
+        for ex_id, name, icon, _b, _s in _EX_META:
+            if ex_id in DISABLED_EXCHANGES:
+                continue
+            meta.append((ex_id, name, icon))
+            tasks.append(_fetch(ex_id, fiat, asset, "buy",  15))
+            tasks.append(_fetch(ex_id, fiat, asset, "sell", 15))
+        res = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_buys, all_sells = [], []
+        for i, (ex_id, name, icon) in enumerate(meta):
+            b, s = res[i * 2], res[i * 2 + 1]
+            if isinstance(b, list):
+                eb = _enrich(b)
+                for a in eb:
+                    a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
+                all_buys += eb
+            if isinstance(s, list):
+                es = _enrich(s)
+                for a in es:
+                    a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
+                all_sells += es
+
+        link = _find_link(all_buys, all_sells, fiat)
+        return web.json_response({"triangle": link})
+    except Exception as e:
+        logger.error(f"api_xtriangle: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def api_dashboard(request: web.Request) -> web.Response:
     """GET /api/dashboard?fiat=KZT&asset=USDT&uid=xxx — агрегированный дашборд."""
     fiat  = request.rel_url.query.get("fiat",  "KZT")
@@ -1183,6 +1272,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/user/subscription",                         api_subscription)
     app.router.add_get("/api/user/pnl",                                  api_pnl)
     app.router.add_get("/api/dashboard",                                  api_dashboard)
+    app.router.add_get("/api/xtriangle/{fiat}/{asset}",                   api_xtriangle)
 
     # Health check
     app.router.add_get("/health",     health_handler)

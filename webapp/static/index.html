@@ -505,6 +505,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="dash-arb-pct" id="dashArbPct"></div>
   </div>
 
+  <!-- Межбиржевая связка без карт -->
+  <div class="tri-card" id="xtriBanner" style="display:none"></div>
+
   <!-- Exchange overview -->
   <div class="dash-sec">📊 Биржи — <span id="dashPairLbl" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">KZT / USDT</span></div>
   <div class="dash-ex-grid" id="dashExGrid">
@@ -1120,31 +1123,34 @@ async function loadOrderbook(){
     document.getElementById('spreadChip').className='spread-chip bad';
   }
 }
-function renderTriangle(t){
-  const el=document.getElementById('triBanner');
+function renderTriangle(t,elId){
+  const el=document.getElementById(elId||'triBanner');
+  if(!el) return;
   if(!t){ el.style.display='none'; return; }
   el.style.display='block';
   const warn=t.suspicious;
-  const tag=l=>l.confirm3p
-    ?'<span class="tri-leg-3p ok">✅ 3-е лица</span>'
-    :'<span class="tri-leg-3p maybe">• не запрещены</span>';
+  const exTag=l=>l.ex_name?`<div style="font-size:9px;color:var(--hint)">${esc(l.ex_icon||'')} ${esc(l.ex_name)}</div>`:'';
   const leg=(l,lbl)=>`<div class="tri-leg">
       <div class="tri-leg-lbl">${lbl}</div>
+      ${exTag(l)}
       <div class="tri-leg-price">${fmt(l.price)}</div>
       <div class="tri-leg-nick">${esc(l.nickname)}</div>
-      ${tag(l)}
+      <span class="tri-leg-3p ok">✅ 3-е лица</span>
     </div>`;
+  const banks=(t.banks&&t.banks.length)?`<div class="tri-profit" style="font-size:10px;color:var(--gold)">🏦 Общий банк: ${t.banks.map(esc).join(', ')}</div>`:'';
+  const title=t.cross?'🔺 Связка без карт · МЕЖБИРЖА':'🔺 Связка без карт';
   el.innerHTML=`
     <div class="tri-head">
-      <span class="tri-title">🔺 Связка без карт</span>
+      <span class="tri-title">${title}</span>
       <span class="tri-pct${warn?' warn':''}">+${t.pct.toFixed(2)}%</span>
     </div>
     <div class="tri-legs">
       ${leg(t.buy,'📥 Купить USDT')}
       ${leg(t.sell,'📤 Продать USDT')}
     </div>
+    ${banks}
     <div class="tri-profit">На обороте ${fmtK(t.amount)} ${t.fiat} → <b>+${fmt(t.profit)} ${t.fiat}</b></div>
-    <div class="tri-profit" style="font-size:10px;color:var(--hint)">✅ Исполнимый объём: ${fmtK(t.lo)}${t.hi?'–'+fmtK(t.hi):'+'} ${t.fiat} (лимиты пересекаются)</div>
+    <div class="tri-profit" style="font-size:10px;color:var(--hint)">✅ Исполнимый объём: ${fmtK(t.lo)}${t.hi?'–'+fmtK(t.hi):'+'} ${t.fiat}</div>
     ${warn?'<div class="tri-warn">⚠️ проверь ликвидность — возможны приманки</div>':''}
   `;
 }
@@ -1990,6 +1996,10 @@ async function loadDashboard(){
 
     // Момент вау: потенциальный заработок
     renderDashEarn(data.earn||null);
+
+    // Межбиржевая связка без карт (отдельный запрос — не тормозит дашборд)
+    fetch(`/api/xtriangle/${dashFiat}/${dashAsset}`).then(r=>r.json())
+      .then(x=>renderTriangle(x.triangle||null,'xtriBanner')).catch(()=>{});
 
     // Arbitrage banner
     dashArbData=data.best_arb||null;

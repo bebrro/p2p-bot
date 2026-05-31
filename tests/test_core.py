@@ -539,18 +539,18 @@ def test_triangle_requires_explicit_third_party():
     """Связка берёт только ЯВНО подтвердивших 3-х лиц (None/False — мимо)."""
     import webapp.server as srv
     buy = [
-        {"price": 500, "third_party": False, "nickname": "no3p", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
-        {"price": 503, "third_party": None,  "nickname": "unk",  "min_amount": 0, "max_amount": 9e9, "pay_types": []},
-        {"price": 505, "third_party": True,  "nickname": "ok3p", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+        {"price": 500, "third_party": False, "nickname": "no3p", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
+        {"price": 503, "third_party": None,  "nickname": "unk",  "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
+        {"price": 505, "third_party": True,  "nickname": "ok3p", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
     sell = [
-        {"price": 515, "third_party": None, "nickname": "may", "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+        {"price": 515, "third_party": None, "nickname": "may", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
     # все sell-ноги «не указано» → связки нет (None недостаточно)
     assert srv._triangle(buy, sell, "KZT") is None
     # добавим явно подтверждённую sell-ногу → связка появляется
     sell.append({"price": 514, "third_party": True, "nickname": "yes3p",
-                 "min_amount": 0, "max_amount": 9e9, "pay_types": []})
+                 "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]})
     t = srv._triangle(buy, sell, "KZT")
     assert t is not None
     assert t["buy"]["price"] == 505 and t["buy"]["confirm3p"] is True   # только ok3p
@@ -561,15 +561,15 @@ def test_triangle_excludes_scammers():
     import webapp.server as srv
     buy = [
         {"price": 500, "third_party": True, "scam_recruit": True, "nickname": "scammer",
-         "min_amount": 0, "max_amount": 9e9, "pay_types": []},   # дешевле, но скам
+         "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},   # дешевле, но скам
         {"price": 506, "third_party": True, "nickname": "honest",
-         "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+         "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
     sell = [
         {"price": 515, "third_party": True, "trap": True, "nickname": "trapper",
-         "min_amount": 0, "max_amount": 9e9, "pay_types": []},   # дороже, но ловушка
+         "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},   # дороже, но ловушка
         {"price": 512, "third_party": True, "nickname": "honest2",
-         "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+         "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
     t = srv._triangle(buy, sell, "KZT")
     assert t is not None
@@ -579,8 +579,8 @@ def test_triangle_excludes_scammers():
 
 def test_triangle_none_without_eligible_legs():
     import webapp.server as srv
-    buy  = [{"price": 500, "third_party": False, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
-    sell = [{"price": 515, "third_party": None,  "nickname": "y", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
+    buy  = [{"price": 500, "third_party": False, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]}]
+    sell = [{"price": 515, "third_party": None,  "nickname": "y", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]}]
     # покупка целиком запрещает 3-х лиц → связки нет
     assert srv._triangle(buy, sell, "KZT") is None
 
@@ -588,18 +588,52 @@ def test_triangle_requires_overlapping_limits():
     """Связка невыполнима если лимиты ног не пересекаются (8.5k vs 50k)."""
     import webapp.server as srv
     buy  = [{"price": 46.88, "third_party": True, "nickname": "Xpay",
-             "min_amount": 8500, "max_amount": 8500, "pay_types": []}]
+             "min_amount": 8500, "max_amount": 8500, "pay_types": ["Kaspi"]}]
     sell = [{"price": 53.53, "third_party": True, "nickname": "Flash",
-             "min_amount": 50000, "max_amount": 50000, "pay_types": []}]
+             "min_amount": 50000, "max_amount": 50000, "pay_types": ["Kaspi"]}]
     assert srv._triangle(buy, sell, "TRY") is None     # лимиты не пересекаются
     # совместимые лимиты → связка есть, с диапазоном пересечения
     buy2  = [{"price": 46.88, "third_party": True, "nickname": "A",
-              "min_amount": 5000, "max_amount": 100000, "pay_types": []}]
+              "min_amount": 5000, "max_amount": 100000, "pay_types": ["Kaspi"]}]
     sell2 = [{"price": 53.53, "third_party": True, "nickname": "B",
-              "min_amount": 10000, "max_amount": 80000, "pay_types": []}]
+              "min_amount": 10000, "max_amount": 80000, "pay_types": ["Kaspi"]}]
     t = srv._triangle(buy2, sell2, "TRY")
     assert t is not None
     assert t["lo"] == 10000 and t["hi"] == 80000       # пересечение лимитов
+
+
+def test_triangle_requires_common_bank():
+    """Без общего банка платёж не провести → связки нет."""
+    import webapp.server as srv
+    buy  = [{"price": 504, "third_party": True, "nickname": "A", "min_amount": 1000,
+             "max_amount": 500000, "pay_types": ["Kaspi Bank"]}]
+    sell = [{"price": 515, "third_party": True, "nickname": "B", "min_amount": 5000,
+             "max_amount": 300000, "pay_types": ["Halyk"]}]   # другой банк
+    assert srv._triangle(buy, sell, "KZT") is None
+    # общий банк (Каспи в разных написаниях) → связка есть
+    sell2 = [{"price": 515, "third_party": True, "nickname": "C", "min_amount": 5000,
+              "max_amount": 300000, "pay_types": ["КаспиБанк"]}]
+    t = srv._triangle(buy, sell2, "KZT")
+    assert t is not None and t["banks"] == ["Kaspi Bank"]
+
+def test_cross_exchange_link():
+    """Межбиржевая связка: купить на одной, продать на другой, общий банк."""
+    import webapp.server as srv
+    buy  = [{"price": 504, "third_party": True, "nickname": "A", "min_amount": 1000,
+             "max_amount": 500000, "pay_types": ["Kaspi"], "exchange": "bybit",
+             "ex_name": "Bybit", "ex_icon": "🟠"}]
+    sell = [{"price": 515, "third_party": True, "nickname": "B", "min_amount": 5000,
+             "max_amount": 300000, "pay_types": ["Kaspi Bank"], "exchange": "wallet",
+             "ex_name": "TG Wallet", "ex_icon": "💎"}]
+    t = srv._find_link(buy, sell, "KZT")
+    assert t is not None
+    assert t["cross"] is True
+    assert t["buy"]["ex_name"] == "Bybit" and t["sell"]["ex_name"] == "TG Wallet"
+
+def test_norm_bank_aliases():
+    import webapp.server as srv
+    assert srv._norm_bank("Kaspi Bank") == srv._norm_bank("КаспиБанк") == "kaspi"
+    assert srv._norm_bank("Tinkoff") == srv._norm_bank("Т-Банк") == "tinkoff"
 
 
 def test_triangle_none_when_no_spread():
