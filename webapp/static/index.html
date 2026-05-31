@@ -502,6 +502,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill" data-val="KGS">🇰🇬 KGS</button>
   </div>
 
+  <!-- Crypto pills -->
+  <div class="dash-fiat-row" id="dashAssetRow">
+    <button class="pill active" data-val="USDT">USDT</button>
+    <button class="pill" data-val="BTC">₿ BTC</button>
+    <button class="pill" data-val="ETH">Ξ ETH</button>
+  </div>
+
   <!-- Plan card -->
   <div class="dash-plan-bar">
     <div>
@@ -947,6 +954,25 @@ function updatePayRow(rowId,exchange,fiat,onSelect){
   }));
 }
 
+// Динамически строит методы оплаты из РЕАЛЬНЫХ объявлений (все биржи/валюты).
+let __paySig={};
+function mergePayMethods(rowId,ads,currentVal,onSelect){
+  const row=document.getElementById(rowId); if(!row) return;
+  if(currentVal) return;          // фильтр активен — не пересобираем (не потерять методы)
+  const seen=new Set();
+  (ads||[]).forEach(a=>(a.pay_types||[]).forEach(p=>{const t=(p||'').trim(); if(t)seen.add(t);}));
+  const methods=[...seen].sort((a,b)=>a.localeCompare(b));
+  const sig=methods.join('|');
+  if(__paySig[rowId]===sig) return;   // не изменилось — без фликера
+  __paySig[rowId]=sig;
+  const pills=[{v:'',lbl:'Все'},...methods.map(m=>({v:m,lbl:m.length>16?m.slice(0,15)+'…':m}))];
+  row.innerHTML=pills.map(b=>`<button class="pill${b.v===currentVal?' active':''}" data-val="${esc(b.v)}">${esc(b.lbl)}</button>`).join('');
+  row.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click',()=>{
+    row.querySelectorAll('.pill').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); onSelect(btn.dataset.val);
+  }));
+}
+
 /* ══════════════════════════════════════════════════════════
    TAB SWITCHING
 ══════════════════════════════════════════════════════════ */
@@ -1138,6 +1164,8 @@ function renderOrderbook({buy,sell,spread,triangle}){
   else{ chip.textContent='—'; chip.className='spread-chip'; }
   const showRisk=loadSettings().show_risk!==false;
   __book={buy:buy||[],sell:sell||[]};   // для тапа по объявлению
+  // Методы оплаты — из реальных объявлений (все способы, любая биржа/валюта)
+  mergePayMethods('payRow',(buy||[]).concat(sell||[]),S.pay,v=>{S.pay=v;restartBookTimer();});
   // Мейкер-режим: в каждую колонку добавляем «твою цену чтобы быть #1»
   document.getElementById('buyList').innerHTML=makerRecCard('buy',buy)+renderAdList(buy,showRisk,'buy');
   document.getElementById('sellList').innerHTML=makerRecCard('sell',sell)+renderAdList(sell,showRisk,'sell');
@@ -1919,14 +1947,22 @@ document.getElementById('chatInput').addEventListener('keydown',function(e){if(e
 /* ══════════════════════════════════════════════════════════
    DASHBOARD (home tab)
 ══════════════════════════════════════════════════════════ */
-let dashFiat='KZT', dashLoading=false, dashArbData=null;
+let dashFiat='KZT', dashAsset='USDT', dashLoading=false, dashArbData=null;
 
 // Wire fiat pills inside dashboard
 document.querySelectorAll('#dashFiatRow .pill').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('#dashFiatRow .pill').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active'); dashFiat=btn.dataset.val;
-    document.getElementById('dashPairLbl').textContent=dashFiat+' / USDT';
+    document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset;
+    loadDashboard();
+  });
+});
+document.querySelectorAll('#dashAssetRow .pill').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#dashAssetRow .pill').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); dashAsset=btn.dataset.val;
+    document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset;
     loadDashboard();
   });
 });
@@ -1935,7 +1971,7 @@ async function loadDashboard(){
   if(dashLoading)return; dashLoading=true;
   try{
     const uid=getUID();
-    const r=await fetch(`/api/dashboard?fiat=${dashFiat}&asset=USDT${uid?'&uid='+uid:''}`);
+    const r=await fetch(`/api/dashboard?fiat=${dashFiat}&asset=${dashAsset}${uid?'&uid='+uid:''}`);
     const data=await r.json(); if(data.error)return;
 
     // Timestamp
