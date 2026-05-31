@@ -1234,7 +1234,7 @@ function showAd(side,idx){
     ${scamWarn}
     <div class="ad-modal-price">${fmt(ad.price)} ${S.fiat}</div>
     <div class="ad-modal-row"><span class="k">Сторона</span><span>${sideLabel}</span></div>
-    <div class="ad-modal-row"><span class="k">Лимиты</span><span>${fmtK(ad.min_amount||0)} – ${fmtK(ad.eff_max||ad.max_amount||0)} ${S.fiat}${ad.max_capped?` <span style="color:var(--hint);font-size:10px">(заявлено ${fmtK(ad.max_amount||0)}, ограничено запасом)</span>`:''}</span></div>
+    <div class="ad-modal-row"><span class="k">Лимиты</span><span>${fmtK(ad.min_amount||0)} – ${fmtK(ad.eff_max||ad.max_amount||0)} ${S.fiat}</span></div>
     <div class="ad-modal-row"><span class="k">Доступно</span><span>${fmtK(ad.available||0)} ${S.asset}</span></div>
     <div class="ad-modal-row"><span class="k">Сделок · %</span><span>${ad.orders||0} · ${ad.completion||0}%</span></div>
     ${flagsHtml}
