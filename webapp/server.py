@@ -146,11 +146,17 @@ def _triangle(buy_ads: list, sell_ads: list, fiat: str) -> dict | None:
     buy_ads  = объявления где ТЫ покупаешь USDT (продавцы/asks)
     sell_ads = объявления где ТЫ продаёшь USDT (покупатели/bids)
     """
-    def ok(a):  # не принимает 3-х лиц → связка невозможна
-        return a.get("third_party") is not False
+    def ok(a):
+        # не принимает 3-х лиц → связка невозможна
+        if a.get("third_party") is False:
+            return False
+        # помеченные скамеры/ловушки — НЕ предлагаем в связке
+        if a.get("scam_recruit") or a.get("trap"):
+            return False
+        return (a.get("price") or 0) > 0
 
-    buys  = [a for a in buy_ads  if ok(a) and (a.get("price") or 0) > 0]
-    sells = [a for a in sell_ads if ok(a) and (a.get("price") or 0) > 0]
+    buys  = [a for a in buy_ads  if ok(a)]
+    sells = [a for a in sell_ads if ok(a)]
     if not buys or not sells:
         return None
 

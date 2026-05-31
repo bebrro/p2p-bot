@@ -555,6 +555,27 @@ def test_triangle_requires_third_party():
     assert t["pct"] > 0
     assert t["profit"] > 0
 
+def test_triangle_excludes_scammers():
+    """Помеченные скамеры/ловушки не предлагаются в связке, даже с лучшей ценой."""
+    import webapp.server as srv
+    buy = [
+        {"price": 500, "third_party": True, "scam_recruit": True, "nickname": "scammer",
+         "min_amount": 0, "max_amount": 9e9, "pay_types": []},   # дешевле, но скам
+        {"price": 506, "third_party": True, "nickname": "honest",
+         "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+    ]
+    sell = [
+        {"price": 515, "third_party": True, "trap": True, "nickname": "trapper",
+         "min_amount": 0, "max_amount": 9e9, "pay_types": []},   # дороже, но ловушка
+        {"price": 512, "third_party": True, "nickname": "honest2",
+         "min_amount": 0, "max_amount": 9e9, "pay_types": []},
+    ]
+    t = srv._triangle(buy, sell, "KZT")
+    assert t is not None
+    assert t["buy"]["nickname"] == "honest"    # скамер 500 исключён
+    assert t["sell"]["nickname"] == "honest2"  # ловушка 515 исключена
+
+
 def test_triangle_none_without_eligible_legs():
     import webapp.server as srv
     buy  = [{"price": 500, "third_party": False, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]
