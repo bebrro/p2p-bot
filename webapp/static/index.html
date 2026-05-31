@@ -125,6 +125,15 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ad-modal-desc.empty{color:var(--hint);font-style:italic}
 .ad-modal-link{display:block;width:100%;background:var(--btn);color:var(--btnt);text-align:center;padding:11px;border-radius:10px;border:none;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;font-family:inherit}
 .ad-modal-link:active{opacity:.8}
+.sel-row{display:flex;gap:6px;margin-bottom:5px}
+.sel-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;background:var(--bg2);border:1px solid rgba(255,255,255,.12);border-radius:20px;color:var(--text);font-size:12px;font-weight:600;padding:6px 8px;cursor:pointer;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sel-btn:active{opacity:.75}
+.sel-caret{color:var(--hint);font-size:10px}
+.sel-modal-title{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text)}
+.sel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.sel-opt{background:var(--bg);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:var(--text);font-size:12px;padding:10px 6px;cursor:pointer;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sel-opt.active{background:var(--btn);color:var(--btnt);border-color:var(--btn);font-weight:700}
+.sel-opt:active{opacity:.8}
 .ad-modal-scam{background:rgba(240,71,71,.14);border:1px solid rgba(240,71,71,.4);border-radius:8px;padding:9px 11px;font-size:11.5px;line-height:1.4;color:var(--text);margin-bottom:10px}
 .ad-card.scam{border-left-color:var(--red)!important;background:linear-gradient(90deg,rgba(240,71,71,.10),var(--bg2))}
 .book-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -439,28 +448,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill"        data-val="okx">🔵 OKX</button>
     <button class="pill"        data-val="wallet">💎 TG Wallet</button>
   </div>
-  <div class="pill-row" id="fiatRow">
-    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
-    <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
-    <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
-    <button class="pill"        data-val="USD">🇺🇸 USD</button>
-    <button class="pill"        data-val="IDR">🇮🇩 IDR</button>
-    <button class="pill"        data-val="VND">🇻🇳 VND</button>
-    <button class="pill"        data-val="INR">🇮🇳 INR</button>
-    <button class="pill"        data-val="AED">🇦🇪 AED</button>
-    <button class="pill"        data-val="NGN">🇳🇬 NGN</button>
-    <button class="pill"        data-val="BRL">🇧🇷 BRL</button>
-    <button class="pill"        data-val="GEL">🇬🇪 GEL</button>
-    <button class="pill"        data-val="AMD">🇦🇲 AMD</button>
-    <button class="pill"        data-val="AZN">🇦🇿 AZN</button>
-    <button class="pill"        data-val="KGS">🇰🇬 KGS</button>
+  <div class="sel-row" id="selRow">
+    <button class="sel-btn" id="selFiat"  onclick="openSelector('fiat')"><span id="selFiatTxt">🇰🇿 KZT</span> <span class="sel-caret">▾</span></button>
+    <button class="sel-btn" id="selAsset" onclick="openSelector('asset')"><span id="selAssetTxt">USDT</span> <span class="sel-caret">▾</span></button>
+    <button class="sel-btn" id="selPay"   onclick="openSelector('pay')"><span id="selPayTxt">💳 Все</span> <span class="sel-caret">▾</span></button>
   </div>
-  <div class="pill-row" id="assetRow">
-    <button class="pill active" data-val="USDT">USDT</button>
-    <button class="pill"        data-val="BTC">BTC</button>
-    <button class="pill"        data-val="ETH">ETH</button>
-  </div>
-  <div class="pill-row" id="payRow"></div>
 </div>
 
 <!-- ═══════════════════════ SPREAD BAR ═══════════════════════ -->
@@ -916,20 +908,17 @@ function wireLocalGroup(id,obj,key,onChange){
   });
 }
 function applyStateToUI(){
-  [{id:'exRow',k:'exchange'},{id:'fiatRow',k:'fiat'},{id:'assetRow',k:'asset'}].forEach(({id,k})=>{
-    document.querySelectorAll(`#${id} .pill`).forEach(b=>b.classList.toggle('active',b.dataset.val===S[k]));
-  });
+  document.querySelectorAll('#exRow .pill').forEach(b=>b.classList.toggle('active',b.dataset.val===S.exchange));
+  if(typeof updateSelLabels==='function') updateSelLabels();
 }
 wireGroup('exRow','exchange',onMainStateChange);
-wireGroup('fiatRow','fiat',onMainStateChange);
-wireGroup('assetRow','asset',onMainStateChange);
 wireLocalGroup('cmpFiatRow',CM,'fiat',loadCompare);
 wireLocalGroup('cmpAssetRow',CM,'asset',loadCompare);
 
 function onMainStateChange(){
-  S.pay=''; MK.pay='';
-  updatePayRow('payRow',S.exchange,S.fiat,v=>{S.pay=v;restartBookTimer();});
+  S.pay=''; MK.pay=''; __payMethods=[];
   updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
+  updateSelLabels();
   updateHeaderPair();
   restartBookTimer();
   if(S.tab==='chart') loadChart();
@@ -951,22 +940,40 @@ function updatePayRow(rowId,exchange,fiat,onSelect){
 }
 
 // Динамически строит методы оплаты из РЕАЛЬНЫХ объявлений (все биржи/валюты).
-let __paySig={};
-function mergePayMethods(rowId,ads,currentVal,onSelect){
-  const row=document.getElementById(rowId); if(!row) return;
-  if(currentVal) return;          // фильтр активен — не пересобираем (не потерять методы)
+/* ── Дропдаун-селекторы: валюта / крипта / способ оплаты ──── */
+const FIATS_UI=[['KZT','🇰🇿 KZT'],['RUB','🇷🇺 RUB'],['TRY','🇹🇷 TRY'],['USD','🇺🇸 USD'],['IDR','🇮🇩 IDR'],['VND','🇻🇳 VND'],['INR','🇮🇳 INR'],['AED','🇦🇪 AED'],['NGN','🇳🇬 NGN'],['BRL','🇧🇷 BRL'],['GEL','🇬🇪 GEL'],['AMD','🇦🇲 AMD'],['AZN','🇦🇿 AZN'],['KGS','🇰🇬 KGS']];
+const ASSETS_UI=[['USDT','USDT'],['BTC','₿ BTC'],['ETH','Ξ ETH']];
+let __payMethods=[], __selOpts=[], __selType='';
+function _labFrom(list,v){ const f=list.find(x=>x[0]===v); return f?f[1]:v; }
+function updateSelLabels(){
+  const ft=document.getElementById('selFiatTxt'); if(ft) ft.textContent=_labFrom(FIATS_UI,S.fiat);
+  const at=document.getElementById('selAssetTxt'); if(at) at.textContent=_labFrom(ASSETS_UI,S.asset);
+  const pt=document.getElementById('selPayTxt'); if(pt){ const m=__payMethods.find(x=>x.v===S.pay); pt.textContent='💳 '+(S.pay?(m?m.l:S.pay):'Все'); }
+}
+function mergePayMethods(ads){
+  if(S.pay) return;   // активен фильтр — не пересобираем (иначе потеряем методы)
   const seen=new Set();
   (ads||[]).forEach(a=>(a.pay_types||[]).forEach(p=>{const t=(p||'').trim(); if(t)seen.add(t);}));
-  const methods=[...seen].sort((a,b)=>a.localeCompare(b));
-  const sig=methods.join('|');
-  if(__paySig[rowId]===sig) return;   // не изменилось — без фликера
-  __paySig[rowId]=sig;
-  const pills=[{v:'',lbl:'Все'},...methods.map(m=>({v:m,lbl:m.length>16?m.slice(0,15)+'…':m}))];
-  row.innerHTML=pills.map(b=>`<button class="pill${b.v===currentVal?' active':''}" data-val="${esc(b.v)}">${esc(b.lbl)}</button>`).join('');
-  row.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click',()=>{
-    row.querySelectorAll('.pill').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active'); onSelect(btn.dataset.val);
-  }));
+  __payMethods=[...seen].sort((a,b)=>a.localeCompare(b)).map(m=>({v:m,l:m.length>22?m.slice(0,21)+'…':m}));
+  updateSelLabels();
+}
+function openSelector(type){
+  let opts,cur,title;
+  if(type==='fiat'){ opts=FIATS_UI.map(x=>({v:x[0],l:x[1]})); cur=S.fiat; title='Валюта'; }
+  else if(type==='asset'){ opts=ASSETS_UI.map(x=>({v:x[0],l:x[1]})); cur=S.asset; title='Криптовалюта'; }
+  else { opts=[{v:'',l:'💳 Все'}].concat(__payMethods); cur=S.pay; title='Способ оплаты'; }
+  __selOpts=opts; __selType=type;
+  document.getElementById('selModalBody').innerHTML=`<div class="sel-modal-title">${title}</div><div class="sel-grid">`+
+    opts.map((o,i)=>`<button class="sel-opt${o.v===cur?' active':''}" onclick="pickSel(${i})">${esc(o.l)}</button>`).join('')+`</div>`;
+  document.getElementById('selModalBg').classList.add('show');
+}
+function closeSelector(){ document.getElementById('selModalBg').classList.remove('show'); }
+function pickSel(i){
+  const o=__selOpts[i], type=__selType; closeSelector();
+  if(type==='fiat'){ if(o.v!==S.fiat){ S.fiat=o.v; S.pay=''; onMainStateChange(); } }
+  else if(type==='asset'){ if(o.v!==S.asset){ S.asset=o.v; updateHeaderPair(); restartBookTimer(); } }
+  else { S.pay=o.v; restartBookTimer(); }
+  updateSelLabels();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1004,10 +1011,9 @@ function switchTab(tab,btn){
   if(btn) btn.classList.add('active'); S.tab=tab;
   // Home tab: hide header selectors and spread bar
   const isHome=tab==='home';
-  ['exRow','fiatRow','assetRow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden',isHome); });
+  ['exRow','selRow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden',isHome); });
   const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=isHome?'none':'';
-  document.getElementById('payRow').classList.toggle('hidden',tab!=='book');
-  document.getElementById('makerPayRow').classList.toggle('hidden',tab!=='maker');
+  const mpr=document.getElementById('makerPayRow'); if(mpr) mpr.classList.toggle('hidden',tab!=='maker');
   if(tab==='home')     loadDashboard();
   if(tab==='book')     { updateBookModeUI(); restartBookTimer(); }
   if(tab==='chart')    loadChart();
@@ -1167,8 +1173,8 @@ function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){
   // Перекошенный рынок: топ-бид (L[0], сторона покупки мейкера) ≥ низ-аск (R[0])
   __makerCrossed = bookMode==='maker' && L.length && R.length && (L[0].price >= R[0].price);
   __book={buy:L,sell:R};   // для тапа по объявлению (с учётом инверсии)
-  // Методы оплаты — из реальных объявлений (все способы, любая биржа/валюта)
-  mergePayMethods('payRow',L.concat(R),S.pay,v=>{S.pay=v;restartBookTimer();});
+  // Методы оплаты — из реальных объявлений (в дропдаун-селектор)
+  mergePayMethods(L.concat(R));
   // Мейкер-режим: в каждую колонку добавляем «твою цену чтобы быть #1»
   document.getElementById('buyList').innerHTML=makerRecCard('buy',L)+renderAdList(L,showRisk,'buy');
   document.getElementById('sellList').innerHTML=makerRecCard('sell',R)+renderAdList(R,showRisk,'sell');
@@ -1386,7 +1392,7 @@ function renderMulti({pairs}){
   }).join('');
 }
 function selectPair(asset){
-  S.asset=asset; applyStateToUI(); updatePayRow('payRow',S.exchange,S.fiat,v=>{S.pay=v;restartBookTimer();}); updateHeaderPair();
+  S.asset=asset; applyStateToUI(); updateSelLabels(); updateHeaderPair();
   switchTab('book',document.querySelector('.nav-btn[data-tab="book"]'));
 }
 
@@ -2070,7 +2076,8 @@ function dashArbClick(){
 }
 
 function dashOpenEx(exId){
-  S.exchange=exId; applyStateToUI(); updateHeaderPair();
+  S.exchange=exId; S.fiat=dashFiat; S.asset=dashAsset; S.pay='';
+  applyStateToUI(); updateHeaderPair();
   switchTab('book',navBtn('book'));
 }
 
@@ -2159,9 +2166,9 @@ applyStateToUI();
 updateHeaderPair();
 updateFilterBadge();
 renderPresets();
-updatePayRow('payRow',S.exchange,S.fiat,v=>{S.pay=v;restartBookTimer();});
 updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
 document.getElementById('makerPayRow').classList.add('hidden');
+updateSelLabels();   // подписи кнопок-селекторов
 // Init book mode toggle from localStorage
 updateBookModeUI();
 // Start on home/dashboard tab
@@ -2170,6 +2177,10 @@ switchTab('home', document.querySelector('.nav-btn[data-tab="home"]'));
 <!-- Модалка деталей объявления -->
 <div class="ad-modal-bg" id="adModalBg" onclick="if(event.target===this)closeAdModal()">
   <div class="ad-modal" id="adModalBody"></div>
+</div>
+<!-- Модалка выбора (валюта / крипта / оплата) -->
+<div class="ad-modal-bg" id="selModalBg" onclick="if(event.target===this)closeSelector()">
+  <div class="ad-modal" id="selModalBody"></div>
 </div>
 </body>
 </html>
