@@ -90,6 +90,7 @@ async def get_ads(
             "completion":  comp,
             "description": item.get("remark") or "",
             "ad_no":       item.get("advNo") or item.get("id") or "",
+            "advertiser_no": item.get("publicUserId") or "",
         })
 
     if pay_types:

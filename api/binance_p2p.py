@@ -48,6 +48,7 @@ async def get_ads(
             "completion":  advertiser.get("monthFinishRate", 0),
             "description": adv.get("remarks", ""),
             "ad_no":       adv.get("advNo", ""),
+            "advertiser_no": advertiser.get("userNo", ""),
         })
     return ads
 

@@ -75,6 +75,7 @@ async def get_ads(
             "completion":  float(item.get("recentExecuteRate", 0)),
             "description": item.get("remark", ""),
             "ad_no":       item.get("id", ""),
+            "advertiser_no": item.get("userId", ""),
         })
     return ads
 
