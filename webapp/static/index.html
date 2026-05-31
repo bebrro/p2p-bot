@@ -1155,10 +1155,10 @@ function renderTriangle(t){
     ${warn?'<div class="tri-warn">⚠️ проверь ликвидность и лимиты — возможны приманки</div>':''}
   `;
 }
-function renderOrderbook({buy,sell,spread,triangle}){
+function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){
   renderTriangle(triangle||null);
-  if(buy.length){ document.getElementById('buyPrice').textContent=fmt(buy[0].price); const v=buy.reduce((s,a)=>s+(a.available||0),0); document.getElementById('buyVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
-  if(sell.length){ document.getElementById('sellPrice').textContent=fmt(sell[0].price); const v=sell.reduce((s,a)=>s+(a.available||0),0); document.getElementById('sellVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
+  if(buy.length){ document.getElementById('buyPrice').textContent=fmt(best_buy||buy[0].price); const v=buy.reduce((s,a)=>s+(a.available||0),0); document.getElementById('buyVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
+  if(sell.length){ document.getElementById('sellPrice').textContent=fmt(best_sell||sell[0].price); const v=sell.reduce((s,a)=>s+(a.available||0),0); document.getElementById('sellVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
   const chip=document.getElementById('spreadChip');
   if(spread?.spread_pct!=null){ const pct=spread.spread_pct; chip.textContent=`⇔ ${pct}%`; chip.className='spread-chip'+(pct>=0.5?' good':pct>=0.2?' mid':''); }
   else{ chip.textContent='—'; chip.className='spread-chip'; }

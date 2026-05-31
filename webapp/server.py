@@ -31,6 +31,7 @@ from handlers.account_manager import (
 from handlers.auto_reprice import add_rule_memory, remove_rule_memory
 from handlers.pnl import calc_pnl
 from utils.spread import calc_spread
+from utils.pricing import pick_best_price
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
@@ -347,13 +348,18 @@ async def api_orderbook(request: web.Request) -> web.Response:
         buy_ads  = _sink_flagged(buy_ads)
         sell_ads = _sink_flagged(sell_ads)
 
+        # Топ-цена и спред — по ДЕ-БАЙТЕНЫМ ценам (без приманок-выбросов),
+        # чтобы заголовок стакана не ломался одиночным фейк-объявлением.
+        best_buy  = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset)
+        best_sell = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset)
         spread = {}
-        if buy_ads and sell_ads:
-            spread = calc_spread(buy_ads[0]["price"], sell_ads[0]["price"])
+        if best_buy and best_sell:
+            spread = calc_spread(best_buy, best_sell)
 
         return web.json_response({
             "buy": buy_ads[:10], "sell": sell_ads[:10],
             "spread": spread, "triangle": triangle,
+            "best_buy": best_buy, "best_sell": best_sell,
         })
     except Exception as e:
         logger.error(f"api_orderbook {ex}/{fiat}/{asset}: {e}")
