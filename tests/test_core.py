@@ -629,9 +629,14 @@ def test_desc_parser_scam_recruit():
                 "@scam_bot пиши", "обучение в тг", "все вопросы в тг",
                 "научу наставник", "пиши в личку"):
         assert p(txt)["scam_recruit"] is True, txt
-    # легитимные — чисто
+    # обход фильтра латиницей (гомоглифы): «Pyбuм кaпyсту» — P,y,u латинские
+    for txt in ("Pyбuм кaпyсту 7% с кpyгa tеlеg: werezov",
+                "Ai-торги с обучением, связки без пластика tелеg: x"):
+        assert p(txt)["scam_recruit"] is True, txt
+    # легитимные — чисто (латиница и кириллица в РАЗНЫХ словах — это норма)
     for txt in ("работаю строго с 1 лицами", "Kaspi Bank оплата сразу",
-                "принимаю от третьих лиц", ""):
+                "принимаю от третьих лиц", "VISA / МИР принимаю",
+                "Tinkoff Sberbank USDT", ""):
         assert p(txt)["scam_recruit"] is False, txt
 
 def test_enrich_sets_scam_recruit():

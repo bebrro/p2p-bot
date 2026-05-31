@@ -105,10 +105,26 @@ _SCAM_RECRUIT = re.compile(
     r'|схем\w*\s+заработ'                     # «схема заработка»
     r'|за\s*работ\w*\s+\d+\s*%'               # «заработок 10%»
     r'|в\s+(?:тг|телег\w*|телеге|вотсап|whats|вацап|лс\b|личк\w+)'   # увод в личку/тг
+    r'|связк\w*\s+без\s+(?:пластик|карт)'     # «связки без пластика»
+    r'|без\s+пластик'                         # «без пластика» (= без карт, вербовка)
     r'|@[a-zA-Z][\w]{3,}'                     # внешний @username в описании
     r')',
     re.IGNORECASE | re.UNICODE,
 )
+
+# Смешение латиницы и кириллицы в одном слове = техника обхода фильтров
+# («Pyбuм кaпyсту» — P,y,u латинские). В нормальном объявлении не бывает.
+_WORD = re.compile(r'[a-zA-Zа-яёА-ЯЁ]{3,}', re.UNICODE)
+_LAT  = re.compile(r'[a-zA-Z]')
+_CYR  = re.compile(r'[а-яёА-ЯЁ]', re.UNICODE)
+
+
+def _has_mixed_script(text: str) -> bool:
+    """True если есть слово с ≥2 латинских И ≥2 кириллических букв (гомоглиф-обход)."""
+    for w in _WORD.findall(text):
+        if len(_LAT.findall(w)) >= 2 and len(_CYR.findall(w)) >= 2:
+            return True
+    return False
 
 
 def parse_description(text: str) -> dict:
@@ -169,7 +185,8 @@ def parse_description(text: str) -> dict:
         flags.append(f"🏦 {bm.group(0)}")
 
     # ── Вербовка / скам ───────────────────────────────────────────────────────
-    scam_recruit = bool(_SCAM_RECRUIT.search(t))
+    # Ловим и по ключевым фразам, и по обходу фильтров (латиница+кириллица в слове)
+    scam_recruit = bool(_SCAM_RECRUIT.search(t)) or _has_mixed_script(t)
     if scam_recruit:
         flags.insert(0, "🚩 ВЕРБОВКА / СКАМ")   # первым — самое важное
 
