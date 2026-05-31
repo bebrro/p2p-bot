@@ -37,7 +37,7 @@ from handlers import (
     whale_tracker, pattern_engine, ai_advisor,
     price_signal,
     subscription, pnl,
-    referral, digest, admin, channel,
+    referral, digest, admin, channel, antiscam,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -208,6 +208,7 @@ async def main():
         BotCommand(command="p2p",         description="📊 P2P курсы — все биржи"),
         BotCommand(command="alerts",      description="🔔 Алерты на спред"),
         BotCommand(command="ai",          description="🤖 AI Советник"),
+        BotCommand(command="antiscam",    description="🛡 Антискам — проверка чеков и кидал"),
         BotCommand(command="pnl",         description="📊 P&L трекер (Pro/Team)"),
         BotCommand(command="calc",        description="🧮 Калькулятор прибыли"),
         BotCommand(command="subscribe",   description="⭐ Подписка и тарифы"),
@@ -220,7 +221,7 @@ async def main():
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     for r in [
-        admin.router, channel.router,              # админ-команды первыми
+        admin.router, channel.router, antiscam.router,  # админ + антискам
         subscription.router, pnl.router,           # монетизация и P&L
         start.router, maker.router, tracker.router,
         position_monitor.router, calculator.router,

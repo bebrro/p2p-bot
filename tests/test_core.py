@@ -380,6 +380,31 @@ def test_main_menu_has_referral():
     cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
     assert "ref:show" in cbs
 
+def test_main_menu_has_antiscam():
+    kb  = main_menu()
+    cbs = {b.callback_data for row in kb.inline_keyboard for b in row if b.callback_data}
+    assert "antiscam:start" in cbs
+
+
+# ─── Антискам ─────────────────────────────────────────────────────────────────
+
+def test_antiscam_memo_has_key_rule():
+    """Памятка содержит главное правило безопасности."""
+    import handlers.antiscam as a
+    assert "реально пришли" in a._MEMO
+    assert "НЕ доказательство" in a._MEMO or "Скриншот" in a._MEMO
+
+def test_antiscam_receipt_prompt_reminds_to_verify():
+    """Промпт анализа чека заставляет AI напомнить про реальное поступление."""
+    import handlers.antiscam as a
+    assert "реально пришли" in a._RECEIPT_PROMPT
+    assert "подделк" in a._RECEIPT_PROMPT.lower()
+
+def test_gemini_has_vision():
+    import inspect
+    from api import gemini
+    assert inspect.iscoroutinefunction(gemini.vision)
+
 
 # ─── AI советник: 4 биржи (task 8) ────────────────────────────────────────────
 

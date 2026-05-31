@@ -47,6 +47,8 @@ def main_menu() -> InlineKeyboardMarkup:
             _B(text="📊 P&L",     callback_data="pnl:view"),
             _B(text="🤖 AI",      callback_data="ai:start"),
         ],
+        # Антискам — защита от фейк-чеков и кидал
+        [_B(text="🛡 Антискам · проверка чеков и кидал", callback_data="antiscam:start")],
         # Реферальная программа — органический рост
         [_B(text="👥 Пригласить друга → +7 дней Pro 🎁", callback_data="ref:show")],
     ]
