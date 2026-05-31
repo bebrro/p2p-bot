@@ -667,6 +667,117 @@ async def api_maker(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# ─── Антискам API (чек / ник / репорт) ──────────────────────────────────────
+_RECEIPT_PROMPT = (
+    "Ты эксперт по безопасности P2P-сделок с криптой. На изображении — "
+    "«чек об оплате», который прислал контрагент. P2P-мошенники присылают "
+    "ПОДДЕЛЬНЫЕ чеки, чтобы продавец отпустил USDT не получив реальных денег.\n\n"
+    "Проанализируй скриншот на признаки подделки и ответь на русском СТРОГО так:\n\n"
+    "🔎 <b>Признаки редактирования:</b> [шрифты, выравнивание, артефакты сжатия, "
+    "несовпадение стиля — или 'явных нет']\n"
+    "📋 <b>Нестыковки:</b> [время/дата/сумма/баланс/реквизиты/статус — или 'не вижу']\n"
+    "🏦 <b>Похоже на реальный интерфейс банка/приложения:</b> [да/нет/трудно сказать]\n"
+    "⚖️ <b>Вердикт:</b> 🟢 похоже на настоящий | 🟡 подозрительно | 🔴 признаки подделки\n\n"
+    "Будь конкретен, но не выдумывай. В конце ОБЯЗАТЕЛЬНО добавь дословно:\n"
+    "«⚠️ Скриншот — НЕ доказательство. Отпускай USDT только когда деньги "
+    "реально пришли на твой счёт (проверь в своём банке/приложении).»"
+)
+
+
+async def api_antiscam_receipt(request: web.Request) -> web.Response:
+    """POST /api/antiscam/receipt  Body: {image: base64}  → AI-анализ чека."""
+    try:
+        body = await request.json()
+        img  = (body.get("image") or "").strip()
+        if img.lower().startswith("data:") and "," in img:
+            img = img.split(",", 1)[1]      # срезаем data:image/...;base64,
+        if not img:
+            return web.json_response({"error": "no image"}, status=400)
+        result = await gemini.vision(img, _RECEIPT_PROMPT, mime="image/jpeg")
+        return web.json_response({"result": result})
+    except Exception as e:
+        logger.error(f"api_antiscam_receipt: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_antiscam_nick(request: web.Request) -> web.Response:
+    """GET /api/antiscam/nick/{nick}  → проверка ника по базе кидал."""
+    nick = (request.match_info.get("nick") or "").strip()
+    if len(nick) < 2:
+        return web.json_response({"error": "short"}, status=400)
+    votes = 0
+    try:
+        if db.ok():
+            nl = nick.lower()
+            for n, cnt in await db.community_get_all():
+                if (n or "").strip().lower() == nl:
+                    votes = int(cnt); break
+    except Exception as e:
+        logger.warning(f"antiscam nick: {e}")
+    if votes >= 3:
+        level, verdict = "danger", f"ОПАСНО — отмечен как кидала {votes} раз"
+    elif votes >= 1:
+        level, verdict = "warn", f"Осторожно — есть {votes} жалоб(ы)"
+    else:
+        level, verdict = "ok", "Жалоб в базе нет (но это не гарантия)"
+    return web.json_response({"nick": nick, "votes": votes,
+                              "level": level, "verdict": verdict})
+
+
+async def api_antiscam_report(request: web.Request) -> web.Response:
+    """POST /api/antiscam/report?uid=  Body: {nick}  → добавить в базу кидал."""
+    try:
+        body = await request.json()
+        nick = (body.get("nick") or "").strip()
+        if len(nick) < 2:
+            return web.json_response({"error": "short"}, status=400)
+        uid   = _uid(request) or 0
+        total = await db.community_vote(uid, nick) if db.ok() else 0
+        return web.json_response({"nick": nick, "total": total})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+# ─── Whale-трекер API (крупные заявки) ───────────────────────────────────────
+async def api_whales(request: web.Request) -> web.Response:
+    """GET /api/whales/{fiat}?asset=USDT&threshold=50000  → крупные мерчанты."""
+    fiat  = request.match_info["fiat"]
+    asset = request.rel_url.query.get("asset", "USDT")
+    try:
+        threshold = float(request.rel_url.query.get("threshold") or 50_000)
+    except Exception:
+        threshold = 50_000
+
+    tasks, meta = [], []
+    for ex_id, name, icon, _b, _s in _EX_META:
+        if ex_id in DISABLED_EXCHANGES:
+            continue
+        for side in ("buy", "sell"):
+            meta.append((ex_id, name, icon, side))
+            tasks.append(_fetch(ex_id, fiat, asset, side, rows=30))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    whales = []
+    for (ex_id, name, icon, side), ads in zip(meta, results):
+        if isinstance(ads, Exception) or not ads:
+            continue
+        for ad in ads:
+            vol = (ad.get("available") or 0) * (ad.get("price") or 0)
+            if vol >= threshold:
+                whales.append({
+                    "ex_name":   name,
+                    "ex_icon":   icon,
+                    "side":      side,                       # buy | sell
+                    "nickname":  ad.get("nickname", "—"),
+                    "price":     ad.get("price", 0),
+                    "available": round(ad.get("available", 0), 2),
+                    "volume":    round(vol),
+                })
+    whales.sort(key=lambda x: x["volume"], reverse=True)
+    return web.json_response({"whales": whales[:30],
+                              "threshold": threshold, "fiat": fiat, "asset": asset})
+
+
 # ─── User-data helpers ────────────────────────────────────────────────────────
 
 def _uid(request: web.Request) -> int | None:
@@ -1299,6 +1410,11 @@ def create_app() -> web.Application:
     app.router.add_get("/api/user/pnl",                                  api_pnl)
     app.router.add_get("/api/dashboard",                                  api_dashboard)
     app.router.add_get("/api/xtriangle/{fiat}/{asset}",                   api_xtriangle)
+
+    app.router.add_post("/api/antiscam/receipt",                          api_antiscam_receipt)
+    app.router.add_get("/api/antiscam/nick/{nick}",                       api_antiscam_nick)
+    app.router.add_post("/api/antiscam/report",                           api_antiscam_report)
+    app.router.add_get("/api/whales/{fiat}",                              api_whales)
 
     # Health check
     app.router.add_get("/health",     health_handler)

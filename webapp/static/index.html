@@ -433,6 +433,54 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .dash-act:active{background:rgba(255,255,255,.08)}
 .dash-act.cta{background:var(--btn);color:var(--btnt);grid-column:1/-1;font-size:13px;padding:11px 8px}
 .dash-act.cta:active{opacity:.85}
+/* ── Whale tracker ── */
+.whale-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;flex-wrap:wrap}
+.whale-sel{background:var(--bg2);padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.whale-thr{display:flex;align-items:center;gap:3px;font-size:9px;color:var(--hint)}
+.whale-thr-pill{background:var(--bg2);border:none;color:var(--hint);padding:5px 7px;border-radius:7px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
+.whale-thr-pill.active{background:var(--btn);color:var(--btnt)}
+.whale-count{font-size:11px;color:var(--hint);padding:2px 10px 8px}
+.whale-row{background:var(--bg2);border-radius:10px;padding:9px 11px;margin:0 8px 7px}
+.whale-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.whale-nick{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whale-side{font-size:9px;padding:2px 6px;border-radius:5px;font-weight:600;white-space:nowrap}
+.whale-side.buy{background:rgba(67,181,129,.15);color:var(--green)}
+.whale-side.sell{background:rgba(240,71,71,.15);color:var(--red)}
+.whale-mid{display:flex;justify-content:space-between;align-items:baseline;margin-top:4px}
+.whale-vol{font-size:14px;font-weight:700;color:var(--gold)}
+.whale-price{font-size:12px;color:var(--text)}
+.whale-bot{font-size:10px;color:var(--hint);margin-top:3px}
+/* ── Tools (антискам + калькулятор) ── */
+.tool-card{background:var(--bg2);border-radius:12px;padding:12px;margin-bottom:10px}
+.tool-card-title{font-size:13px;font-weight:700;margin-bottom:3px}
+.tool-card-sub{font-size:11px;color:var(--hint);line-height:1.4;margin-bottom:9px}
+.tool-btn{width:100%;background:var(--btn);color:var(--btnt);border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:6px}
+.tool-btn:active{opacity:.85}
+.tool-btn.sm{width:auto;padding:10px 14px;margin:0}
+.tool-btn.danger{background:var(--red);margin-top:8px}
+.tool-input-row{display:flex;gap:6px}
+.tool-input-row input{flex:1}
+#tab-tools input[type=text],#tab-tools input[type=number]{background:var(--bg);border:1px solid rgba(255,255,255,.08);color:var(--text);border-radius:8px;padding:10px;font-size:13px;font-family:inherit;width:100%;box-sizing:border-box}
+.tool-result{margin-top:10px;background:var(--bg);border-radius:9px;padding:11px;font-size:12px;line-height:1.5}
+.tool-result-title{font-weight:700;margin-bottom:6px;font-size:12px}
+.tool-result-body{white-space:normal;word-break:break-word}
+.tool-wait{color:var(--hint);font-size:11px;margin-top:6px;text-align:center}
+.tool-memo .tool-memo-body{font-size:11.5px;line-height:1.6;color:var(--text)}
+.nick-verdict{padding:10px;border-radius:8px;font-size:12.5px;line-height:1.5}
+.nick-verdict.ok{background:rgba(67,181,129,.12)}
+.nick-verdict.warn{background:rgba(250,166,26,.14)}
+.nick-verdict.danger{background:rgba(240,71,71,.14)}
+.calc-lbl{display:block;font-size:10px;color:var(--hint);text-transform:uppercase;letter-spacing:.3px;margin:10px 0 4px}
+.calc-cur-row{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.calc-cur{background:var(--bg);border:1px solid rgba(255,255,255,.08);color:var(--text);border-radius:8px;padding:9px 4px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.calc-cur.active{background:var(--btn);color:var(--btnt);border-color:var(--btn)}
+.calc-res-head{font-size:14px;font-weight:700;margin-bottom:8px}
+.calc-res-head.green{color:var(--green)} .calc-res-head.red{color:var(--red)}
+.calc-res-pct{font-size:11px;opacity:.8;margin-left:4px}
+.calc-res-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.calc-res-grid>div{display:flex;flex-direction:column;gap:1px}
+.calc-res-grid span{font-size:9px;color:var(--hint);text-transform:uppercase;letter-spacing:.2px}
+.calc-res-grid b{font-size:12px}
 </style>
 </head>
 <body>
@@ -668,6 +716,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="sub-btn"        data-sub="alerts"    onclick="switchMonitor('alerts',this)">🔔 Алерты</button>
     <button class="sub-btn"        data-sub="blacklist" onclick="switchMonitor('blacklist',this)">🚫 ЧС</button>
     <button class="sub-btn"        data-sub="auto"      onclick="switchMonitor('auto',this)">🤖 Авто</button>
+    <button class="sub-btn"        data-sub="whales"    onclick="switchMonitor('whales',this)">🐋 Киты</button>
   </div>
 
   <!-- Пары (бывшая вкладка Мульти) -->
@@ -697,6 +746,22 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- 🤖 Авто-репрайсер -->
   <div class="mon-panel hidden" id="monAuto" style="overflow-y:auto">
     <div id="autoContent"><div class="spinner"></div></div>
+  </div>
+
+  <!-- 🐋 Киты -->
+  <div class="mon-panel hidden" id="monWhales" style="overflow-y:auto">
+    <div class="whale-bar">
+      <div class="whale-sel" id="whaleFiatSel" onclick="openWhaleFiat()">🇰🇿 KZT ▾</div>
+      <div class="whale-thr">
+        <span>Порог</span>
+        <button class="whale-thr-pill" data-thr="30000"  onclick="setWhaleThr(30000,this)">30k</button>
+        <button class="whale-thr-pill active" data-thr="50000" onclick="setWhaleThr(50000,this)">50k</button>
+        <button class="whale-thr-pill" data-thr="100000" onclick="setWhaleThr(100000,this)">100k</button>
+        <button class="whale-thr-pill" data-thr="500000" onclick="setWhaleThr(500000,this)">500k</button>
+      </div>
+      <button class="multi-refresh-btn" onclick="loadWhales()">↻</button>
+    </div>
+    <div id="whalesContent"><div class="spinner"></div></div>
   </div>
 </div>
 
@@ -779,6 +844,74 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
 </div>
 
+<!-- ════════════════════ TAB: ИНСТРУМЕНТЫ ════════════════════ -->
+<div class="tab-panel hidden" id="tab-tools" style="display:flex;flex-direction:column;padding-bottom:calc(var(--nav-h)+6px)">
+  <div class="sub-nav">
+    <button class="sub-btn active" data-tsub="scam" onclick="switchTool('scam',this)">🛡 Антискам</button>
+    <button class="sub-btn"        data-tsub="calc" onclick="switchTool('calc',this)">🧮 Калькулятор</button>
+  </div>
+
+  <!-- 🛡 Антискам -->
+  <div class="tool-panel" id="toolScam" style="overflow-y:auto;padding:10px">
+    <div class="tool-card">
+      <div class="tool-card-title">🧾 Проверка чека (AI)</div>
+      <div class="tool-card-sub">Загрузи скрин «чека об оплате» от контрагента — AI найдёт признаки подделки.</div>
+      <input type="file" id="receiptFile" accept="image/*" style="display:none" onchange="checkReceipt(event)">
+      <button class="tool-btn" onclick="document.getElementById('receiptFile').click()">📸 Загрузить чек</button>
+      <div id="receiptResult" class="tool-result" style="display:none"></div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-card-title">👤 Проверка никнейма</div>
+      <div class="tool-card-sub">Пробей ник контрагента по краудсорс-базе кидал.</div>
+      <div class="tool-input-row">
+        <input type="text" id="nickInput" placeholder="Ник из объявления" onkeydown="if(event.key==='Enter')checkNick()">
+        <button class="tool-btn sm" onclick="checkNick()">Проверить</button>
+      </div>
+      <div id="nickResult" class="tool-result" style="display:none"></div>
+    </div>
+
+    <div class="tool-card tool-memo">
+      <div class="tool-card-title">📋 Памятка безопасности</div>
+      <div class="tool-memo-body">
+        💰 Отпускай USDT <b>только</b> когда деньги реально пришли на счёт. Скриншот/СМС/«чек» — НЕ доказательство.<br><br>
+        🔴 Торопят «быстрее отпускай»<br>
+        🔴 «Деньги в пути / зависли» — почти всегда обман<br>
+        🔴 Просят отпустить частями / «на доверии»<br>
+        🔴 Сумма в чеке не сходится до копейки<br>
+        🔴 Платёж от 3-го лица, которого ты не разрешал<br><br>
+        ✅ Сам зайди в банк-приложение и проверь баланс<br>
+        ✅ Сверь сумму и имя отправителя<br>
+        ✅ Сомневаешься — открой спор/поддержку биржи
+      </div>
+    </div>
+  </div>
+
+  <!-- 🧮 Калькулятор -->
+  <div class="tool-panel hidden" id="toolCalc" style="overflow-y:auto;padding:10px">
+    <div class="tool-card">
+      <div class="tool-card-title">🧮 Калькулятор прибыли</div>
+      <div class="tool-card-sub">Введи параметры сделки — посчитаю чистую прибыль с учётом комиссии.</div>
+      <label class="calc-lbl">Валюта</label>
+      <div class="calc-cur-row" id="calcCurRow">
+        <button class="calc-cur active" data-cur="KZT" onclick="pickCalcCur('KZT',this)">🇰🇿 KZT</button>
+        <button class="calc-cur" data-cur="RUB" onclick="pickCalcCur('RUB',this)">🇷🇺 RUB</button>
+        <button class="calc-cur" data-cur="TRY" onclick="pickCalcCur('TRY',this)">🇹🇷 TRY</button>
+        <button class="calc-cur" data-cur="USD" onclick="pickCalcCur('USD',this)">🇺🇸 USD</button>
+      </div>
+      <label class="calc-lbl">Цена покупки (за 1 USDT)</label>
+      <input type="number" inputmode="decimal" id="calcBuy" placeholder="460" oninput="runCalc()">
+      <label class="calc-lbl">Цена продажи (за 1 USDT)</label>
+      <input type="number" inputmode="decimal" id="calcSell" placeholder="550" oninput="runCalc()">
+      <label class="calc-lbl">Сумма покупки (фиат)</label>
+      <input type="number" inputmode="decimal" id="calcSpent" placeholder="100000" oninput="runCalc()">
+      <label class="calc-lbl">Комиссия биржи, % <span style="color:var(--hint)">(P2P обычно 0)</span></label>
+      <input type="number" inputmode="decimal" id="calcFee" value="0" oninput="runCalc()">
+      <div id="toolCalcResult" class="tool-result" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════════ TAB: AI ═════════════════════════════ -->
 <div class="tab-panel hidden" id="tab-ai">
   <div class="chat-messages" id="chatMessages"></div>
@@ -795,6 +928,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="nav-btn"        data-tab="spread"   onclick="switchTab('spread',this)"><span class="nav-icon">⚡</span>Спред</button>
   <button class="nav-btn"        data-tab="maker"    onclick="switchTab('maker',this)"><span class="nav-icon">🎯</span>Мейкер</button>
   <button class="nav-btn"        data-tab="monitor"  onclick="switchTab('monitor',this)"><span class="nav-icon">🔔</span>Монитор</button>
+  <button class="nav-btn"        data-tab="tools"    onclick="switchTab('tools',this)"><span class="nav-icon">🧰</span>Инструм.</button>
   <button class="nav-btn"        data-tab="settings" onclick="switchTab('settings',this)"><span class="nav-icon">⚙️</span>Кабинет</button>
   <button class="nav-btn"        data-tab="ai"       onclick="switchTab('ai',this)"><span class="nav-icon">🤖</span>AI</button>
 </nav>
@@ -825,6 +959,8 @@ let REFRESH_MS = (_cfg.refresh_speed || 10) * 1000;
 ══════════════════════════════════════════════════════════ */
 const S  = { exchange: _cfg.default_exchange||'binance', fiat: _cfg.default_fiat||'KZT', asset:'USDT', tab:'book', pay:'' };
 const CM = { fiat:'KZT', asset:'USDT' };
+const WH = { fiat:'KZT', threshold:50000 };
+let   _toolsInited=false, _calcCur='KZT';
 const MK = { side:'buy', pay:'' };
 const BF = { min_amount:0, third_party:'', min_orders:0, min_comp:0 };
 
@@ -952,6 +1088,7 @@ function openSelector(type){
   else if(type==='asset'){ opts=ASSETS_UI.map(x=>({v:x[0],l:x[1]})); cur=S.asset; title='Криптовалюта'; }
   else if(type==='dfiat'){ opts=FIATS_UI.map(x=>({v:x[0],l:x[1]})); cur=dashFiat; title='Валюта'; }
   else if(type==='dasset'){ opts=ASSETS_UI.map(x=>({v:x[0],l:x[1]})); cur=dashAsset; title='Криптовалюта'; }
+  else if(type==='wfiat'){ opts=FIATS_UI.map(x=>({v:x[0],l:x[1]})); cur=WH.fiat; title='Валюта'; }
   else { opts=[{v:'',l:'💳 Все'}].concat(__payMethods); cur=S.pay; title='Способ оплаты'; }
   __selOpts=opts; __selType=type;
   document.getElementById('selModalBody').innerHTML=`<div class="sel-modal-title">${title}</div><div class="sel-grid">`+
@@ -965,9 +1102,12 @@ function pickSel(i){
   else if(type==='asset'){ if(o.v!==S.asset){ S.asset=o.v; updateHeaderPair(); restartBookTimer(); } }
   else if(type==='dfiat'){ if(o.v!==dashFiat){ dashFiat=o.v; document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset; updateDashSelLabels(); loadDashboard(); } }
   else if(type==='dasset'){ if(o.v!==dashAsset){ dashAsset=o.v; document.getElementById('dashPairLbl').textContent=dashFiat+' / '+dashAsset; updateDashSelLabels(); loadDashboard(); } }
+  else if(type==='wfiat'){ if(o.v!==WH.fiat){ WH.fiat=o.v; document.getElementById('whaleFiatSel').textContent=whaleFiatLabel()+' ▾'; loadWhales(); } return; }
   else { S.pay=o.v; restartBookTimer(); }
   updateSelLabels();
 }
+function openWhaleFiat(){ openSelector('wfiat'); }
+function whaleFiatLabel(){ const f=FIATS_UI.find(x=>x[0]===WH.fiat); return f?f[1]:WH.fiat; }
 
 /* ══════════════════════════════════════════════════════════
    TAB SWITCHING
@@ -1014,6 +1154,7 @@ function switchTab(tab,btn){
   if(tab==='monitor')  { const sub=document.querySelector('.sub-btn[data-sub="'+currentSub+'"]'); switchMonitor(currentSub,sub); }
   if(tab==='settings'){ initSettingsTab(); loadSubscription(); }
   if(tab==='ai')       initChat();
+  if(tab==='tools')    initTools();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1355,6 +1496,7 @@ function switchMonitor(sub,btn){
   if(sub==='alerts')    loadAlerts();
   if(sub==='blacklist') loadBlacklist();
   if(sub==='auto')      loadAuto();
+  if(sub==='whales')    loadWhales();
 }
 
 /* ── Pairs (Мультипара) ───────────────────────────────────── */
@@ -2173,6 +2315,131 @@ updateDashSelLabels();
 // Init book mode toggle from localStorage
 updateBookModeUI();
 // Start on home/dashboard tab
+/* ══════════════════════════════════════════════════════════
+   WHALE TRACKER (киты)
+══════════════════════════════════════════════════════════ */
+function setWhaleThr(v,btn){
+  WH.threshold=v;
+  document.querySelectorAll('.whale-thr-pill').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  loadWhales();
+}
+async function loadWhales(){
+  const box=document.getElementById('whalesContent'); if(!box)return;
+  box.innerHTML='<div class="spinner"></div>';
+  document.getElementById('whaleFiatSel').textContent=whaleFiatLabel()+' ▾';
+  try{
+    const r=await fetch(`/api/whales/${WH.fiat}?asset=USDT&threshold=${WH.threshold}`);
+    const data=await r.json(); if(data.error)throw new Error(data.error);
+    renderWhales(data.whales||[]);
+  }catch(e){ box.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
+}
+function renderWhales(whales){
+  const box=document.getElementById('whalesContent');
+  if(!whales.length){ box.innerHTML=`<div class="empty-hint">🐋 Китов выше ${fmtK(WH.threshold)} не найдено.<br>Снизь порог или смени валюту.</div>`; return; }
+  let html=`<div class="whale-count">Найдено: <b>${whales.length}</b> · порог ${fmtK(WH.threshold)} ${WH.fiat}</div>`;
+  whales.forEach(w=>{
+    const isBuy=w.side==='buy';
+    const sideTag=isBuy?'<span class="whale-side buy">📗 покупка</span>':'<span class="whale-side sell">📕 продажа</span>';
+    html+=`<div class="whale-row">
+      <div class="whale-top"><span class="whale-nick">${esc(w.ex_icon)} ${esc(w.nickname)}</span>${sideTag}</div>
+      <div class="whale-mid"><span class="whale-vol">🐋 ${fmtK(w.volume)} ${esc(w.fiat||WH.fiat)}</span><span class="whale-price">@ ${fmt(w.price)}</span></div>
+      <div class="whale-bot">${fmtK(w.available)} USDT в наличии · ${esc(w.ex_name)}</div>
+    </div>`;
+  });
+  box.innerHTML=html;
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOOLS TAB (антискам + калькулятор)
+══════════════════════════════════════════════════════════ */
+function initTools(){
+  if(_toolsInited)return; _toolsInited=true;
+  switchTool('scam',document.querySelector('.sub-btn[data-tsub="scam"]'));
+}
+function switchTool(sub,btn){
+  document.querySelectorAll('#tab-tools .tool-panel').forEach(p=>p.classList.add('hidden'));
+  const el=document.getElementById(sub==='scam'?'toolScam':'toolCalc'); if(el)el.classList.remove('hidden');
+  document.querySelectorAll('#tab-tools .sub-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+}
+
+/* ── Антискам: проверка чека ── */
+async function checkReceipt(ev){
+  const file=ev.target.files&&ev.target.files[0]; if(!file)return;
+  const out=document.getElementById('receiptResult');
+  out.style.display='block'; out.className='tool-result'; out.innerHTML='<div class="spinner"></div><div class="tool-wait">🔎 AI анализирует чек… (~10-20 сек)</div>';
+  try{
+    const b64=await fileToB64(file);
+    const r=await fetch('/api/antiscam/receipt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64})});
+    const data=await r.json(); if(data.error)throw new Error(data.error);
+    out.innerHTML=`<div class="tool-result-title">🧾 Анализ чека</div><div class="tool-result-body">${sanitizeAI(data.result||'—')}</div>`;
+  }catch(e){ out.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
+  ev.target.value='';
+}
+function fileToB64(file){
+  return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); });
+}
+// AI отдаёт текст с разрешёнными <b>…</b> тегами — остальное экранируем
+function sanitizeAI(s){
+  return esc(s).replace(/&lt;b&gt;/g,'<b>').replace(/&lt;\/b&gt;/g,'</b>').replace(/\n/g,'<br>');
+}
+
+/* ── Антискам: проверка ника ── */
+async function checkNick(){
+  const inp=document.getElementById('nickInput'), nick=(inp.value||'').trim();
+  const out=document.getElementById('nickResult');
+  if(nick.length<2){ out.style.display='block'; out.className='tool-result'; out.innerHTML='<div class="tool-result-body">Введи ник (от 2 символов).</div>'; return; }
+  out.style.display='block'; out.className='tool-result'; out.innerHTML='<div class="spinner"></div>';
+  try{
+    const r=await fetch(`/api/antiscam/nick/${encodeURIComponent(nick)}`);
+    const d=await r.json(); if(d.error)throw new Error(d.error);
+    const cls=d.level==='danger'?'danger':(d.level==='warn'?'warn':'ok');
+    const dot=d.level==='danger'?'🔴':(d.level==='warn'?'🟡':'🟢');
+    let html=`<div class="nick-verdict ${cls}">${dot} <b>${esc(nick)}</b><br>${esc(d.verdict)}</div>`;
+    html+=`<button class="tool-btn danger" onclick="reportNick('${esc(nick).replace(/'/g,"")}')">🚨 Это кидала — добавить в базу</button>`;
+    out.innerHTML=html;
+  }catch(e){ out.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
+}
+async function reportNick(nick){
+  const out=document.getElementById('nickResult');
+  try{
+    const uid=getUID()||0;
+    const r=await fetch(`/api/antiscam/report?uid=${uid}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nick})});
+    const d=await r.json(); if(d.error)throw new Error(d.error);
+    out.innerHTML=`<div class="nick-verdict danger">🚨 <b>${esc(nick)}</b> добавлен в базу.<br>Всего жалоб: <b>${d.total}</b><br><span style="color:var(--hint)">Спасибо — ты защитил других 🛡</span></div>`;
+  }catch(e){ out.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
+}
+
+/* ── Калькулятор сделки ── */
+const CALC_FLAGS={KZT:'🇰🇿',RUB:'🇷🇺',TRY:'🇹🇷',USD:'🇺🇸'};
+function pickCalcCur(cur,btn){
+  _calcCur=cur;
+  document.querySelectorAll('#calcCurRow .calc-cur').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  runCalc();
+}
+function runCalc(){
+  const buy=parseFloat(document.getElementById('calcBuy').value)||0;
+  const sell=parseFloat(document.getElementById('calcSell').value)||0;
+  const spent=parseFloat(document.getElementById('calcSpent').value)||0;
+  const fee=parseFloat(document.getElementById('calcFee').value)||0;
+  const out=document.getElementById('toolCalcResult');
+  if(buy<=0||sell<=0||spent<=0){ out.style.display='none'; return; }
+  const usdt=spent/buy, received=usdt*sell, feeCost=received*(fee/100);
+  const net=received-feeCost-spent, netPct=spent?net/spent*100:0, perU=sell-buy;
+  const ok=net>0, cur=_calcCur, flag=CALC_FLAGS[cur]||'';
+  out.style.display='block'; out.className='tool-result';
+  out.innerHTML=`
+    <div class="calc-res-head ${ok?'green':'red'}">${ok?'✅ Прибыль':'❌ Убыток'}: ${fmt(Math.abs(net))} ${cur} <span class="calc-res-pct">${netPct>=0?'+':''}${netPct.toFixed(2)}%</span></div>
+    <div class="calc-res-grid">
+      <div><span>Куплено</span><b>${usdt.toFixed(4)} USDT</b></div>
+      <div><span>Прибыль/USDT</span><b>${perU>=0?'+':''}${fmt(perU)} ${cur}</b></div>
+      <div><span>Получено</span><b>${fmt(received)} ${cur}</b></div>
+      <div><span>Комиссия (${fee}%)</span><b>${fmt(feeCost)} ${cur}</b></div>
+    </div>`;
+}
+
 switchTab('home', document.querySelector('.nav-btn[data-tab="home"]'));
 </script>
 <!-- Модалка деталей объявления -->

@@ -667,6 +667,19 @@ def test_triangle_uses_eff_max_for_overlap():
     assert srv._find_link(buy, sell, "KZT") is None
 
 
+def test_new_tool_endpoints_registered():
+    """Антискам + whale роуты подключены в приложении."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    import webapp.server as srv
+    app = srv.create_app()
+    paths = {str(r.resource.canonical) for r in app.router.routes()}
+    assert "/api/antiscam/receipt" in paths
+    assert "/api/antiscam/nick/{nick}" in paths
+    assert "/api/antiscam/report" in paths
+    assert "/api/whales/{fiat}" in paths
+
+
 def test_any_bank_detection():
     from utils.desc_parser import parse_description as p
     assert p("Переводите с ЛЮБОГО банка!")["any_bank"] is True
