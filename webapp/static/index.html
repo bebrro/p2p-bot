@@ -125,6 +125,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ad-modal-desc.empty{color:var(--hint);font-style:italic}
 .ad-modal-link{display:block;width:100%;background:var(--btn);color:var(--btnt);text-align:center;padding:11px;border-radius:10px;border:none;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;font-family:inherit}
 .ad-modal-link:active{opacity:.8}
+.ad-modal-scam{background:rgba(240,71,71,.14);border:1px solid rgba(240,71,71,.4);border-radius:8px;padding:9px 11px;font-size:11.5px;line-height:1.4;color:var(--text);margin-bottom:10px}
+.ad-card.scam{border-left-color:var(--red)!important;background:linear-gradient(90deg,rgba(240,71,71,.10),var(--bg2))}
 .book-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .col-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .buy-col .col-title{color:var(--green)}.sell-col .col-title{color:var(--red)}
@@ -1162,7 +1164,8 @@ function renderAdList(ads,showRisk=true,side='buy'){
     const pay=(ad.pay_types||[]).slice(0,2).map(p=>`<span class="pay-pill">${esc(p)}</span>`).join('')||'—';
     const risk=(showRisk&&ad.risk_badge)?`<span class="risk-badge">${esc(ad.risk_badge)}</span>`:'';
     const tp=ad.third_party===true?' 🤝':(ad.third_party===false?' 🚫':'');
-    return `<div class="ad-card" style="cursor:pointer" onclick="showAd('${side}',${i})"><div class="ad-price">${fmt(ad.price)}${tp}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
+    const scam=ad.scam_recruit?'<span style="color:var(--red)"> 🚩</span>':'';
+    return `<div class="ad-card${ad.scam_recruit?' scam':''}" style="cursor:pointer" onclick="showAd('${side}',${i})"><div class="ad-price">${fmt(ad.price)}${tp}${scam}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
   }).join('');
 }
 
@@ -1181,11 +1184,13 @@ function showAd(side,idx){
   const pays=(ad.pay_types||[]).map(p=>`<span class="ad-modal-flag">💳 ${esc(p)}</span>`).join('');
   const desc=(ad.description||'').trim();
   const descHtml=desc?`<div class="ad-modal-desc">${esc(desc)}</div>`:`<div class="ad-modal-desc empty">Без описания</div>`;
+  const scamWarn=ad.scam_recruit?`<div class="ad-modal-scam">🚩 <b>Осторожно: похоже на вербовку / скам-схему.</b><br>В описании зовут «лёгкие деньги» или уводят в личку мимо биржи. Не пиши таким, не отдавай реквизиты и крипту.</div>`:'';
   document.getElementById('adModalBody').innerHTML=`
     <div class="ad-modal-head">
       <span class="ad-modal-nick">${esc(ad.nickname||'—')}</span>
       <button class="ad-modal-close" onclick="closeAdModal()">×</button>
     </div>
+    ${scamWarn}
     <div class="ad-modal-price">${fmt(ad.price)} ${S.fiat}</div>
     <div class="ad-modal-row"><span class="k">Сторона</span><span>${sideLabel}</span></div>
     <div class="ad-modal-row"><span class="k">Лимиты</span><span>${fmtK(ad.min_amount||0)} – ${fmtK(ad.max_amount||0)} ${S.fiat}</span></div>

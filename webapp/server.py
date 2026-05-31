@@ -223,6 +223,7 @@ def _enrich(ads: list) -> list:
         ad["third_party"]  = info["third_party"]    # True | False | None
         ad["exact_amount"] = info["exact_amount"]
         ad["smart_flags"]  = info["flags"]
+        ad["scam_recruit"] = info.get("scam_recruit", False)
     return ads
 
 

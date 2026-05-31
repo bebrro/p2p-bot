@@ -82,6 +82,27 @@ _ONLY_BANK = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# ── Вербовка / скам-схема в описании ─────────────────────────────────────────
+# Мошенники вербуют людей прямо в описании объявления: обещают «лёгкие деньги»
+# и уводят в личку (teleg:/@ник) мимо биржи. Помечаем такие красным флагом.
+_SCAM_RECRUIT = re.compile(
+    r'('
+    r'руб\w*\s+капуст'                       # «рубим капусту»
+    r'|капуст[ауыой]\b'                       # капуста = деньги (сленг)
+    r'|%\s*(?:с|за)\s*круг'                   # «7% с круга»
+    r'|(?:с|за)\s+круга?\b'                   # «с круга»
+    r'|teleg\w*\s*[:\-–]'                     # «teleg: ник»
+    r'|тг\s*[:\-–]\s*\S'                      # «тг: ник»
+    r'|пиш\w*\s+(?:в\s+)?(?:тг|телег|лс|личк|вотсап|whats|вацап)'
+    r'|(?:ищу|нужны|набор)\s+люд'             # «ищу людей / набор людей»
+    r'|обуч\w+\s+(?:заработ|схем|связк)'      # «обучу заработку»
+    r'|схем\w*\s+заработ'                     # «схема заработка»
+    r'|за\s*работ\w*\s+\d+\s*%'               # «заработок 10%»
+    r'|@[a-zA-Z][\w]{3,}'                     # внешний @username в описании
+    r')',
+    re.IGNORECASE | re.UNICODE,
+)
+
 
 def parse_description(text: str) -> dict:
     """
@@ -95,7 +116,8 @@ def parse_description(text: str) -> dict:
     }
     """
     if not text or not text.strip():
-        return {"third_party": None, "exact_amount": None, "flags": []}
+        return {"third_party": None, "exact_amount": None,
+                "scam_recruit": False, "flags": []}
 
     t = text.strip()
     flags: list[str] = []
@@ -139,9 +161,15 @@ def parse_description(text: str) -> dict:
     if bm:
         flags.append(f"🏦 {bm.group(0)}")
 
+    # ── Вербовка / скам ───────────────────────────────────────────────────────
+    scam_recruit = bool(_SCAM_RECRUIT.search(t))
+    if scam_recruit:
+        flags.insert(0, "🚩 ВЕРБОВКА / СКАМ")   # первым — самое важное
+
     return {
         "third_party":  third_party,
         "exact_amount": exact_amount,
+        "scam_recruit": scam_recruit,
         "flags":        flags,
     }
 

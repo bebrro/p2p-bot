@@ -615,6 +615,28 @@ def test_desc_parser_third_party():
     for txt in ("оплата картой сбербанк", "перевод ровно 5000", ""):
         assert p(txt)["third_party"] is None, txt
 
+def test_desc_parser_scam_recruit():
+    """Детектор вербовки/скама в описании объявления."""
+    from utils.desc_parser import parse_description as p
+    # реальный скам-пример
+    s = p("Рубим капусту внутри биржы 7% с круга в 15 минут teleg: werezov")
+    assert s["scam_recruit"] is True
+    assert any("ВЕРБОВКА" in f for f in s["flags"])
+    # другие вербовочные
+    for txt in ("ищу людей для заработка пиши в тг", "обучу схеме заработка", "@scam_bot пиши"):
+        assert p(txt)["scam_recruit"] is True, txt
+    # легитимные — чисто
+    for txt in ("работаю строго с 1 лицами", "Kaspi Bank оплата сразу",
+                "принимаю от третьих лиц", ""):
+        assert p(txt)["scam_recruit"] is False, txt
+
+def test_enrich_sets_scam_recruit():
+    import webapp.server as srv
+    ads = [{"description": "рубим капусту 7% с круга teleg: x", "completion": 0, "pay_types": []}]
+    out = srv._enrich(ads)
+    assert out[0]["scam_recruit"] is True
+
+
 def test_enrich_sets_third_party():
     """_enrich парсит описание и проставляет third_party на объявление."""
     import webapp.server as srv
