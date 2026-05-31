@@ -625,7 +625,9 @@ def test_desc_parser_scam_recruit():
     assert s["scam_recruit"] is True
     assert any("ВЕРБОВКА" in f for f in s["flags"])
     # другие вербовочные
-    for txt in ("ищу людей для заработка пиши в тг", "обучу схеме заработка", "@scam_bot пиши"):
+    for txt in ("ищу людей для заработка пиши в тг", "обучу схеме заработка",
+                "@scam_bot пиши", "обучение в тг", "все вопросы в тг",
+                "научу наставник", "пиши в личку"):
         assert p(txt)["scam_recruit"] is True, txt
     # легитимные — чисто
     for txt in ("работаю строго с 1 лицами", "Kaspi Bank оплата сразу",
