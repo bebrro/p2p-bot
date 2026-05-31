@@ -1157,18 +1157,22 @@ function renderTriangle(t){
 }
 function renderOrderbook({buy,sell,spread,triangle,best_buy,best_sell}){
   renderTriangle(triangle||null);
-  if(buy.length){ document.getElementById('buyPrice').textContent=fmt(best_buy||buy[0].price); const v=buy.reduce((s,a)=>s+(a.available||0),0); document.getElementById('buyVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
-  if(sell.length){ document.getElementById('sellPrice').textContent=fmt(best_sell||sell[0].price); const v=sell.reduce((s,a)=>s+(a.available||0),0); document.getElementById('sellVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
+  // Мейкер сидит ИНВЕРСНО тейкеру: его «покупка» = биды (там где тейкеры
+  // продают), его «продажа» = аски. В мейкер-режиме меняем колонки местами.
+  let L=buy||[], R=sell||[], lBest=best_buy, rBest=best_sell;
+  if(bookMode==='maker'){ L=sell||[]; R=buy||[]; lBest=best_sell; rBest=best_buy; }
+  if(L.length){ document.getElementById('buyPrice').textContent=fmt(lBest||L[0].price); const v=L.reduce((s,a)=>s+(a.available||0),0); document.getElementById('buyVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
+  if(R.length){ document.getElementById('sellPrice').textContent=fmt(rBest||R[0].price); const v=R.reduce((s,a)=>s+(a.available||0),0); document.getElementById('sellVol').textContent=v?`📦 ${fmtK(v)} ${S.asset}`:''; }
   const chip=document.getElementById('spreadChip');
   if(spread?.spread_pct!=null){ const pct=spread.spread_pct; chip.textContent=`⇔ ${pct}%`; chip.className='spread-chip'+(pct>=0.5?' good':pct>=0.2?' mid':''); }
   else{ chip.textContent='—'; chip.className='spread-chip'; }
   const showRisk=loadSettings().show_risk!==false;
-  __book={buy:buy||[],sell:sell||[]};   // для тапа по объявлению
+  __book={buy:L,sell:R};   // для тапа по объявлению (с учётом инверсии)
   // Методы оплаты — из реальных объявлений (все способы, любая биржа/валюта)
-  mergePayMethods('payRow',(buy||[]).concat(sell||[]),S.pay,v=>{S.pay=v;restartBookTimer();});
+  mergePayMethods('payRow',L.concat(R),S.pay,v=>{S.pay=v;restartBookTimer();});
   // Мейкер-режим: в каждую колонку добавляем «твою цену чтобы быть #1»
-  document.getElementById('buyList').innerHTML=makerRecCard('buy',buy)+renderAdList(buy,showRisk,'buy');
-  document.getElementById('sellList').innerHTML=makerRecCard('sell',sell)+renderAdList(sell,showRisk,'sell');
+  document.getElementById('buyList').innerHTML=makerRecCard('buy',L)+renderAdList(L,showRisk,'buy');
+  document.getElementById('sellList').innerHTML=makerRecCard('sell',R)+renderAdList(R,showRisk,'sell');
 }
 const FIAT_STEP={KZT:0.5,RUB:0.05,TRY:0.05,USD:0.001,THB:0.01,IDR:1,VND:1,INR:0.01,AED:0.001,NGN:0.1,BRL:0.001,GEL:0.001,AMD:0.1,AZN:0.001,UZS:1,KGS:0.01};
 function makerRecCard(side,ads){
