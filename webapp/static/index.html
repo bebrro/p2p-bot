@@ -1290,7 +1290,8 @@ function renderTriangle(t,elId){
       ${leg(t.sell,'📤 Продать USDT')}
     </div>
     ${banks}
-    <div class="tri-profit">На обороте ${fmtK(t.amount)} ${t.fiat} → <b>+${fmt(t.profit)} ${t.fiat}</b></div>
+    <div class="tri-profit">💵 Чистыми на обороте ${fmtK(t.amount)} ${t.fiat} → <b style="color:var(--green)">+${fmt(t.profit_net!=null?t.profit_net:t.profit)} ${t.fiat}</b>${(t.pct_net!=null)?` <span style="color:var(--hint)">(${t.pct_net>=0?'+':''}${t.pct_net}%)</span>`:''}</div>
+    <div class="tri-profit" style="font-size:10px;color:var(--hint)">Грязными +${fmt(t.profit)} · издержки −${fmt(t.fee_fiat||0)} ${t.fiat}${t.cross?` (перевод ${t.fee_usdt} USDT)`:''}</div>
     <div class="tri-profit" style="font-size:10px;color:var(--hint)">✅ Исполнимый объём: ${fmtK(t.lo)}${t.hi?'–'+fmtK(t.hi):'+'} ${t.fiat}</div>
     ${warn?'<div class="tri-warn">⚠️ проверь ликвидность — возможны приманки</div>':''}
   `;

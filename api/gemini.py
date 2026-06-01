@@ -5,6 +5,7 @@
 Ключ получить: https://aistudio.google.com/app/apikey
 """
 import aiohttp
+import asyncio
 import os
 
 GEMINI_URL = (
@@ -184,26 +185,33 @@ async def chat(messages: list, max_tokens: int = 1500) -> str:
         ],
     }
 
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(
-                f"{GEMINI_URL}?key={api_key}",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
-            ) as r:
-                data = await r.json(content_type=None)
+    # Авто-ретрай при 429: ждём и пробуем снова, чтобы юзер не видел ошибку.
+    delays = [6, 12]                          # 2 повтора
+    for attempt in range(len(delays) + 1):
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.post(
+                    f"{GEMINI_URL}?key={api_key}",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=45),
+                ) as r:
+                    data = await r.json(content_type=None)
 
-        if "error" in data:
-            err  = data["error"]
-            code = err.get("code", "")
-            msg  = err.get("message", str(err))
-            if code == 429:
-                return "⏳ Слишком много запросов. Подожди минуту и попробуй снова."
-            return f"❌ Gemini API: {msg}"
+            if "error" in data:
+                code = data["error"].get("code", "")
+                msg  = data["error"].get("message", str(data["error"]))
+                if code == 429 and attempt < len(delays):
+                    await asyncio.sleep(delays[attempt])
+                    continue
+                if code == 429:
+                    return "⏳ AI сейчас перегружен. Подожди минуту и спроси снова."
+                return f"❌ Gemini API: {msg}"
 
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-    except aiohttp.ClientTimeout:
-        return "❌ Gemini не ответил за 45 секунд. Попробуй ещё раз."
-    except Exception as e:
-        return f"❌ Ошибка: {e}"
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            if attempt < len(delays):
+                await asyncio.sleep(delays[attempt])
+                continue
+            return "❌ Gemini не ответил. Попробуй ещё раз."
+    return "❌ Gemini недоступен. Попробуй позже."

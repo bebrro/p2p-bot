@@ -10,6 +10,7 @@ Mini App HTTP-сервер (aiohttp.web).
 """
 import asyncio
 import logging
+import os
 import re
 import time as _time
 from datetime import datetime, timezone
@@ -110,6 +111,12 @@ async def _gather_exchanges(asset: str, fiat: str) -> list[dict]:
                 "spread_abs": None, "suspicious": False, "status": "disabled",
             })
     return exchanges
+
+
+# Издержки связки: сетевой перевод USDT (TRC20 ≈ 1 USDT) и P2P-комиссия.
+# Можно переопределить через env. P2P у Binance/Bybit/OKX/Wallet обычно 0.
+NETWORK_FEE_USDT = float(os.getenv("NETWORK_FEE_USDT", "1.0"))
+P2P_FEE_PCT      = float(os.getenv("P2P_FEE_PCT", "0.0"))
 
 
 # Референсный оборот по фиатам (≈ $1000) — для демо «сколько бы заработал».
@@ -261,18 +268,35 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
             "ex_icon":   a.get("ex_icon"),
         }
 
+    cross = bool(bb.get("exchange") and bs.get("exchange")
+                 and bb.get("exchange") != bs.get("exchange"))
+    # Грязная прибыль (по спреду) и ЧИСТАЯ (за вычетом издержек).
+    gross = vol * best["pct"] / 100
+    # Межбиржевая связка требует перевода USDT между биржами → сетевая комиссия
+    # (TRC20 ≈ 1 USDT). Внутри одной биржи перевода нет → 0.
+    usdt_qty   = vol / bb["price"] if bb.get("price") else 0
+    net_fee_u  = NETWORK_FEE_USDT if cross else 0.0
+    fee_fiat   = net_fee_u * (bb.get("price") or 0)
+    # P2P-комиссия (для большинства бирж 0). Берём с обеих ног оборота.
+    fee_fiat  += vol * (P2P_FEE_PCT / 100) * 2
+    net        = gross - fee_fiat
+    net_pct    = (net / vol * 100) if vol else 0
+
     return {
         "buy":        _leg(bb),
         "sell":       _leg(bs),
         "pct":        best["pct"],
         "abs":        best["abs"],
-        "profit":     round(vol * best["pct"] / 100),
+        "profit":     round(gross),
+        "profit_net": round(net),
+        "pct_net":    round(net_pct, 2),
+        "fee_fiat":   round(fee_fiat),
+        "fee_usdt":   net_fee_u,
         "amount":     round(vol),
         "lo":         round(lo),
         "hi":         round(hi) if hi < INF else None,
         "banks":      banks,
-        "cross":      bool(bb.get("exchange") and bs.get("exchange")
-                          and bb.get("exchange") != bs.get("exchange")),
+        "cross":      cross,
         "fiat":       fiat,
         "suspicious": best["pct"] > SUSPICIOUS_SPREAD_PCT,
     }
