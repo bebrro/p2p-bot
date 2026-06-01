@@ -38,6 +38,7 @@ from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
 from utils.desc_parser import parse_description
 from utils import ai_desc
+from api import binance_detail
 from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
 
 logger     = logging.getLogger(__name__)
@@ -477,6 +478,13 @@ async def api_orderbook(request: web.Request) -> web.Response:
             _fetch(ex, fiat, asset, "buy",  15, pay, min_amount),
             _fetch(ex, fiat, asset, "sell", 15, pay, min_amount),
         )
+        # Binance прячет условия за логином — дозаполняем их бёрнер-сессией
+        # (только топ-объявы, если фича настроена; иначе no-op).
+        if ex == "binance" and binance_detail.enabled():
+            await asyncio.gather(
+                binance_detail.fill_remarks(buy_ads,  limit=5),
+                binance_detail.fill_remarks(sell_ads, limit=5),
+            )
         buy_en  = _enrich(buy_ads)
         sell_en = _enrich(sell_ads)
         await _ai_overlay(buy_en + sell_en)     # один батч на обе стороны
@@ -1359,6 +1367,10 @@ async def api_xtriangle(request: web.Request) -> web.Response:
                     a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
                 all_sells += es
 
+        # Условия Binance-объяв для связки (топ по цене первыми) — бёрнер-сессией
+        if binance_detail.enabled():
+            bnb = [a for a in (all_buys + all_sells) if a.get("exchange") == "binance"]
+            await binance_detail.fill_remarks(bnb, limit=6)
         await _ai_overlay(all_buys + all_sells)   # семантика 3-х лиц/банка для связки
         link = _find_link(all_buys, all_sells, fiat)
         return web.json_response({"triangle": link})
