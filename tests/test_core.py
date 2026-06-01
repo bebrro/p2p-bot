@@ -706,6 +706,50 @@ def test_new_tool_endpoints_registered():
     assert "/api/whales/{fiat}" in paths
 
 
+def test_link_alerts_threshold_and_cooldown(monkeypatch):
+    """Связка-алерт шлёт при net% ≥ порога и молчит по кулдауну/ниже порога."""
+    import asyncio
+    from handlers import link_alerts as la
+
+    la._last_fired.clear()
+    subs = {777: [{"fiat": "KZT", "asset": "USDT", "threshold": 2.0}]}
+    monkeypatch.setattr(la, "get_all_arb_alerts", lambda: subs)
+
+    link = {"buy": {"price": 500, "nickname": "A"}, "sell": {"price": 515, "nickname": "B"},
+            "cross": False, "banks": ["Kaspi"], "profit_net": 2900, "pct_net": 2.9,
+            "fee_fiat": 0, "amount": 100000, "lo": 1000, "hi": 300000, "suspicious": False}
+
+    import webapp.server as srv
+    async def _bl(fiat, asset="USDT"):
+        return link
+    monkeypatch.setattr(srv, "best_link", _bl)
+
+    sent = []
+    class _Bot:
+        async def send_message(self, uid, text, **k):
+            sent.append((uid, text))
+
+    bot = _Bot()
+    asyncio.run(la.check_link_alerts(bot))
+    assert len(sent) == 1 and sent[0][0] == 777        # сработал
+
+    asyncio.run(la.check_link_alerts(bot))
+    assert len(sent) == 1                               # кулдаун — молчит
+
+    # ниже порога — не шлём
+    la._last_fired.clear()
+    link["pct_net"] = 1.0
+    asyncio.run(la.check_link_alerts(bot))
+    assert len(sent) == 1
+
+    # suspicious (приманка) — не шлём
+    la._last_fired.clear()
+    link["pct_net"] = 5.0
+    link["suspicious"] = True
+    asyncio.run(la.check_link_alerts(bot))
+    assert len(sent) == 1
+
+
 def test_ai_desc_disabled_without_key(monkeypatch):
     """Без GEMINI_API_KEY AI-разбор выключен, classify не лезет в сеть."""
     import asyncio

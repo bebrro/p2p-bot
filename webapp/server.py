@@ -1361,43 +1361,48 @@ async def api_pnl(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def best_link(fiat: str, asset: str = "USDT") -> dict | None:
+    """
+    Считает лучшую МЕЖБИРЖЕВУЮ связку без карт по фиату: собирает объявления со
+    всех живых бирж, дозаполняет условия Binance, прогоняет AI-разбор и ищет
+    исполнимую пару (3-и лица + банк + лимиты). Используется и API, и алертами.
+    """
+    tasks, meta = [], []
+    for ex_id, name, icon, _b, _s in _EX_META:
+        if ex_id in DISABLED_EXCHANGES:
+            continue
+        meta.append((ex_id, name, icon))
+        tasks.append(_fetch(ex_id, fiat, asset, "buy",  15))
+        tasks.append(_fetch(ex_id, fiat, asset, "sell", 15))
+    res = await asyncio.gather(*tasks, return_exceptions=True)
+
+    all_buys, all_sells = [], []
+    for i, (ex_id, name, icon) in enumerate(meta):
+        b, s = res[i * 2], res[i * 2 + 1]
+        if isinstance(b, list):
+            eb = _enrich(b)
+            for a in eb:
+                a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
+            all_buys += eb
+        if isinstance(s, list):
+            es = _enrich(s)
+            for a in es:
+                a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
+            all_sells += es
+
+    if binance_detail.enabled():
+        bnb = [a for a in (all_buys + all_sells) if a.get("exchange") == "binance"]
+        await binance_detail.fill_remarks(bnb, limit=6)
+    await _ai_overlay(all_buys + all_sells)
+    return _find_link(all_buys, all_sells, fiat)
+
+
 async def api_xtriangle(request: web.Request) -> web.Response:
-    """GET /api/xtriangle/{fiat}/{asset} — МЕЖБИРЖЕВАЯ связка без карт.
-    Собирает объявления со всех живых бирж, ищет лучшую исполнимую пару
-    (купить на одной, продать на другой) с совпадением 3-х лиц + банка + лимитов."""
+    """GET /api/xtriangle/{fiat}/{asset} — МЕЖБИРЖЕВАЯ связка без карт."""
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
     try:
-        tasks, meta = [], []
-        for ex_id, name, icon, _b, _s in _EX_META:
-            if ex_id in DISABLED_EXCHANGES:
-                continue
-            meta.append((ex_id, name, icon))
-            tasks.append(_fetch(ex_id, fiat, asset, "buy",  15))
-            tasks.append(_fetch(ex_id, fiat, asset, "sell", 15))
-        res = await asyncio.gather(*tasks, return_exceptions=True)
-
-        all_buys, all_sells = [], []
-        for i, (ex_id, name, icon) in enumerate(meta):
-            b, s = res[i * 2], res[i * 2 + 1]
-            if isinstance(b, list):
-                eb = _enrich(b)
-                for a in eb:
-                    a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
-                all_buys += eb
-            if isinstance(s, list):
-                es = _enrich(s)
-                for a in es:
-                    a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
-                all_sells += es
-
-        # Условия Binance-объяв для связки (топ по цене первыми) — бёрнер-сессией
-        if binance_detail.enabled():
-            bnb = [a for a in (all_buys + all_sells) if a.get("exchange") == "binance"]
-            await binance_detail.fill_remarks(bnb, limit=6)
-        await _ai_overlay(all_buys + all_sells)   # семантика 3-х лиц/банка для связки
-        link = _find_link(all_buys, all_sells, fiat)
-        return web.json_response({"triangle": link})
+        return web.json_response({"triangle": await best_link(fiat, asset)})
     except Exception as e:
         logger.error(f"api_xtriangle: {e}")
         return web.json_response({"error": str(e)}, status=500)

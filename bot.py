@@ -38,6 +38,7 @@ from handlers import (
     price_signal,
     subscription, pnl,
     referral, digest, admin, channel, antiscam,
+    link_alerts,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -243,6 +244,7 @@ async def main():
     asyncio.create_task(_loop(price_history.collect_prices,                  1800,   "price_history"))
     asyncio.create_task(_loop(lambda: auto_reprice.run_repricer(bot),          60,   "repricer"))
     asyncio.create_task(_loop(lambda: arbitrage.check_arbitrage(bot),         120,   "arbitrage"))
+    asyncio.create_task(_loop(lambda: link_alerts.check_link_alerts(bot),     150,   "link_alerts"))
     asyncio.create_task(_loop(lambda: ad_schedule.run_schedule(bot),           60,   "schedule"))
     asyncio.create_task(_loop(lambda: whale_tracker.check_whales(bot),        120,  "whales"))
     asyncio.create_task(_loop(lambda: digest.send_daily_digest(bot),           60,  "digest"))
