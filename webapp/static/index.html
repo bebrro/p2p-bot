@@ -1361,6 +1361,7 @@ function showAd(side,idx){
   // 3-и лица уже есть в smart_flags («❌ нет 3-х лиц» / «✅ 3-е лица ок») —
   // отдельную плашку не дублируем.
   (ad.smart_flags||[]).forEach(f=>flags.push(esc(f)));
+  if(ad.ai_desc) flags.push('🤖 разбор AI');
   if(ad.risk_badge) flags.push('⚠️ '+esc(ad.risk_badge));
   const flagsHtml=flags.length?`<div class="ad-modal-flags">${flags.map(f=>`<span class="ad-modal-flag">${f}</span>`).join('')}</div>`:'';
   const pays=(ad.pay_types||[]).map(p=>`<span class="ad-modal-flag">💳 ${esc(p)}</span>`).join('');

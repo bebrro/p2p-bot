@@ -31,6 +31,11 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 # TG Wallet P2P API key (получить: wallet.tg → P2P → Настройки → API)
 WALLET_P2P_API_KEY = os.getenv("WALLET_P2P_API_KEY", "")
 
+# AI-разбор описаний (3-и лица / скам / ловушка / любой банк) через Gemini.
+# Понимает формулировки, которые regex не покрыть. Кэш + один батч-запрос.
+# Выключить: AI_DESC_PARSE=0 (останется только regex-разбор).
+AI_DESC_PARSE = os.getenv("AI_DESC_PARSE", "1").strip().lower() not in ("0", "false", "no", "off")
+
 # Временно отключённые биржи (мёртвый/заблокированный API).
 # По умолчанию — НИ ОДНА (все 4 работают с Railway: проверено через /health).
 # Если какая-то биржа начнёт таймаутить — отключи через Railway:

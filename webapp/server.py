@@ -37,6 +37,7 @@ from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
 from utils.desc_parser import parse_description
+from utils import ai_desc
 from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
 
 logger     = logging.getLogger(__name__)
@@ -336,6 +337,44 @@ def _enrich(ads: list) -> list:
         ad["scam_recruit"] = info.get("scam_recruit", False)
         ad["trap"]         = info.get("trap", False)
         ad["any_bank"]     = info.get("any_bank", False)
+        ad["ai_desc"]      = False
+    return ads
+
+
+def _apply_third_party_flag(ad: dict) -> None:
+    """Пересобирает плашку 3-х лиц в smart_flags по текущему ad['third_party']."""
+    flags = [f for f in (ad.get("smart_flags") or [])
+             if ("3-х лиц" not in f and "3-е лиц" not in f)]
+    if ad.get("third_party") is True:
+        flags.insert(0, "✅ 3-е лица ок")
+    elif ad.get("third_party") is False:
+        flags.insert(0, "❌ нет 3-х лиц")
+    ad["smart_flags"] = flags
+
+
+async def _ai_overlay(ads: list) -> list:
+    """
+    Накладывает семантику Gemini ПОВЕРХ regex-результата (ads уже после _enrich).
+    AI понимает формулировки, которые regex покрыть не может («1/3»,
+    «на дов лицо но от 1 го» и т.п.). Если AI выключен/упал — остаётся regex.
+    """
+    if not ai_desc.enabled():
+        return ads
+    try:
+        res = await ai_desc.classify([a.get("description", "") for a in ads])
+    except Exception as e:
+        logger.warning(f"_ai_overlay: {e}")
+        return ads
+    for a in ads:
+        r = res.get((a.get("description") or "").strip())
+        if not r:
+            continue                       # нет описания / AI не классифицировал — regex
+        a["third_party"]  = r["third_party"]
+        a["scam_recruit"] = r["scam_recruit"]
+        a["trap"]         = r["trap"]
+        a["any_bank"]     = r["any_bank"]
+        a["ai_desc"]      = True
+        _apply_third_party_flag(a)
     return ads
 
 
@@ -440,6 +479,7 @@ async def api_orderbook(request: web.Request) -> web.Response:
         )
         buy_en  = _enrich(buy_ads)
         sell_en = _enrich(sell_ads)
+        await _ai_overlay(buy_en + sell_en)     # один батч на обе стороны
 
         # Связка «без карт» — считаем из всех объявлений (своё условие по 3-м лицам)
         triangle = _triangle(buy_en, sell_en, fiat)
@@ -1319,6 +1359,7 @@ async def api_xtriangle(request: web.Request) -> web.Response:
                     a["exchange"], a["ex_name"], a["ex_icon"] = ex_id, name, icon
                 all_sells += es
 
+        await _ai_overlay(all_buys + all_sells)   # семантика 3-х лиц/банка для связки
         link = _find_link(all_buys, all_sells, fiat)
         return web.json_response({"triangle": link})
     except Exception as e:

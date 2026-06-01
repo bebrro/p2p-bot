@@ -68,6 +68,44 @@ async def ask(prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> 
         return f"❌ Ошибка соединения: {e}"
 
 
+async def ask_json(prompt: str, max_tokens: int = 4000, timeout: int = 12) -> str:
+    """
+    Как ask(), но просит Gemini вернуть СТРОГО JSON (responseMimeType).
+    Возвращает сырой JSON-текст или строку с '❌' при ошибке.
+    """
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return "❌ GEMINI_API_KEY не задан."
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature":      0.0,
+            "maxOutputTokens":  max_tokens,
+            "responseMimeType": "application/json",
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT",        "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH",       "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ],
+    }
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(
+                f"{GEMINI_URL}?key={api_key}",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as r:
+                data = await r.json(content_type=None)
+        if "error" in data:
+            return f"❌ Gemini API: {data['error'].get('message', 'error')}"
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        return f"❌ {e}"
+
+
 async def vision(image_b64: str, prompt: str,
                  mime: str = "image/jpeg", max_tokens: int = 1500) -> str:
     """

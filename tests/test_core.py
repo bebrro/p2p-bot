@@ -680,6 +680,55 @@ def test_new_tool_endpoints_registered():
     assert "/api/whales/{fiat}" in paths
 
 
+def test_ai_desc_disabled_without_key(monkeypatch):
+    """Без GEMINI_API_KEY AI-разбор выключен, classify не лезет в сеть."""
+    import asyncio
+    from utils import ai_desc
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert ai_desc.enabled() is False
+    res = asyncio.run(ai_desc.classify(["с любого банка", ""]))
+    assert res == {}                      # ничего не классифицировано, без падений
+
+
+def test_ai_desc_normalize():
+    from utils import ai_desc
+    assert ai_desc._normalize({"third_party": "yes"})["third_party"] is True
+    assert ai_desc._normalize({"third_party": "no"})["third_party"] is False
+    assert ai_desc._normalize({"third_party": "unknown"})["third_party"] is None
+    n = ai_desc._normalize({"third_party": "no", "scam": True, "trap": False, "any_bank": True})
+    assert n["scam_recruit"] is True and n["trap"] is False and n["any_bank"] is True
+
+
+def test_ai_desc_uses_cache(monkeypatch):
+    """При попадании в кэш classify не делает запрос к Gemini."""
+    import asyncio
+    from utils import ai_desc
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setenv("AI_DESC_PARSE", "1")
+    ai_desc._CACHE[ai_desc._key("кэш-тест")] = {
+        "third_party": True, "scam_recruit": False, "trap": False, "any_bank": False}
+    called = {"n": 0}
+    async def _boom(*a, **k):
+        called["n"] += 1
+        return "[]"
+    monkeypatch.setattr(ai_desc.gemini, "ask_json", _boom)
+    res = asyncio.run(ai_desc.classify(["кэш-тест"]))
+    assert res["кэш-тест"]["third_party"] is True
+    assert called["n"] == 0               # всё из кэша, сеть не трогали
+
+
+def test_apply_third_party_flag(monkeypatch):
+    """AI-оверлей пересобирает плашку 3-х лиц без дублей."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    import webapp.server as srv
+    ad = {"smart_flags": ["❌ нет 3-х лиц", "🕐 время ограничено"], "third_party": True}
+    srv._apply_third_party_flag(ad)
+    assert ad["smart_flags"].count("✅ 3-е лица ок") == 1
+    assert "❌ нет 3-х лиц" not in ad["smart_flags"]
+    assert "🕐 время ограничено" in ad["smart_flags"]
+
+
 def test_any_bank_detection():
     from utils.desc_parser import parse_description as p
     assert p("Переводите с ЛЮБОГО банка!")["any_bank"] is True
