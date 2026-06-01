@@ -7,6 +7,20 @@ from typing import Literal
 
 PlanType = Literal["free", "pro", "team"]
 
+
+def _as_aware(dt):
+    """Приводит datetime/ISO-строку к tz-aware (наивный считаем UTC). None → None."""
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if isinstance(dt, datetime) and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
 PLANS: dict[str, dict] = {
     "free": {
         "name":          "Free",
@@ -60,15 +74,10 @@ def get_plan_key(user_sub: dict | None) -> str:
     plan = user_sub.get("plan", "free")
     if plan == "free":
         return "free"
-    expires_at = user_sub.get("expires_at")
+    expires_at = _as_aware(user_sub.get("expires_at"))
     if expires_at is None:
-        return plan   # бессрочная (выдана вручную без даты)
-    # expires_at может быть datetime или строкой ISO
-    if isinstance(expires_at, str):
-        try:
-            expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        except Exception:
-            return "free"
+        # None = бессрочная (выдана вручную); строка-мусор → _as_aware вернёт None
+        return plan if user_sub.get("expires_at") in (None, "") else "free"
     if expires_at < datetime.now(timezone.utc):
         return "free"   # истекла
     return plan
@@ -86,14 +95,11 @@ def format_expires(user_sub: dict | None) -> str:
     """Человекочитаемый остаток подписки."""
     if not user_sub or user_sub.get("plan", "free") == "free":
         return ""
-    expires_at = user_sub.get("expires_at")
-    if not expires_at:
+    if not user_sub.get("expires_at"):
         return "∞ навсегда"
-    if isinstance(expires_at, str):
-        try:
-            expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        except Exception:
-            return ""
+    expires_at = _as_aware(user_sub.get("expires_at"))
+    if expires_at is None:
+        return ""
     now   = datetime.now(timezone.utc)
     delta = expires_at - now
     if delta.total_seconds() < 0:

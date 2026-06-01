@@ -112,6 +112,32 @@ def test_lifetime_no_expiry():
     lifetime = {"plan": "pro", "expires_at": None}
     assert get_plan_key(lifetime) == "pro"
 
+def test_subscription_naive_expires_no_crash():
+    """Наивный expires_at (без tz) не должен ронять сравнение дат."""
+    from datetime import datetime, timezone, timedelta
+    from utils.subscription import get_plan_key, format_expires
+    naive_future = datetime.now() + timedelta(days=5)          # без tzinfo
+    assert get_plan_key({"plan": "pro", "expires_at": naive_future}) == "pro"
+    naive_past = datetime.now() - timedelta(days=1)
+    assert get_plan_key({"plan": "pro", "expires_at": naive_past}) == "free"
+    # ISO-строка без таймзоны
+    assert get_plan_key({"plan": "pro", "expires_at": "2999-01-01T00:00:00"}) == "pro"
+    assert format_expires({"plan": "pro", "expires_at": naive_future}).startswith("⏰")
+
+def test_get_history_strips_tz(monkeypatch):
+    """get_history приводит tz-aware даты из БД к наивным (иначе краш сравнения)."""
+    import asyncio
+    from datetime import datetime, timezone
+    import handlers.price_history as ph
+    aware = [(datetime.now(timezone.utc), 500.0, 510.0)]
+    monkeypatch.setattr(ph.db, "ok", lambda: True)
+    async def _hist(*a, **k):
+        return aware
+    monkeypatch.setattr(ph.db, "history_get", _hist)
+    ph._history.clear()
+    rows = asyncio.run(ph.get_history("binance", "KZT", "USDT"))
+    assert rows and all(ts.tzinfo is None for ts, _b, _s in rows)
+
 def test_team_plan_active():
     active = {
         "plan": "team",

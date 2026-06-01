@@ -26,13 +26,25 @@ async def record_price(exchange: str, fiat: str, asset: str, buy: float, sell: f
 
 async def get_history(exchange: str, fiat: str, asset: str) -> list:
     """Возвращает [(datetime, buy, sell), ...] от старого к новому.
-    Сначала ищет в памяти, при пустой памяти читает из DB."""
+    Сначала ищет в памяти, при пустой памяти читает из DB.
+
+    ВАЖНО: память хранит НАИВНЫЕ даты (datetime.now()), а БД — tz-aware
+    (TIMESTAMPTZ). Потребители (pattern_engine и др.) сравнивают с наивным
+    datetime.now(), поэтому приводим всё к наивному — иначе «can't compare
+    offset-naive and offset-aware datetimes»."""
     key = (exchange, fiat, asset)
     if key in _history and _history[key]:
-        return list(_history[key])
-    if db.ok():
-        return await db.history_get(exchange, fiat, asset)
-    return []
+        rows = list(_history[key])
+    elif db.ok():
+        rows = await db.history_get(exchange, fiat, asset)
+    else:
+        rows = []
+    out = []
+    for ts, b, s in rows:
+        if getattr(ts, "tzinfo", None) is not None:
+            ts = ts.replace(tzinfo=None)      # tz-aware → наивный
+        out.append((ts, b, s))
+    return out
 
 
 def _fiat_kb(exchange: str) -> InlineKeyboardMarkup:
