@@ -219,6 +219,10 @@ def parse_description(text: str) -> dict:
     t = text.strip()
     flags: list[str] = []
 
+    # «принимаю с любого банка / любой картой» — банк-агностик. На практике это
+    # же значит «приму от любого отправителя» → 3-и лица ок (если не запрещено).
+    any_bank = bool(_ANY_BANK.search(t))
+
     # ── Третьи лица ───────────────────────────────────────────────────────────
     # ВАЖНО: приоритет у «НЕ принимает». YES-паттерн жадно ловит «принимаю от
     # третьих» даже во фразе «НЕ принимаю от третьих» — поэтому если сработал
@@ -229,7 +233,7 @@ def parse_description(text: str) -> dict:
     if has_no:
         third_party = False
         flags.append("❌ нет 3-х лиц")
-    elif has_yes:
+    elif has_yes or any_bank:           # «любой банк/карта» → приём от 3-х лиц
         third_party = True
         flags.append("✅ 3-е лица ок")
     else:
@@ -285,7 +289,7 @@ def parse_description(text: str) -> dict:
         "exact_amount": exact_amount,
         "scam_recruit": scam_recruit,
         "trap":         trap,
-        "any_bank":     bool(_ANY_BANK.search(t)),
+        "any_bank":     any_bank,
         "flags":        flags,
     }
 
