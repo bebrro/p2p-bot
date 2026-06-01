@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 
 from api import gemini
 
@@ -25,6 +26,14 @@ logger = logging.getLogger(__name__)
 # norm_text -> {"third_party": True|False|None, "scam_recruit", "trap", "any_bank"}
 _CACHE: dict[str, dict] = {}
 _CACHE_MAX = 5000
+
+# Бэкофф при 429 (лимит Gemini). Пока активен — разбор описаний работает ТОЛЬКО
+# из кэша и не дёргает API, чтобы не отнимать квоту у чата (он важнее).
+_COOLDOWN_UNTIL = 0.0
+_COOLDOWN_SEC = 60
+# Троттл: не чаще одного батч-запроса в N секунд (бесплатный лимит ~15/мин).
+_LAST_CALL = 0.0
+_MIN_INTERVAL = 4.0
 
 
 def enabled() -> bool:
@@ -122,6 +131,7 @@ async def classify(texts: list[str]) -> dict[str, dict]:
     Классифицирует описания. Возвращает {исходный_текст: {признаки}}.
     Пустые тексты пропускает. При выключенном/упавшем AI — то что есть в кэше.
     """
+    global _LAST_CALL, _COOLDOWN_UNTIL
     out: dict[str, dict] = {}
     todo: list[str] = []
     for t in texts:
@@ -137,11 +147,22 @@ async def classify(texts: list[str]) -> dict[str, dict]:
     if not todo or not enabled():
         return out
 
+    # Бэкофф после 429 или троттл — не трогаем API, отдаём что есть в кэше
+    now = time.time()
+    if now < _COOLDOWN_UNTIL or (now - _LAST_CALL) < _MIN_INTERVAL:
+        return out
+    _LAST_CALL = now
+
     listing = "\n".join(f"{i + 1}. {t[:400]}" for i, t in enumerate(todo))
     try:
         raw = await gemini.ask_json(_PROMPT + listing, max_tokens=4000, timeout=12)
         if raw.startswith("❌"):
-            logger.warning(f"ai_desc: gemini error: {raw[:80]}")
+            low = raw.lower()
+            if "429" in raw or "quota" in low or "exhaust" in low or "rate" in low:
+                _COOLDOWN_UNTIL = time.time() + _COOLDOWN_SEC
+                logger.warning("ai_desc: 429 — пауза разбора описаний на %ss", _COOLDOWN_SEC)
+            else:
+                logger.warning(f"ai_desc: gemini error: {raw[:80]}")
             return out
         arr = json.loads(raw)
         if isinstance(arr, list):
