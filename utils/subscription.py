@@ -45,9 +45,9 @@ PLANS: dict[str, dict] = {
         "name":             "Pro",
         "emoji":            "⭐",
         "tagline":          "Для трейдера — окупается с одной сделки",
-        "price_usdt":       9.99,
+        "price_usdt":       12.99,
         "price_lifetime":   59.0,
-        "price_stars":      650,    # ≈ +30% к USDT (покрывает комиссию Apple/Google)
+        "price_stars":      850,    # ≈ +30% к USDT (покрывает комиссию Apple/Google)
         "price_stars_life": 3800,
         "duration_days":    30,
         "repricer_rules":   10,
@@ -137,6 +137,24 @@ def format_expires(user_sub: dict | None) -> str:
         hours = delta.seconds // 3600
         return f"⏰ ещё {hours}ч"
     return f"⏰ ещё {days}д (до {expires_at.strftime('%d.%m.%Y')})"
+
+
+def paywall(title: str, bullets: list[str]) -> str:
+    """Привлекательный текст-пейволл при попытке free-юзера открыть Pro-фичу.
+    Продаёт через выгоды + цена + триал/реферал, а не сухое «недоступно»."""
+    p = PLANS["pro"]
+    lines = [
+        f"🔒 <b>{title}</b>",
+        "Это функция <b>Pro</b>. Что ты получаешь:",
+        "",
+        *[f"  ✅ {b}" for b in bullets],
+        "",
+        f"⭐ <b>Pro — {p['price_lifetime']:.0f}$ навсегда</b> 🔥 "
+        f"или {p['price_usdt']:.2f}$/мес",
+        "Окупается с одной сделки. USDT (0% комиссии) или Stars в 1 тап.",
+        "🎁 Или пригласи 2 друзей → Pro в подарок.",
+    ]
+    return "\n".join(lines)
 
 
 def format_plan_card(plan_key: str, is_current: bool = False) -> str:

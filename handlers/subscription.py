@@ -143,7 +143,7 @@ def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
     btns = []
     if current_plan != "pro":
         btns.append([
-            InlineKeyboardButton(text="⭐ Pro — 9.99/мес",     callback_data="sub:pay:pro"),
+            InlineKeyboardButton(text="⭐ Pro — 12.99/мес",     callback_data="sub:pay:pro"),
             InlineKeyboardButton(text="⭐ Pro — 59 навсегда🔥", callback_data="sub:pay:pro_life"),
         ])
     if current_plan != "team":
@@ -582,14 +582,14 @@ async def admin_give_pro(message: Message):
 
 _WINBACK_TEXT = (
     "👋 <b>Твой пробный Pro закончился</b>\n\n"
-    "Эти 3 дня ты пользовался полным арсеналом:\n"
-    "🔄 Авто-репрайсер — держал цену лучше конкурентов\n"
-    "🐋 Whale Tracker · 🧠 Pattern Engine\n"
-    "🤖 AI-советник · 📊 P&L · Smart Арбитраж 4 биржи\n\n"
+    "Эти 5 дней ты пользовался полным арсеналом:\n"
+    "🤖 Авто-репрайсер — держал цену лучше конкурентов\n"
+    "🐋 Whale Tracker · 🔔 Алерты на связки в ЛС\n"
+    "🧾 AI-проверка чеков · 📈 P&L · ♾ AI-ассистент\n\n"
     "Сейчас ты на <b>Free</b> — большинство фич закрыто. 🔒\n\n"
     "🎁 <b>Вернись на Pro:</b>\n"
-    "💵 9.99$/мес или 59$ навсегда 🔥\n"
-    "⭐ или 650 Stars — оплата в 1 тап\n\n"
+    "💵 59$ навсегда 🔥 или 12.99$/мес\n"
+    "⭐ или Telegram Stars — оплата в 1 тап\n\n"
     "💡 <b>Или бесплатно:</b> пригласи 2 друзей → получи Pro в подарок!"
 )
 

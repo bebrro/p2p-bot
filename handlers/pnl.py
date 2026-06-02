@@ -63,18 +63,16 @@ async def _show_picker(uid: int, event: Message | CallbackQuery):
     plan_key = get_plan_key(sub)
 
     if plan_key == "free":
-        text = (
-            "📊 <b>P&L Трекер</b>\n\n"
-            "⭐ Функция доступна в планах <b>Pro</b> и <b>Team</b>.\n\n"
-            "Показывает:\n"
-            "• Историю последних сделок с 3 бирж\n"
-            "• Среднюю цену покупки и продажи\n"
-            "• Маржу и расчётную прибыль\n"
-            "• Разбивку по фиатным валютам"
-        )
+        from utils.subscription import paywall
+        text = paywall("📈 P&L-аналитика", [
+            "История сделок со всех твоих бирж",
+            "Средняя цена покупки и продажи",
+            "Маржа и расчётная прибыль",
+            "Разбивка по фиатным валютам",
+        ])
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⭐ Оформить подписку", callback_data="sub:list")],
-            [InlineKeyboardButton(text="⬅️ Назад",             callback_data="back:main")],
+            [InlineKeyboardButton(text="🚀 Разблокировать Pro", callback_data="sub:list")],
+            [InlineKeyboardButton(text="⬅️ Назад",              callback_data="back:main")],
         ])
         if is_cb:
             await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
