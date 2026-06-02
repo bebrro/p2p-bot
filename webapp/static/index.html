@@ -2108,9 +2108,11 @@ async function sendChat(autoMsg){
   if(!autoMsg){input.value='';input.style.height='';appendBubble('user',text);}
   chatLoading=true; sendBtn.disabled=true; showTyping();
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:S.exchange,fiat:S.fiat,asset:S.asset,history:chatHistory,message:text})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:S.exchange,fiat:S.fiat,asset:S.asset,history:chatHistory,message:text,uid:getUID()})});
     const data=await r.json(); hideTyping();
-    if(data.error)appendBubble('error','❌ '+data.error);
+    if(data.limit_reached){
+      const b=appendBubble('error',''); b.innerHTML=sanitizeAI(data.response);
+    } else if(data.error)appendBubble('error','❌ '+data.error);
     else{chatHistory=data.history||[];appendBubble('ai',data.response);}
   }catch(e){hideTyping();appendBubble('error','❌ '+e.message);}
   finally{chatLoading=false;sendBtn.disabled=false;}

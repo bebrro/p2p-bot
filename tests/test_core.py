@@ -748,6 +748,42 @@ def test_new_tool_endpoints_registered():
     assert "/api/whales/{fiat}" in paths
 
 
+def test_chat_quota_free_vs_pro(monkeypatch):
+    """Free: лимит N/день; Pro: безлимит."""
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+    import webapp.server as srv
+    srv._chat_counts.clear()
+    monkeypatch.setattr(srv, "FREE_CHAT_DAILY", 3)
+
+    # free (нет подписки)
+    monkeypatch.setattr(srv.db, "ok", lambda: True)
+    async def _no_sub(uid): return None
+    monkeypatch.setattr(srv.db, "subscription_get", _no_sub)
+
+    async def run_free():
+        used = 0
+        for _ in range(5):
+            ok, rem, plan = await srv._chat_quota(111)
+            if ok:
+                srv._chat_used(111); used += 1
+        return used
+    assert asyncio.run(run_free()) == 3        # ровно лимит
+
+    # pro — безлимит
+    async def _pro(uid):
+        return {"plan": "pro", "expires_at": datetime.now(timezone.utc) + timedelta(days=5)}
+    monkeypatch.setattr(srv.db, "subscription_get", _pro)
+    async def run_pro():
+        for _ in range(10):
+            ok, rem, plan = await srv._chat_quota(222)
+            srv._chat_used(222)
+        ok, rem, plan = await srv._chat_quota(222)
+        return ok, rem
+    ok, rem = asyncio.run(run_pro())
+    assert ok is True and rem == -1
+
+
 def test_link_alerts_threshold_and_cooldown(monkeypatch):
     """Связка-алерт шлёт при net% ≥ порога и молчит по кулдауну/ниже порога."""
     import asyncio

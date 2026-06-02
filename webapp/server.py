@@ -679,11 +679,47 @@ async def api_ai(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# Дневной лимит AI-чата для free. Pro/Team — безлимит. Защищает от роста цены
+# Gemini на публичном боте (чат — единственная AI-функция без общего кэша).
+FREE_CHAT_DAILY = int(os.getenv("FREE_CHAT_DAILY", "5"))
+_chat_counts: dict[int, list] = {}      # uid -> [date_str, count]
+
+
+async def _chat_quota(uid):
+    """(можно, остаток, план). Pro/Team — безлимит; free — FREE_CHAT_DAILY/день."""
+    try:
+        uid = int(uid) if uid else 0
+    except Exception:
+        uid = 0
+    plan = "free"
+    if uid:
+        sub  = await db.subscription_get(uid) if db.ok() else None
+        plan = get_plan_key(sub)
+    if plan != "free":
+        return True, -1, plan            # безлимит
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    rec = _chat_counts.get(uid)
+    if not rec or rec[0] != today:
+        rec = [today, 0]
+        _chat_counts[uid] = rec
+    return (FREE_CHAT_DAILY - rec[1]) > 0, max(FREE_CHAT_DAILY - rec[1], 0), plan
+
+
+def _chat_used(uid):
+    try:
+        uid = int(uid) if uid else 0
+    except Exception:
+        uid = 0
+    rec = _chat_counts.get(uid)
+    if rec:
+        rec[1] += 1
+
+
 async def api_chat(request: web.Request) -> web.Response:
     """
     POST /api/chat
-    Body: {exchange, fiat, asset, history: [...Gemini turns...], message: str}
-    Returns: {response: str, history: [...updated turns...]}
+    Body: {exchange, fiat, asset, history, message, uid}
+    Returns: {response, history, [limit_reached]}
     """
     try:
         body     = await request.json()
@@ -692,9 +728,22 @@ async def api_chat(request: web.Request) -> web.Response:
         asset    = body.get("asset",    "USDT")
         history  = body.get("history",  [])   # [{role, parts:[{text}]}, ...]
         user_msg = body.get("message",  "").strip()
+        uid      = body.get("uid") or _uid(request)
 
         if not user_msg:
             return web.json_response({"error": "empty message"}, status=400)
+
+        allowed, remaining, _plan = await _chat_quota(uid)
+        if not allowed:
+            return web.json_response({
+                "response": (
+                    f"🔒 Лимит бесплатного AI-чата на сегодня исчерпан "
+                    f"({FREE_CHAT_DAILY} сообщений в день).\n\n"
+                    "Оформи <b>Pro</b> — безлимитный AI-ассистент и все функции бота. "
+                    "Бесплатный лимит обновится завтра."),
+                "history": history,
+                "limit_reached": True,
+            })
 
         # Первое сообщение: грузим стакан и прячем контекст внутри user-turn
         if not history:
@@ -714,6 +763,9 @@ async def api_chat(request: web.Request) -> web.Response:
 
         response     = await gemini.chat(messages)
         full_history = messages + [{"role": "model", "parts": [{"text": response}]}]
+
+        if not response.startswith(("❌", "⏳")):
+            _chat_used(uid)              # списываем лимит только за успешный ответ
 
         return web.json_response({"response": response, "history": full_history})
 
