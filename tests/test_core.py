@@ -999,6 +999,13 @@ def test_desc_parser_trap_and_exact_amount():
     # легитимные — без ловушки
     for txt in ("Kaspi оплата сразу", "работаю строго с 1 лицами", ""):
         assert p(txt)["trap"] is False, txt
+    # цена-приманка «строго по заявкам / без заявки другое объявление» = ловушка
+    bait = p("Ордер СТРОГО по заявкам!\nБез заявки другое объявление в профиле.")
+    assert bait["trap"] is True
+    assert any("приманка" in f for f in bait["flags"])
+    assert p("по предварительной заявке")["trap"] is True
+    # ложных срабатываний на «заявку» нет
+    assert p("заявка на возврат не принимается")["trap"] is False
 
 
 def test_enrich_sets_third_party():
