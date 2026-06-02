@@ -139,6 +139,7 @@ _GUIDE_STEPS = [
 def _new_user_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚀 Быстрый гайд (2 мин)",  callback_data="ob:step:0")],
+        [InlineKeyboardButton(text="❓ Инструкции (API-ключи и др.)", callback_data="help:menu")],
         [InlineKeyboardButton(text="⏭ Пропустить → в меню",   callback_data="ob:skip")],
     ])
 
@@ -208,6 +209,12 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
             asyncio.create_task(process_referral(referrer_id, uid, bot))
         except (ValueError, Exception) as e:
             logger.warning(f"Bad ref arg '{ref_arg}': {e}")
+
+    # Глубокая ссылка на инструкции: /start help (из мини-аппа)
+    if (command.args or "") == "help":
+        from handlers.help_guide import _MENU, _menu_kb
+        await message.answer(_MENU, reply_markup=_menu_kb(), parse_mode="HTML")
+        return
 
     # Владелец — сразу пожизненный Team, без триала
     if uid in ADMIN_IDS:

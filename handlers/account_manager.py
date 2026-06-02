@@ -25,6 +25,30 @@ router = Router()
 _accounts: dict[int, list] = {}
 MAX_ACCOUNTS = 5   # per user total (all exchanges)
 
+# Кому уже показали безопасный гайд (чтобы не вываливать стену каждый раз)
+_guide_seen: set[int] = set()
+
+_API_GUIDE = (
+    "🔑 <b>Как добавить API-ключ безопасно</b>\n\n"
+    "Ключ нужен, чтобы бот сам держал твои объявления в топе (репрайсер) и "
+    "считал P&amp;L. <b>Доступ к деньгам боту НЕ нужен.</b>\n\n"
+    "<b>🟠 Bybit:</b> Профиль → API → Create New Key → System-generated.\n"
+    "<b>🔵 OKX:</b> Профиль → API → Create API Key (придумай Passphrase).\n\n"
+    "<b>⚠️ Права — самое важное:</b>\n"
+    "✅ Включи только <b>P2P / Trade</b> (управление объявлениями)\n"
+    "❌ <b>Withdraw / Вывод — НИКОГДА не включай!</b>\n\n"
+    "Без права вывода деньги в безопасности даже если ключ утечёт — максимум "
+    "переставят цену объявления.\n\n"
+    "🔒 Бот шифрует ключи и удаляет твои сообщения с ними из чата сразу."
+)
+
+
+def _guide_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Понятно — добавить ключ", callback_data="acc:add:start")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")],
+    ])
+
 EXCHANGE_NAMES = {"bybit": "🟠 Bybit", "okx": "🔵 OKX", "binance": "🟡 Binance"}
 
 
@@ -119,17 +143,25 @@ def _accounts_kb(user_id: int) -> InlineKeyboardMarkup:
         ])
     if len(accs) < MAX_ACCOUNTS:
         buttons.append([InlineKeyboardButton(text="➕ Добавить аккаунт", callback_data="acc:add:start")])
-    buttons.append([InlineKeyboardButton(text="ℹ️ Безопасность", callback_data="acc:security")])
+    buttons.append([InlineKeyboardButton(text="🔒 Как добавить ключ безопасно", callback_data="acc:guide")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад",         callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # ─── Handlers ──────────────────────────────────────────────────────────────────
 
-@router.callback_query(lambda c: c.data == "acc:list")
+@router.callback_query(lambda c: c.data in ("acc:guide", "acc:list"))
 async def acc_list(callback: CallbackQuery):
     uid    = callback.from_user.id
     accs   = _all_accounts(uid)
+
+    # Первый заход (ключей ещё нет) или явный запрос гайда → пошаговая инструкция
+    if callback.data == "acc:guide" or (uid not in _guide_seen and not accs):
+        _guide_seen.add(uid)
+        await callback.message.edit_text(_API_GUIDE, reply_markup=_guide_kb(),
+                                         parse_mode="HTML", disable_web_page_preview=True)
+        return
+
     bybit_active = get_active_account(uid, "bybit")
     okx_active   = get_active_account(uid, "okx")
 

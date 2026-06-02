@@ -794,6 +794,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- ════════════════════ TAB: НАСТРОЙКИ ══════════════════════ -->
 <div class="tab-panel hidden" id="tab-settings">
   <div class="settings-section">
+    <div class="settings-section-title">❓ Помощь</div>
+    <button class="check-status-btn" style="background:var(--btn);color:var(--btnt)" onclick="openGuide()">❓ Инструкции · API-ключи, связки, безопасность</button>
+  </div>
+  <div class="settings-section">
     <div class="settings-section-title">Статус бирж</div>
     <div class="settings-card">
       <div class="settings-row"><span class="settings-row-label">🟡 Binance</span><div class="status-row-right"><span id="statusTxt_binance">—</span><span class="status-dot" id="status_binance"></span></div></div>
@@ -1443,6 +1447,11 @@ function openTriLeg(side){
   openUrl(exLink(ex, l.advertiser_no||l.ad_no||'', __triLegs.fiat, 'USDT'));
 }
 function openAdLink(){ openUrl(adLink((__modalAd&&__modalAd.advertiser_no)||'')); }
+// Открыть инструкции в чате бота (deep-link /start help)
+function openGuide(){
+  const url='https://t.me/Sniper_P2P_Bot?start=help';
+  if(tg?.openTelegramLink) tg.openTelegramLink(url); else openUrl(url);
+}
 
 /* ══════════════════════════════════════════════════════════
    CHART
