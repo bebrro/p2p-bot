@@ -38,7 +38,7 @@ from handlers import (
     price_signal,
     subscription, pnl,
     referral, digest, admin, channel, antiscam,
-    link_alerts,
+    link_alerts, help_guide,
 )
 from api import binance_p2p, bybit_p2p, okx_p2p, wallet_p2p
 from utils.spread import calc_spread
@@ -209,6 +209,7 @@ async def main():
         BotCommand(command="antiscam",  description="🛡 Проверить контрагента и чек на скам"),
         BotCommand(command="alerts",    description="🔔 Алерты на курс и арбитраж"),
         BotCommand(command="pnl",       description="📈 Моя статистика P&L"),
+        BotCommand(command="help",      description="❓ Инструкции (API-ключи и др.)"),
         BotCommand(command="subscribe", description="⭐ Подписка Pro"),
         BotCommand(command="ref",       description="🎁 Пригласить друга"),
     ])
@@ -223,6 +224,7 @@ async def main():
     for r in [
         admin.router, channel.router, antiscam.router,  # админ + антискам
         subscription.router, pnl.router,           # монетизация и P&L
+        help_guide.router,                          # инструкции / помощь
         start.router, maker.router, tracker.router,
         position_monitor.router, calculator.router,
         multipair.router, price_history.router,
