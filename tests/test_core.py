@@ -838,6 +838,39 @@ def test_ai_desc_disabled_without_key(monkeypatch):
     assert res == {}                      # ничего не классифицировано, без падений
 
 
+def test_ai_desc_persistent_cache(monkeypatch):
+    """После рестарта (память пуста) разбор берётся из БД, без вызова API."""
+    import asyncio, json
+    from utils import ai_desc
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    monkeypatch.setenv("AI_DESC_PARSE", "1")
+    ai_desc._CACHE.clear(); ai_desc._LAST_CALL = 0; ai_desc._COOLDOWN_UNTIL = 0
+
+    store = {}
+    async def cget(hashes): return {h: store[h] for h in hashes if h in store}
+    async def cput(items): store.update(items)
+    monkeypatch.setattr(ai_desc, "_key", ai_desc._key)  # noop, keep
+    import db
+    monkeypatch.setattr(db, "ai_cache_get", cget)
+    monkeypatch.setattr(db, "ai_cache_put", cput)
+
+    calls = {"n": 0}
+    async def fake(prompt, **k):
+        calls["n"] += 1
+        n = prompt.split("ОПИСАНИЯ:\n", 1)[1].strip().count("\n") + 1
+        return json.dumps([{"third_party": "no", "scam": False, "trap": False,
+                            "any_bank": False, "banks": []} for _ in range(n)])
+    monkeypatch.setattr(ai_desc.gemini, "ask_json", fake)
+
+    asyncio.run(ai_desc.classify(["не принимаю 3 лица"]))
+    assert calls["n"] == 1 and len(store) == 1          # разобрано + записано в БД
+
+    ai_desc._CACHE.clear(); ai_desc._LAST_CALL = 0      # имитируем рестарт
+    r = asyncio.run(ai_desc.classify(["не принимаю 3 лица"]))
+    assert calls["n"] == 1                              # API НЕ дёргали — взяли из БД
+    assert r["не принимаю 3 лица"]["third_party"] is False
+
+
 def test_ai_desc_normalize():
     from utils import ai_desc
     assert ai_desc._normalize({"third_party": "yes"})["third_party"] is True

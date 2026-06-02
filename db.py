@@ -205,6 +205,14 @@ async def _create_tables() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
         CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at DESC);
+
+        -- Персистентный кэш AI-разбора описаний: каждое уникальное описание
+        -- разбирается Gemini ОДИН раз за всё время (а не заново после рестарта).
+        CREATE TABLE IF NOT EXISTS ai_desc_cache (
+            hash       TEXT PRIMARY KEY,
+            data       TEXT NOT NULL,         -- JSON {third_party,scam_recruit,trap,any_bank,banks}
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
         """)
 
 
@@ -1038,3 +1046,46 @@ async def admin_stats() -> dict:
         "pay_24h":        pay_24h,
         "conversion":     round(conversion, 1),
     }
+
+
+# ── AI-разбор описаний: персистентный кэш ─────────────────────────────────────
+
+async def ai_cache_get(hashes: list[str]) -> dict[str, str]:
+    """Возвращает {hash: data_json} для известных описаний. Пусто если БД нет."""
+    if not ok() or not hashes:
+        return {}
+    try:
+        async with _pool.acquire() as c:
+            rows = await c.fetch(
+                "SELECT hash, data FROM ai_desc_cache WHERE hash = ANY($1::text[])",
+                list(hashes),
+            )
+        return {r["hash"]: r["data"] for r in rows}
+    except Exception as e:
+        logger.warning(f"ai_cache_get: {e}")
+        return {}
+
+
+async def ai_cache_put(items: dict[str, str]) -> None:
+    """Сохраняет/обновляет {hash: data_json}. No-op без БД."""
+    if not ok() or not items:
+        return
+    try:
+        async with _pool.acquire() as c:
+            await c.executemany(
+                "INSERT INTO ai_desc_cache(hash, data, updated_at) VALUES($1,$2,NOW()) "
+                "ON CONFLICT(hash) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()",
+                list(items.items()),
+            )
+    except Exception as e:
+        logger.warning(f"ai_cache_put: {e}")
+
+
+async def ai_cache_count() -> int:
+    if not ok():
+        return 0
+    try:
+        async with _pool.acquire() as c:
+            return int(await c.fetchval("SELECT COUNT(*) FROM ai_desc_cache"))
+    except Exception:
+        return 0

@@ -223,10 +223,15 @@ async def selftest_cmd(message: Message):
         _check_parser(), _check_ai(), _check_link(), _check_descriptions(),
     )
 
-    from utils import scam_db
+    from utils import scam_db, ai_desc
     from api import binance_detail
+    try:
+        ai_cached = await db.ai_cache_count()
+    except Exception:
+        ai_cached = 0
     extra = [
         f"{'✅' if db.ok() else '⚪'} База данных: {'подключена' if db.ok() else 'память (без БД)'}",
+        f"✅ Кэш разбора: {len(ai_desc._CACHE)} в памяти · {ai_cached:,} в БД".replace(",", " "),
         f"✅ Антискам-ЧС: {scam_db.count():,} кидал Bybit".replace(",", " "),
         f"{'✅' if binance_detail.enabled() else '⚪'} Binance-условия: "
         f"{'бёрнер настроен' if binance_detail.enabled() else 'выключено (нет сессии)'}",

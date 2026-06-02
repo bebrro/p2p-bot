@@ -134,20 +134,12 @@ _PROMPT = (
     "СБП=система быстрых платежей • КЗ=Казахстан • Каспи/Halyk/Freedom/Jusan/Forte=банки KZ • "
     "Тинёк/Сбер/Альфа/Райф=банки RU • терминал/банкомат=внесение наличными.\n\n"
 
-    "════════ ФРАЗЫ ПРО 3-х ЛИЦ НА РАЗНЫХ ЯЗЫКАХ ════════\n"
-    "НЕ принимает (third_party=no):\n"
-    "  EN: «no third party», «own account only», «sender name must match», «only from your card»\n"
-    "  TR: «3. şahıs kabul edilmez», «üçüncü şahıs/kişi ödemesi yok», «sadece kendi hesabınızdan/kartınızdan», «gönderen adı eşleşmeli»\n"
-    "  ID: «tidak menerima pihak ketiga», «hanya rekening sendiri», «nama pengirim harus sama»\n"
-    "  VI: «không nhận bên thứ ba», «chỉ chuyển từ tài khoản của bạn», «tên người gửi phải trùng»\n"
-    "  PT: «não aceito terceiros», «somente da sua conta», «apenas conta própria»\n"
-    "  AR: «لا أقبل طرف ثالث», «من حسابك فقط»\n"
-    "ПРИНИМАЕТ (third_party=yes):\n"
-    "  EN: «third party ok», «any bank», «any card accepted»\n"
-    "  TR: «3. şahıs kabul», «her bankadan», «herhangi bir karttan/hesaptan»\n"
-    "  ID: «pihak ketiga boleh», «bank apa saja», «kartu siapa saja»\n"
-    "  VI: «nhận bên thứ ba», «mọi ngân hàng», «thẻ nào cũng được»\n"
-    "  PT: «aceito terceiros», «qualquer banco»\n\n"
+    "════════ КЛЮЧЕВЫЕ ФРАЗЫ (мультиязык) ════════\n"
+    "NO 3-х лиц: TR «3.şahıs/üçüncü kişi kabul edilmez/etmiyorum», «sadece kendi "
+    "hesabınızdan»; EN «no third party / own account only / sender must match»; "
+    "ID «tidak menerima pihak ketiga»; VI «không nhận bên thứ ba»; PT «não aceito terceiros».\n"
+    "YES 3-х лиц / any_bank: TR «3.şahıs kabul / her bankadan»; EN «third party ok / "
+    "any bank»; ID «pihak ketiga boleh / bank apa saja»; VI «nhận bên thứ ba».\n\n"
 
     "════════ ПРИМЕРЫ ════════\n"
     "«1/3 на дов лицо, чек обязательно» → {\"third_party\":\"yes\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
@@ -185,7 +177,7 @@ async def classify(texts: list[str]) -> dict[str, dict]:
     """
     global _LAST_CALL, _COOLDOWN_UNTIL
     out: dict[str, dict] = {}
-    todo: list[str] = []
+    miss: dict[str, str] = {}      # hash -> text (нет в памяти)
     for t in texts:
         t = (t or "").strip()
         if not t:
@@ -193,9 +185,26 @@ async def classify(texts: list[str]) -> dict[str, dict]:
         k = _key(t)
         if k in _CACHE:
             out[t] = _CACHE[k]
-        elif t not in todo:
-            todo.append(t)
+        else:
+            miss[k] = t
 
+    # ── Слой 2: персистентный кэш в БД (переживает рестарты/деплои) ────────────
+    if miss:
+        try:
+            import db
+            db_hits = await db.ai_cache_get(list(miss.keys()))
+        except Exception:
+            db_hits = {}
+        for k, data in db_hits.items():
+            try:
+                parsed = json.loads(data)
+            except Exception:
+                continue
+            _CACHE[k] = parsed
+            out[miss[k]] = parsed
+        miss = {k: t for k, t in miss.items() if k not in db_hits}
+
+    todo = list(miss.values())
     if not todo or not enabled():
         return out
 
@@ -206,6 +215,7 @@ async def classify(texts: list[str]) -> dict[str, dict]:
     _LAST_CALL = now
 
     listing = "\n".join(f"{i + 1}. {t[:400]}" for i, t in enumerate(todo))
+    new_items: dict[str, str] = {}     # hash -> json для записи в БД
     try:
         raw = await gemini.ask_json(_PROMPT + listing, max_tokens=4000, timeout=12)
         if raw.startswith("❌"):
@@ -221,12 +231,22 @@ async def classify(texts: list[str]) -> dict[str, dict]:
             for i, t in enumerate(todo):
                 if i < len(arr) and isinstance(arr[i], dict):
                     parsed = _normalize(arr[i])
-                    _CACHE[_key(t)] = parsed
+                    k = _key(t)
+                    _CACHE[k] = parsed
                     out[t] = parsed
+                    new_items[k] = json.dumps(parsed, ensure_ascii=False)
     except Exception as e:
         logger.warning(f"ai_desc classify failed: {e}")
 
-    if len(_CACHE) > _CACHE_MAX:                       # подрезаем старое
+    # ── Запись новых разборов в персистентный кэш ─────────────────────────────
+    if new_items:
+        try:
+            import db
+            await db.ai_cache_put(new_items)
+        except Exception:
+            pass
+
+    if len(_CACHE) > _CACHE_MAX:                       # подрезаем старое в памяти
         for k in list(_CACHE)[: len(_CACHE) - _CACHE_MAX]:
             _CACHE.pop(k, None)
     return out
