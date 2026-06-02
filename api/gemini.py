@@ -7,6 +7,24 @@
 import aiohttp
 import asyncio
 import os
+from datetime import datetime, timezone
+
+# Счётчик запросов к Gemini за текущий день (UTC) — чтобы видеть, близко ли к
+# бесплатному лимиту (~1500/день) и пора ли привязывать карту.
+_usage = {"date": "", "count": 0}
+
+
+def _bump() -> None:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _usage["date"] != today:
+        _usage["date"], _usage["count"] = today, 0
+    _usage["count"] += 1
+
+
+def usage_today() -> int:
+    """Сколько запросов к Gemini сделано сегодня (UTC)."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return _usage["count"] if _usage["date"] == today else 0
 
 # Модель настраивается через env GEMINI_MODEL. По умолчанию gemini-2.0-flash —
 # у неё бесплатный лимит ~1500 запросов/день против ~250 у 2.5-flash, при
@@ -49,6 +67,7 @@ async def ask(prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> 
     }
 
     try:
+        _bump()
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 f"{GEMINI_URL}?key={api_key}",
@@ -98,6 +117,7 @@ async def ask_json(prompt: str, max_tokens: int = 4000, timeout: int = 12) -> st
         ],
     }
     try:
+        _bump()
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 f"{GEMINI_URL}?key={api_key}",
@@ -141,6 +161,7 @@ async def vision(image_b64: str, prompt: str,
     }
 
     try:
+        _bump()
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 f"{GEMINI_URL}?key={api_key}",
@@ -194,6 +215,7 @@ async def chat(messages: list, max_tokens: int = 1500) -> str:
     delays = [6, 12]                          # 2 повтора
     for attempt in range(len(delays) + 1):
         try:
+            _bump()
             async with aiohttp.ClientSession() as s:
                 async with s.post(
                     f"{GEMINI_URL}?key={api_key}",

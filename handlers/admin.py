@@ -224,13 +224,19 @@ async def selftest_cmd(message: Message):
     )
 
     from utils import scam_db, ai_desc
-    from api import binance_detail
+    from api import binance_detail, gemini
     try:
         ai_cached = await db.ai_cache_count()
     except Exception:
         ai_cached = 0
+    used = gemini.usage_today()
+    FREE_RPD = 1500
+    g_mark = "✅" if used < FREE_RPD * 0.8 else ("🟡" if used < FREE_RPD else "🔴")
+    g_line = (f"{g_mark} Gemini сегодня: {used} / ~{FREE_RPD} бесплатных запросов"
+              + (" — пора привязать карту" if used >= FREE_RPD else ""))
     extra = [
         f"{'✅' if db.ok() else '⚪'} База данных: {'подключена' if db.ok() else 'память (без БД)'}",
+        g_line,
         f"✅ Кэш разбора: {len(ai_desc._CACHE)} в памяти · {ai_cached:,} в БД".replace(",", " "),
         f"✅ Антискам-ЧС: {scam_db.count():,} кидал Bybit".replace(",", " "),
         f"{'✅' if binance_detail.enabled() else '⚪'} Binance-условия: "
