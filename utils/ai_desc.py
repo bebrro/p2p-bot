@@ -111,6 +111,7 @@ _PROMPT = (
     "════════ ПРИМЕРЫ ════════\n"
     "«1/3 на дов лицо, чек обязательно» → {\"third_party\":\"yes\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
     "«Принимаю только от 1 го, на дов лицо» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
+    "«Из-за блокировки карт принимаю на доверенное лицо. Не принимаю платежи от 3-х лиц» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
     "«С любого банка КЗ по номеру карты» → {\"third_party\":\"yes\",\"scam\":false,\"trap\":false,\"any_bank\":true}\n"
     "«Оплата только с личных счетов или счетов доверенных лиц» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
     "«Каспи только, перевод с вашей карты» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
