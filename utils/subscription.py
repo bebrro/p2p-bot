@@ -25,16 +25,26 @@ PLANS: dict[str, dict] = {
     "free": {
         "name":          "Free",
         "emoji":         "🆓",
+        "tagline":       "Разведка рынка",
         "repricer_rules": 1,
         "trackers":       3,
         "alerts":         3,
         "arbitrage_4x":   False,
         "pnl":            False,
         "export":         False,
+        "ai_daily":       5,
+        "features": [
+            "Курсы 4 бирж + стакан с защитой от приманок",
+            "Связки без карт (просмотр)",
+            "Антискам: проверка ника + база 11 500 кидал",
+            "AI-ассистент — 5 вопросов в день",
+            "3 алерта · 3 трекера",
+        ],
     },
     "pro": {
         "name":             "Pro",
         "emoji":            "⭐",
+        "tagline":          "Для трейдера — окупается с одной сделки",
         "price_usdt":       9.99,
         "price_lifetime":   59.0,
         "price_stars":      650,    # ≈ +30% к USDT (покрывает комиссию Apple/Google)
@@ -46,10 +56,21 @@ PLANS: dict[str, dict] = {
         "arbitrage_4x":     True,
         "pnl":              True,
         "export":           True,
+        "ai_daily":         -1,     # безлимит
+        "features": [
+            "♾ Безлимитный AI-ассистент по сделкам",
+            "🤖 Авто-репрайсер — держит твои объявления в топе 24/7",
+            "🔔 Алерты на связки и арбитраж прямо в ЛС",
+            "🐋 Whale-трекер — видишь крупных игроков",
+            "🧾 AI-проверка чеков на подделку",
+            "📈 P&L-аналитика + 📤 экспорт сделок",
+            "20 алертов · 20 трекеров · 10 правил репрайсера",
+        ],
     },
     "team": {
         "name":             "Team",
         "emoji":            "👑",
+        "tagline":          "Для P2P-магазина и мульти-аккаунтов",
         "price_usdt":       24.99,
         "price_lifetime":   149.0,
         "price_stars":      1600,
@@ -61,6 +82,13 @@ PLANS: dict[str, dict] = {
         "arbitrage_4x":     True,
         "pnl":              True,
         "export":           True,
+        "ai_daily":         -1,
+        "features": [
+            "Всё из Pro, без ограничений",
+            "👥 До 5 API-аккаунтов (мульти-аккаунт)",
+            "50 правил репрайсера · 100 алертов · 100 трекеров",
+            "⚡ Приоритетная поддержка",
+        ],
     },
 }
 
@@ -112,25 +140,20 @@ def format_expires(user_sub: dict | None) -> str:
 
 
 def format_plan_card(plan_key: str, is_current: bool = False) -> str:
-    """HTML-блок описания плана для Telegram."""
+    """HTML-блок описания плана для Telegram — подача через выгоды."""
     p    = PLANS.get(plan_key, PLANS["free"])
-    mark = " ✅ (текущий)" if is_current else ""
-    lines = [f"{p['emoji']} <b>{p['name']}</b>{mark}"]
+    star = " ⭐ ПОПУЛЯРНЫЙ" if plan_key == "pro" else ""
+    mark = "  ✅ твой план" if is_current else ""
+    lines = [f"{p['emoji']} <b>{p['name']}</b> — <i>{p.get('tagline','')}</i>{star}{mark}"]
     if plan_key == "free":
-        lines.append("💰 Бесплатно")
+        lines.append("💰 <b>Бесплатно</b>")
     else:
         lines.append(
-            f"💰 {p['price_usdt']:.2f} USDT/мес  "
-            f"или {p['price_lifetime']:.0f} USDT навсегда 🔥"
+            f"💰 <b>{p['price_lifetime']:.0f} USDT навсегда</b> 🔥  "
+            f"или {p['price_usdt']:.2f}/мес"
         )
         if p.get("price_stars"):
-            lines.append(f"⭐ или {p['price_stars']} Stars/мес — оплата в 1 тап")
-    lines += [
-        f"  • Репрайсер: до {p['repricer_rules']} правил",
-        f"  • Трекеры: до {p['trackers']}",
-        f"  • Алерты: до {p['alerts']}",
-        f"  • 4-биржевой арбитраж: {'✅' if p['arbitrage_4x'] else '❌'}",
-        f"  • P&L трекер: {'✅' if p['pnl'] else '❌'}",
-        f"  • Экспорт данных: {'✅' if p['export'] else '❌'}",
-    ]
+            lines.append(f"⭐ можно Telegram Stars — оплата в 1 тап")
+    for f in p.get("features", []):
+        lines.append(f"  ✅ {f}")
     return "\n".join(lines)

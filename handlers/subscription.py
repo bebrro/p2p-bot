@@ -165,21 +165,25 @@ async def _get_sub_text(uid: int) -> tuple[str, str]:
     expires  = format_expires(sub) if sub else ""
 
     lines = [
-        "⭐ <b>Подписка P2P Monitor</b>",
+        "🚀 <b>P2P Sniper — тарифы</b>",
+        "",
+        "Один пропущенный кидала или одна связка окупают подписку на месяцы вперёд.",
         "",
         f"Твой план: <b>{PLANS[plan_key]['emoji']} {PLANS[plan_key]['name']}</b>"
         + (f"  —  {expires}" if expires else ""),
         "",
-        "─────────────────",
+        "━━━━━━━━━━━━━━━━━",
         format_plan_card("free",  plan_key == "free"),
         "",
+        "━━━━━━━━━━━━━━━━━",
         format_plan_card("pro",   plan_key == "pro"),
         "",
+        "━━━━━━━━━━━━━━━━━",
         format_plan_card("team",  plan_key == "team"),
         "",
-        "─────────────────",
-        "💳 Оплата через <b>USDT TRC20</b> (0% комиссия)",
-        "Нажми кнопку ниже — получишь адрес кошелька и инструкцию.",
+        "━━━━━━━━━━━━━━━━━",
+        "💳 USDT TRC20 (0% комиссии) или ⭐ Telegram Stars (в 1 тап)",
+        "♾ <b>Lifetime</b> = заплатил раз и навсегда. Окупается за ~6 месяцев против помесячной.",
     ]
     return "\n".join(lines), plan_key
 
