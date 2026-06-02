@@ -166,9 +166,11 @@ async def _check_ai() -> str:
         t0 = time.time()
         ans = await gemini.ask("Ответь одним словом: ок", max_tokens=10)
         dt = time.time() - t0
-        if ans.startswith("❌") or ans.startswith("⏳"):
+        if ans.startswith("⏳"):     # лимит — не поломка, работает regex-фолбэк
+            return "⚪ AI (Gemini): лимит исчерпан — работает regex-фолбэк"
+        if ans.startswith("❌"):
             return f"🔴 AI (Gemini): {ans[:40]}"
-        return f"✅ AI (Gemini): отвечает · {dt:.1f}с"
+        return f"✅ AI (Gemini): отвечает · {dt:.1f}с ({gemini.GEMINI_MODEL})"
     except Exception as e:
         return f"🔴 AI (Gemini): {type(e).__name__}"
 

@@ -8,9 +8,14 @@ import aiohttp
 import asyncio
 import os
 
+# Модель настраивается через env GEMINI_MODEL. По умолчанию gemini-2.0-flash —
+# у неё бесплатный лимит ~1500 запросов/день против ~250 у 2.5-flash, при
+# достаточном качестве для разбора описаний и чата. Хочешь умнее — поставь
+# GEMINI_MODEL=gemini-2.5-flash (но упрёшься в лимит быстрее).
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta"
-    "/models/gemini-2.5-flash:generateContent"
+    f"/models/{GEMINI_MODEL}:generateContent"
 )
 
 
