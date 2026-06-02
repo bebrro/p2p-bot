@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, MenuButtonCommands
+from aiogram.types import BotCommand, MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
 from config import BOT_TOKEN, WEBAPP_URL, WEBAPP_PORT, PAYMENT_LABELS, REDIS_URL, ADMIN_CHAT_ID
 from webapp.server import start_webapp
@@ -203,23 +203,22 @@ async def main():
     dp.message.middleware(_rl)
     dp.callback_query.middleware(RateLimitMiddleware(rate=20, period=3.0))
 
-    # ── Команды (кнопка ☰ рядом с полем ввода) ────────────────────────────
+    # ── Команды в меню «/» — чистый набор, только нужное пользователю ──────
     await bot.set_my_commands([
-        BotCommand(command="menu",        description="📱 Главное меню"),
-        BotCommand(command="p2p",         description="📊 P2P курсы — все биржи"),
-        BotCommand(command="alerts",      description="🔔 Алерты на спред"),
-        BotCommand(command="ai",          description="🤖 AI Советник"),
-        BotCommand(command="antiscam",    description="🛡 Антискам — проверка чеков и кидал"),
-        BotCommand(command="pnl",         description="📊 P&L трекер (Pro/Team)"),
-        BotCommand(command="calc",        description="🧮 Калькулятор прибыли"),
-        BotCommand(command="subscribe",   description="⭐ Подписка и тарифы"),
-        BotCommand(command="ref",         description="👥 Реферальная программа"),
-        BotCommand(command="digest",      description="☀️ Утренний дайджест"),
-        BotCommand(command="whale",       description="🐋 Whale Tracker"),
-        BotCommand(command="stopwhale",   description="🛑 Остановить Whale Tracker"),
-        BotCommand(command="pay_confirm", description="💳 Подтвердить оплату USDT"),
+        BotCommand(command="menu",      description="📊 Открыть P2P Sniper"),
+        BotCommand(command="antiscam",  description="🛡 Проверить контрагента и чек на скам"),
+        BotCommand(command="alerts",    description="🔔 Алерты на курс и арбитраж"),
+        BotCommand(command="pnl",       description="📈 Моя статистика P&L"),
+        BotCommand(command="subscribe", description="⭐ Подписка Pro"),
+        BotCommand(command="ref",       description="🎁 Пригласить друга"),
     ])
-    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    # Кнопка меню рядом с полем ввода: открывает САМ мини-апп (а не список команд).
+    if WEBAPP_URL:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="📊 P2P Sniper",
+                                         web_app=WebAppInfo(url=WEBAPP_URL)))
+    else:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     for r in [
         admin.router, channel.router, antiscam.router,  # админ + антискам

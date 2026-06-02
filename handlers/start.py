@@ -320,41 +320,9 @@ async def cmd_myid(message: Message):
     )
 
 
-# ─── Шорткаты команд из ☰ меню ──────────────────────────────────────────────
-
-@router.message(Command("p2p"))
-async def cmd_p2p(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟡 Binance P2P", callback_data="ex:binance"),
-         InlineKeyboardButton(text="🟠 Bybit P2P",   callback_data="ex:bybit")],
-        [InlineKeyboardButton(text="⬅️ Меню",        callback_data="back:main")],
-    ])
-    await message.answer("📊 <b>P2P курсы</b>\n\nВыбери биржу:", reply_markup=kb, parse_mode="HTML")
-
-
-@router.message(Command("calc"))
-async def cmd_calc(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧮 Открыть калькулятор", callback_data="calc:start")]
-    ])
-    await message.answer("🧮 <b>Калькулятор прибыли</b>", reply_markup=kb, parse_mode="HTML")
-
-
-@router.message(Command("whale"))
-async def cmd_whale(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🐋 Whale Tracker", callback_data="wt:list")]
-    ])
-    await message.answer("🐋 <b>Whale Tracker</b>", reply_markup=kb, parse_mode="HTML")
-
-
-@router.message(Command("ai"))
-async def cmd_ai(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🤖 AI Советник", callback_data="ai:start")]
-    ])
-    await message.answer("🤖 <b>AI Советник</b>", reply_markup=kb, parse_mode="HTML")
-
+# ─── Команды-флоу ───────────────────────────────────────────────────────────
+# Шорткаты /p2p /calc /whale /ai убраны: их заменяет мини-апп (вкладки) и
+# кнопка меню «📊 P2P Sniper». Меньше дублей — чище меню.
 
 @router.message(Command("alerts"))
 async def cmd_alerts(message: Message):
