@@ -118,6 +118,9 @@ async def _gather_exchanges(asset: str, fiat: str) -> list[dict]:
 # Можно переопределить через env. P2P у Binance/Bybit/OKX/Wallet обычно 0.
 NETWORK_FEE_USDT = float(os.getenv("NETWORK_FEE_USDT", "1.0"))
 P2P_FEE_PCT      = float(os.getenv("P2P_FEE_PCT", "0.0"))
+# Минимальная ЧИСТАЯ доходность связки, ниже которой её не показываем —
+# +0.02% это шум/убыток после комиссий, не возможность.
+MIN_LINK_PCT     = float(os.getenv("MIN_LINK_PCT", "0.6"))
 
 
 # Референсный оборот по фиатам (≈ $1000) — для демо «сколько бы заработал».
@@ -303,6 +306,9 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
     fee_fiat  += vol * (P2P_FEE_PCT / 100) * 2
     net        = gross - fee_fiat
     net_pct    = (net / vol * 100) if vol else 0
+
+    if net_pct < MIN_LINK_PCT:           # связка слишком тонкая → не показываем
+        return None
 
     return {
         "buy":        _leg(bb),

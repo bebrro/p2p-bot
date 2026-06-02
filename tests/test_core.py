@@ -938,6 +938,21 @@ def test_norm_bank_aliases():
     assert srv._norm_bank("Tinkoff") == srv._norm_bank("Т-Банк") == "tinkoff"
 
 
+def test_link_min_profit_threshold():
+    """Связка с мизерной чистой прибылью (< MIN_LINK_PCT) не показывается."""
+    import webapp.server as srv
+    # спред ~0.02% (503.00 → 503.10) — шум, не возможность
+    buy  = [{"price": 503.0, "third_party": True, "nickname": "A", "min_amount": 1000,
+             "max_amount": 900000, "available": 5000, "pay_types": ["Kaspi"]}]
+    sell = [{"price": 503.1, "third_party": True, "nickname": "B", "min_amount": 1000,
+             "max_amount": 900000, "available": 5000, "pay_types": ["Kaspi"]}]
+    assert srv._find_link(buy, sell, "KZT") is None
+    # нормальная связка (~2%) — показывается
+    sell2 = [{"price": 513.0, "third_party": True, "nickname": "B", "min_amount": 1000,
+              "max_amount": 900000, "available": 5000, "pay_types": ["Kaspi"]}]
+    assert srv._find_link(buy, sell2, "KZT") is not None
+
+
 def test_price_bait_flagging():
     """Нереальные цены (вне ±5% медианы в выгодную сторону) → price_bait."""
     import webapp.server as srv

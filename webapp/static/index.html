@@ -3,7 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>P2P Monitor</title>
+<title>P2P Sniper — сканер P2P-арбитража: Binance, Bybit, OKX, TG Wallet</title>
+<meta name="description" content="P2P Sniper — мониторинг P2P-курса USDT на Binance, Bybit, OKX, TG Wallet в реальном времени. Поиск арбитража и связок без карт, защита от скама и приманок, AI-ассистент. KZT, RUB, TRY, USD и 10+ валют.">
+<meta name="keywords" content="P2P арбитраж, P2P сканер, USDT курс, Binance P2P, Bybit P2P, OKX P2P, TG Wallet, связка без карт, P2P бот, антискам P2P, спред USDT, KZT RUB TRY">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0e1621">
+<link rel="canonical" href="https://t.me/Sniper_P2P_Bot">
+<!-- Open Graph (превью при шеринге ссылки в Telegram/соцсетях) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="P2P Sniper">
+<meta property="og:title" content="P2P Sniper — сканер P2P-арбитража 4 бирж">
+<meta property="og:description" content="Курс USDT на Binance/Bybit/OKX/TG Wallet в реальном времени, арбитраж, связки без карт, антискам и AI-ассистент. 14 валют.">
+<meta property="og:url" content="https://t.me/Sniper_P2P_Bot">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="P2P Sniper — сканер P2P-арбитража">
+<meta name="twitter:description" content="USDT на Binance/Bybit/OKX/TG Wallet, арбитраж, связки без карт, антискам, AI.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"P2P Sniper",
+"applicationCategory":"FinanceApplication","operatingSystem":"Telegram",
+"description":"Сканер P2P-арбитража USDT на Binance, Bybit, OKX, TG Wallet: курсы в реальном времени, связки без карт, антискам, AI-ассистент.",
+"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -407,7 +427,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .dash-plan-bar{background:var(--bg2);border-radius:var(--r);padding:9px 12px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;animation:fadeIn .2s ease}
 .dash-plan-name{font-size:13px;font-weight:700}
 .dash-plan-sub{font-size:10px;color:var(--hint);margin-top:1px}
-.dash-earn{background:linear-gradient(135deg,rgba(250,166,26,.18),rgba(67,181,129,.12));border:1px solid rgba(250,166,26,.35);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;text-align:center;animation:fadeIn .25s ease}
+.dash-earn{background:linear-gradient(135deg,rgba(250,166,26,.18),rgba(67,181,129,.12));border:1px solid rgba(250,166,26,.35);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;text-align:center;animation:fadeIn .25s ease;cursor:pointer;transition:transform .1s}
+.dash-earn:active{transform:scale(.99)}
+.dash-earn-cta{font-size:9.5px;color:var(--hint);margin-top:5px}
+.dash-quiet{background:var(--bg2);border-radius:var(--r);padding:14px;margin-bottom:9px;text-align:center;font-size:12px;color:var(--text);line-height:1.5;animation:fadeIn .25s ease}
 .dash-earn-lbl{font-size:11px;color:var(--gold);font-weight:600;letter-spacing:.2px}
 .dash-earn-val{font-size:26px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;line-height:1.15;margin:2px 0}
 .dash-earn-sub{font-size:10px;color:var(--hint);line-height:1.35}
@@ -543,24 +566,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <span class="sub-plan-badge" id="dashPlanBadge">—</span>
   </div>
 
-  <!-- WOW: потенциальный заработок сегодня -->
-  <div class="dash-earn" id="dashEarnCard" style="display:none">
-    <div class="dash-earn-lbl">💰 СЕГОДНЯ МОЖНО ЗАРАБОТАТЬ</div>
+  <!-- ГЕРОЙ: лучшая реальная возможность сейчас (честная, без приманок) -->
+  <div class="dash-earn" id="dashEarnCard" style="display:none" onclick="dashArbClick()">
+    <div class="dash-earn-lbl">🔥 ЛУЧШАЯ ВОЗМОЖНОСТЬ <span class="dash-sec-ts" id="dashTs"></span></div>
     <div class="dash-earn-val" id="dashEarnVal">—</div>
     <div class="dash-earn-sub" id="dashEarnSub"></div>
+    <div class="dash-earn-cta">нажми → разбор в «Спреде»</div>
+  </div>
+  <!-- Когда возможностей нет — спокойный нейтральный блок -->
+  <div class="dash-quiet" id="dashQuietCard" style="display:none">
+    🟰 Рынок спокойный — биржи торгуются по схожим ценам.<br>
+    <span style="color:var(--hint);font-size:10px">Загляни позже или проверь другие валюты ↑</span>
   </div>
 
-  <!-- Best arbitrage -->
-  <div class="dash-sec">🔥 Лучшая возможность <span class="dash-sec-ts" id="dashTs"></span></div>
-  <div class="dash-arb no-arb" id="dashArbCard" onclick="dashArbClick()">
-    <div>
-      <div class="dash-arb-route" id="dashArbRoute">Загрузка данных...</div>
-      <div class="dash-arb-hint"  id="dashArbHint">Анализируем все биржи</div>
-    </div>
-    <div class="dash-arb-pct" id="dashArbPct"></div>
-  </div>
-
-  <!-- Межбиржевая связка без карт -->
+  <!-- Межбиржевая связка без карт (только если реальная > порога) -->
   <div class="tri-card" id="xtriBanner" style="display:none"></div>
 
   <!-- Exchange overview -->
@@ -2162,16 +2181,13 @@ async function loadDashboard(){
     // Exchange grid
     renderDashExchanges(data.exchanges||[]);
 
-    // Момент вау: потенциальный заработок
+    // Герой: лучшая ЧЕСТНАЯ возможность (earn считается по не-подозрительному арбу)
+    dashArbData=data.best_arb||null;
     renderDashEarn(data.earn||null);
 
     // Межбиржевая связка без карт (отдельный запрос — не тормозит дашборд)
     fetch(`/api/xtriangle/${dashFiat}/${dashAsset}`).then(r=>r.json())
       .then(x=>renderTriangle(x.triangle||null,'xtriBanner')).catch(()=>{});
-
-    // Arbitrage banner
-    dashArbData=data.best_arb||null;
-    renderDashArb(dashArbData);
 
     // Tools
     if(data.tools&&uid){
@@ -2216,27 +2232,17 @@ function renderDashExchanges(exchanges){
 
 function renderDashEarn(earn){
   const card=document.getElementById('dashEarnCard');
-  if(!earn||earn.profit<=0){ card.style.display='none'; return; }
+  const quiet=document.getElementById('dashQuietCard');
+  if(!earn||earn.profit<=0){
+    card.style.display='none';
+    if(quiet) quiet.style.display='block';     // спокойный рынок — нейтральный блок
+    return;
+  }
+  if(quiet) quiet.style.display='none';
   card.style.display='block';
   document.getElementById('dashEarnVal').textContent='+'+fmt(earn.profit)+' '+earn.fiat;
   document.getElementById('dashEarnSub').textContent=
-    `на обороте ${fmtK(earn.amount)} ${earn.fiat} · ${earn.route} +${earn.pct.toFixed(2)}%`;
-}
-function renderDashArb(arb){
-  const card=document.getElementById('dashArbCard');
-  const route=document.getElementById('dashArbRoute');
-  const hint=document.getElementById('dashArbHint');
-  const pct=document.getElementById('dashArbPct');
-  if(!arb||arb.pct<=0){
-    card.className='dash-arb no-arb';
-    route.textContent='Арбитражных возможностей нет';
-    hint.textContent='Все биржи торгуются по схожим ценам';
-    pct.textContent=''; return;
-  }
-  card.className='dash-arb';
-  route.textContent=arb.from+' → '+arb.to;
-  hint.textContent='+'+fmt(arb.abs)+' '+dashFiat+' · нажми → Спред';
-  pct.textContent='+'+arb.pct.toFixed(2)+'%';
+    `${earn.route} · +${earn.pct.toFixed(2)}% · на обороте ${fmtK(earn.amount)} ${earn.fiat}`;
 }
 
 function dashArbClick(){
