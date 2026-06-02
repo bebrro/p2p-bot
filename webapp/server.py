@@ -517,12 +517,10 @@ async def api_orderbook(request: web.Request) -> web.Response:
         sell_en = _enrich(sell_ads)
         await _ai_overlay(buy_en + sell_en)     # один батч на обе стороны
 
-        # Связка «без карт» — МЕЖБИРЖЕВАЯ (все 4 биржи), чтобы появлялась в Стакане
-        # для любого фиата и не зависела от выбранной биржи. Кэш 45с — не дёргаем
-        # биржи дважды. Фолбэк на внутрибиржевую, если межбиржевой нет.
-        triangle = await best_link_cached(fiat, asset)
-        if not triangle:
-            triangle = _triangle(buy_en, sell_en, fiat)
+        # Связка «без карт» — ВНУТРИ этой биржи (левый/правый стакан одной биржи).
+        # Работает на всех валютах: мультиязычный AI-разбор распознаёт условия на
+        # турецком/индонезийском/вьетнамском/англ. и т.д.
+        triangle = _triangle(buy_en, sell_en, fiat)
 
         buy_ads  = _apply_filters(buy_en)
         sell_ads = _apply_filters(sell_en)
