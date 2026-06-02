@@ -175,6 +175,28 @@ async def _check_ai() -> str:
         return f"🔴 AI (Gemini): {type(e).__name__}"
 
 
+async def _check_descriptions() -> list:
+    """Сколько объявлений с непустым описанием у каждой биржи (по 12 шт)."""
+    probes = [
+        ("🟡 Binance",   lambda: binance_p2p.get_ads(asset="USDT", fiat="RUB", trade_type="BUY", rows=12, _force=True)),
+        ("🟠 Bybit",     lambda: bybit_p2p.get_ads(asset="USDT", fiat="RUB", side="1", size=12, _force=True)),
+        ("🔵 OKX",       lambda: okx_p2p.get_ads(asset="USDT", fiat="RUB", side="buy", rows=12, _force=True)),
+        ("💎 TG Wallet", lambda: wallet_p2p.get_ads(asset="USDT", fiat="RUB", side="buy", rows=12, _force=True)),
+    ]
+    async def one(name, fn):
+        try:
+            ads = await fn()
+            n = len(ads)
+            got = sum(1 for a in ads if (a.get("description") or "").strip())
+            if n == 0:
+                return f"{name}: нет данных"
+            mark = "✅" if got else "🔴"
+            return f"{mark} {name}: {got}/{n} с описанием"
+        except Exception as e:
+            return f"🔴 {name}: {type(e).__name__}"
+    return await asyncio.gather(*[one(n, f) for n, f in probes])
+
+
 async def _check_link() -> str:
     try:
         from webapp.server import best_link
@@ -197,8 +219,8 @@ async def selftest_cmd(message: Message):
     # биржи
     ex_results = await asyncio.gather(*[_probe_one(n, fn) for n, fn in _PROBES])
     # остальное параллельно
-    parser, ai, link = await asyncio.gather(
-        _check_parser(), _check_ai(), _check_link(),
+    parser, ai, link, descs = await asyncio.gather(
+        _check_parser(), _check_ai(), _check_link(), _check_descriptions(),
     )
 
     from utils import scam_db
@@ -215,6 +237,7 @@ async def selftest_cmd(message: Message):
         "🧪 <b>Селф-тест системы</b>\n\n"
         "<b>Биржи:</b>\n" + "\n".join(ex_results) + "\n\n"
         "<b>Логика:</b>\n" + "\n".join([parser, ai, link]) + "\n\n"
+        "<b>Описания у бирж:</b>\n" + "\n".join(descs) + "\n\n"
         "<b>Сервисы:</b>\n" + "\n".join(extra) + "\n\n"
         "<i>✅ ок · 🔴 ошибка · ⚪ выключено/нет данных</i>"
     )
