@@ -642,6 +642,28 @@ def test_triangle_requires_common_bank():
     t = srv._triangle(buy, sell2, "KZT")
     assert t is not None and t["banks"] == ["Kaspi Bank"]
 
+def test_scam_blacklist_flags_and_excludes(monkeypatch):
+    """Кидала из ЧС (Bybit userMaskId) помечается и не попадает в связку."""
+    from utils import scam_db
+    import webapp.server as srv
+    monkeypatch.setattr(scam_db, "_BYBIT_SCAM", {"sdeadbeef": "мороз"})
+    # _enrich помечает scam_recruit + known_scammer
+    ad = {"price": 75, "nickname": "X", "user_mask_id": "sdeadbeef",
+          "description": "", "pay_types": ["Kaspi"]}
+    srv._enrich([ad])
+    assert ad["known_scammer"] is True and ad["scam_recruit"] is True
+    assert ad["scam_reason"] == "мороз"
+    # связка не берёт помеченного кидалу
+    buy = [{"price": 500, "third_party": True, "nickname": "S", "min_amount": 1000,
+            "max_amount": 900000, "available": 5000, "pay_types": ["Kaspi"],
+            "user_mask_id": "sdeadbeef", "scam_recruit": True}]
+    sell = [{"price": 515, "third_party": True, "nickname": "B", "min_amount": 1000,
+             "max_amount": 900000, "available": 5000, "pay_types": ["Kaspi"]}]
+    assert srv._find_link(buy, sell, "KZT") is None
+    # чужой mask — не кидала
+    assert scam_db.is_scammer("sok123") is False
+
+
 def test_bank_from_description():
     """Банк из описания («только Т-Банк») участвует в матчинге связки."""
     from utils.desc_parser import parse_description as p

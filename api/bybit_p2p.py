@@ -76,6 +76,7 @@ async def get_ads(
             "description": item.get("remark", ""),
             "ad_no":       item.get("id", ""),
             "advertiser_no": item.get("userId", ""),
+            "user_mask_id":  item.get("userMaskId", ""),   # = s<hash> для ЧС-матчинга
         })
     return ads
 

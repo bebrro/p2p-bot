@@ -1371,7 +1371,7 @@ function showAd(side,idx){
   const pays=(ad.pay_types||[]).map(p=>`<span class="ad-modal-flag">💳 ${esc(p)}</span>`).join('');
   const desc=(ad.description||'').trim();
   const descHtml=desc?`<div class="ad-modal-desc">${esc(desc)}</div>`:`<div class="ad-modal-desc empty">Без описания</div>`;
-  const scamWarn=ad.scam_recruit?`<div class="ad-modal-scam">🚩 <b>Осторожно: похоже на вербовку / скам-схему.</b><br>В описании зовут «лёгкие деньги» или уводят в личку мимо биржи. Не пиши таким, не отдавай реквизиты и крипту.</div>`:(ad.trap?`<div class="ad-modal-scam" style="background:rgba(250,166,26,.14);border-color:rgba(250,166,26,.4)">⚠️ <b>Странные условия — возможна ловушка.</b><br>Просят написать фразу-«согласие» или прислать «чек» — этим выигрывают апелляции. Торгуй строго по правилам биржи, не пиши скриптов.</div>`:'');
+  const scamWarn=ad.known_scammer?`<div class="ad-modal-scam">🚨 <b>В ЧЁРНОМ СПИСКЕ кидал (BlackListBybit).</b><br>Этот мерчант отмечен как мошенник в публичной базе.${ad.scam_reason?'<br>Причина: '+esc(ad.scam_reason):''}<br>Не торгуй с ним.</div>`:(ad.scam_recruit?`<div class="ad-modal-scam">🚩 <b>Осторожно: похоже на вербовку / скам-схему.</b><br>В описании зовут «лёгкие деньги» или уводят в личку мимо биржи. Не пиши таким, не отдавай реквизиты и крипту.</div>`:(ad.trap?`<div class="ad-modal-scam" style="background:rgba(250,166,26,.14);border-color:rgba(250,166,26,.4)">⚠️ <b>Странные условия — возможна ловушка.</b><br>Просят написать фразу-«согласие» или прислать «чек» — этим выигрывают апелляции. Торгуй строго по правилам биржи, не пиши скриптов.</div>`:''));
   document.getElementById('adModalBody').innerHTML=`
     <div class="ad-modal-head">
       <span class="ad-modal-nick">${esc(ad.nickname||'—')}</span>

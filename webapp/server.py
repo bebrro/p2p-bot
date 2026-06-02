@@ -39,6 +39,7 @@ from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
 from utils.desc_parser import parse_description
 from utils import ai_desc
+from utils import scam_db
 from api import binance_detail
 from config import DISABLED_EXCHANGES, SUSPICIOUS_SPREAD_PCT
 
@@ -385,6 +386,16 @@ def _enrich(ads: list) -> list:
         ad["any_bank"]     = info.get("any_bank", False)
         ad["desc_banks"]   = info.get("banks", [])
         ad["ai_desc"]      = False
+        # Чёрный список кидал (Bybit userMaskId из канала-блэклиста)
+        mask = ad.get("user_mask_id")
+        if scam_db.is_scammer(mask):
+            ad["known_scammer"] = True
+            ad["scam_recruit"]  = True          # сольёт вниз + исключит из связок
+            r = scam_db.reason(mask)
+            ad["scam_reason"]   = r
+            fl = ad.get("smart_flags") or []
+            fl.insert(0, "🚨 ЧС BlackListBybit" + (f": {r}" if r else ""))
+            ad["smart_flags"] = fl
     return ads
 
 
@@ -417,7 +428,7 @@ async def _ai_overlay(ads: list) -> list:
         if not r:
             continue                       # нет описания / AI не классифицировал — regex
         a["third_party"]  = r["third_party"]
-        a["scam_recruit"] = r["scam_recruit"]
+        a["scam_recruit"] = r["scam_recruit"] or a.get("known_scammer", False)
         a["trap"]         = r["trap"]
         a["any_bank"]     = r["any_bank"]
         if r.get("banks"):
