@@ -11,6 +11,7 @@
 """
 import base64
 import logging
+import re
 
 from aiogram import Router, Bot, F
 from aiogram.filters import Command
@@ -22,6 +23,7 @@ from aiogram.types import (
 )
 
 import db
+from utils import scam_db
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -139,8 +141,12 @@ async def as_receipt_not_photo(message: Message):
 async def as_nick(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AntiScamStates.waiting_nick)
     await callback.message.edit_text(
-        "👤 <b>Проверка никнейма</b>\n\n"
-        "Введи <b>ник контрагента</b> (как в объявлении) — проверю по базе кидал.",
+        "👤 <b>Проверка контрагента</b>\n\n"
+        "Пришли одно из:\n"
+        "• <b>ник</b> контрагента (проверю по краудсорс-базе жалоб)\n"
+        "• <b>ссылку на профиль Bybit</b> или его ID — проверю по базе "
+        f"<b>{scam_db.count():,}</b> кидал из @BlackListBybit".replace(",", " ") + "\n\n"
+        "<i>Ссылку на профиль удобно скопировать в приложении Bybit → «Поделиться».</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Отмена", callback_data="antiscam:start")],
@@ -163,7 +169,36 @@ async def _scam_votes(nick: str) -> int:
 @router.message(AntiScamStates.waiting_nick)
 async def as_nick_check(message: Message, state: FSMContext):
     await state.clear()
-    nick = (message.text or "").strip()
+    raw = (message.text or "").strip()
+
+    # 1) Ссылка на профиль Bybit / userMaskId → проверка по базе @BlackListBybit
+    mask_m = re.search(r"s[0-9a-f]{32}", raw)
+    if mask_m:
+        mask = mask_m.group(0)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔁 Проверить ещё", callback_data="as:nick")],
+            [InlineKeyboardButton(text="⬅️ Антискам",       callback_data="antiscam:start")],
+        ])
+        if scam_db.is_scammer(mask):
+            r = scam_db.reason(mask)
+            await message.answer(
+                "🚨 <b>В ЧЁРНОМ СПИСКЕ Bybit</b>\n\n"
+                "Этот мерчант отмечен как кидала в базе @BlackListBybit.\n"
+                + (f"Причина: <i>{r}</i>\n" if r else "")
+                + "\n❌ <b>Не торгуй с ним.</b>",
+                parse_mode="HTML", reply_markup=kb,
+            )
+        else:
+            await message.answer(
+                "🟢 <b>Не найден в базе кидал</b> (@BlackListBybit).\n\n"
+                "Но это НЕ гарантия честности — соблюдай правила: отпускай USDT "
+                "только когда деньги реально пришли на счёт.",
+                parse_mode="HTML", reply_markup=kb,
+            )
+        return
+
+    # 2) Обычная проверка ника по краудсорс-базе жалоб
+    nick = raw
     if len(nick) < 2:
         await message.answer("❌ Слишком короткий ник. Попробуй снова: /antiscam")
         return
