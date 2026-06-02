@@ -722,14 +722,14 @@ async def api_ai(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
-# Дневной лимит AI-чата для free. Pro/Team — безлимит. Защищает от роста цены
-# Gemini на публичном боте (чат — единственная AI-функция без общего кэша).
-FREE_CHAT_DAILY = int(os.getenv("FREE_CHAT_DAILY", "5"))
+# Дневной лимит AI-чата зависит от плана (PLANS[plan]["ai_daily"], -1 = безлимит).
+# Чат — единственная AI-функция без общего кэша, поэтому даже у Pro «честный
+# безлимит» (fair-use), чтобы lifetime-подписка не уходила в минус за годы.
 _chat_counts: dict[int, list] = {}      # uid -> [date_str, count]
 
 
 async def _chat_quota(uid):
-    """(можно, остаток, план). Pro/Team — безлимит; free — FREE_CHAT_DAILY/день."""
+    """(можно, остаток, план). Лимит/день берётся из плана; -1 = безлимит."""
     try:
         uid = int(uid) if uid else 0
     except Exception:
@@ -738,14 +738,15 @@ async def _chat_quota(uid):
     if uid:
         sub  = await db.subscription_get(uid) if db.ok() else None
         plan = get_plan_key(sub)
-    if plan != "free":
-        return True, -1, plan            # безлимит
+    daily = get_limits(plan).get("ai_daily", 5)
+    if daily < 0:
+        return True, -1, plan            # безлимит (Max)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     rec = _chat_counts.get(uid)
     if not rec or rec[0] != today:
         rec = [today, 0]
         _chat_counts[uid] = rec
-    return (FREE_CHAT_DAILY - rec[1]) > 0, max(FREE_CHAT_DAILY - rec[1], 0), plan
+    return (daily - rec[1]) > 0, max(daily - rec[1], 0), plan
 
 
 def _chat_used(uid):
@@ -778,12 +779,14 @@ async def api_chat(request: web.Request) -> web.Response:
 
         allowed, remaining, _plan = await _chat_quota(uid)
         if not allowed:
+            daily = get_limits(_plan).get("ai_daily", 5)
+            upsell = ("Оформи <b>Pro</b> — 50 вопросов в день и все функции бота."
+                      if _plan == "free" else
+                      "Перейди на <b>Max</b> — безлимитный AI-ассистент.")
             return web.json_response({
                 "response": (
-                    f"🔒 Лимит бесплатного AI-чата на сегодня исчерпан "
-                    f"({FREE_CHAT_DAILY} сообщений в день).\n\n"
-                    "Оформи <b>Pro</b> — безлимитный AI-ассистент и все функции бота. "
-                    "Бесплатный лимит обновится завтра."),
+                    f"🔒 Дневной лимит AI-чата исчерпан ({daily} в день).\n\n"
+                    f"{upsell}\nЛимит обновится завтра."),
                 "history": history,
                 "limit_reached": True,
             })

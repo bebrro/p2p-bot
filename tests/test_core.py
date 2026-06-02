@@ -782,39 +782,38 @@ def test_new_tool_endpoints_registered():
     assert "/api/whales/{fiat}" in paths
 
 
-def test_chat_quota_free_vs_pro(monkeypatch):
-    """Free: лимит N/день; Pro: безлимит."""
+def test_chat_quota_by_plan(monkeypatch):
+    """Лимит AI-чата по плану: free=5, Pro=50 (fair-use), Max=безлимит."""
     import asyncio
     from datetime import datetime, timezone, timedelta
     import webapp.server as srv
+    from utils.subscription import PLANS
     srv._chat_counts.clear()
-    monkeypatch.setattr(srv, "FREE_CHAT_DAILY", 3)
-
-    # free (нет подписки)
     monkeypatch.setattr(srv.db, "ok", lambda: True)
+
+    # free → ровно ai_daily (5)
     async def _no_sub(uid): return None
     monkeypatch.setattr(srv.db, "subscription_get", _no_sub)
-
-    async def run_free():
+    async def run(uid, n):
         used = 0
-        for _ in range(5):
-            ok, rem, plan = await srv._chat_quota(111)
+        for _ in range(n):
+            ok, rem, plan = await srv._chat_quota(uid)
             if ok:
-                srv._chat_used(111); used += 1
+                srv._chat_used(uid); used += 1
         return used
-    assert asyncio.run(run_free()) == 3        # ровно лимит
+    assert asyncio.run(run(111, 8)) == PLANS["free"]["ai_daily"]  # 5
 
-    # pro — безлимит
+    # Pro → 50 (НЕ безлимит — защита lifetime)
     async def _pro(uid):
         return {"plan": "pro", "expires_at": datetime.now(timezone.utc) + timedelta(days=5)}
     monkeypatch.setattr(srv.db, "subscription_get", _pro)
-    async def run_pro():
-        for _ in range(10):
-            ok, rem, plan = await srv._chat_quota(222)
-            srv._chat_used(222)
-        ok, rem, plan = await srv._chat_quota(222)
-        return ok, rem
-    ok, rem = asyncio.run(run_pro())
+    assert asyncio.run(run(222, 60)) == PLANS["pro"]["ai_daily"]  # 50
+
+    # Max → безлимит (-1)
+    async def _max(uid):
+        return {"plan": "team", "expires_at": datetime.now(timezone.utc) + timedelta(days=5)}
+    monkeypatch.setattr(srv.db, "subscription_get", _max)
+    ok, rem, plan = asyncio.run(srv._chat_quota(333))
     assert ok is True and rem == -1
 
 
