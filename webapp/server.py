@@ -266,6 +266,10 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
             "confirm3p": a.get("third_party") is True,
             "ex_name":   a.get("ex_name"),
             "ex_icon":   a.get("ex_icon"),
+            # для прямой ссылки на объявление/мерчанта на бирже
+            "exchange":      a.get("exchange"),
+            "ad_no":         a.get("ad_no", ""),
+            "advertiser_no": a.get("advertiser_no", ""),
         }
 
     cross = bool(bb.get("exchange") and bs.get("exchange")

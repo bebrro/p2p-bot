@@ -102,6 +102,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .tri-pct.warn{color:var(--gold)}
 .tri-legs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
 .tri-leg{background:rgba(0,0,0,.18);border-radius:7px;padding:6px 8px}
+.tri-leg-clk{cursor:pointer;transition:background .12s}
+.tri-leg-clk:active{background:rgba(255,255,255,.06)}
 .tri-leg-lbl{font-size:9px;color:var(--hint);text-transform:uppercase;letter-spacing:.3px}
 .tri-leg-price{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
 .tri-leg-nick{font-size:10px;color:var(--hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1270,12 +1272,13 @@ function renderTriangle(t,elId){
   if(!t){ el.style.display='none'; return; }
   el.style.display='block';
   const warn=t.suspicious;
+  __triLegs={buy:t.buy,sell:t.sell,fiat:t.fiat};
   const exTag=l=>l.ex_name?`<div style="font-size:9px;color:var(--hint)">${esc(l.ex_icon||'')} ${esc(l.ex_name)}</div>`:'';
-  const leg=(l,lbl)=>`<div class="tri-leg">
+  const leg=(l,lbl,side)=>`<div class="tri-leg tri-leg-clk" onclick="openTriLeg('${side}')">
       <div class="tri-leg-lbl">${lbl}</div>
       ${exTag(l)}
       <div class="tri-leg-price">${fmt(l.price)}</div>
-      <div class="tri-leg-nick">${esc(l.nickname)}</div>
+      <div class="tri-leg-nick">${esc(l.nickname)} ›</div>
       <span class="tri-leg-3p ok">✅ 3-е лица</span>
     </div>`;
   const banks=(t.banks&&t.banks.length)?`<div class="tri-profit" style="font-size:10px;color:var(--gold)">🏦 Общий банк: ${t.banks.map(esc).join(', ')}</div>`:'';
@@ -1286,8 +1289,8 @@ function renderTriangle(t,elId){
       <span class="tri-pct${warn?' warn':''}">+${t.pct.toFixed(2)}%</span>
     </div>
     <div class="tri-legs">
-      ${leg(t.buy,'📥 Купить USDT')}
-      ${leg(t.sell,'📤 Продать USDT')}
+      ${leg(t.buy,'📥 Купить USDT','buy')}
+      ${leg(t.sell,'📤 Продать USDT','sell')}
     </div>
     ${banks}
     <div class="tri-profit">💵 Чистыми на обороте ${fmtK(t.amount)} ${t.fiat} → <b style="color:var(--green)">+${fmt(t.profit_net!=null?t.profit_net:t.profit)} ${t.fiat}</b>${(t.pct_net!=null)?` <span style="color:var(--hint)">(${t.pct_net>=0?'+':''}${t.pct_net}%)</span>`:''}</div>
@@ -1389,19 +1392,29 @@ function showAd(side,idx){
   document.getElementById('adModalBg').classList.add('show');
 }
 function closeAdModal(){ document.getElementById('adModalBg').classList.remove('show'); }
-function adLink(advNo){
-  const ex=S.exchange,f=S.fiat,a=S.asset;
+function exLink(ex,advNo,f,a){
+  a=a||'USDT';
   if(ex==='binance') return advNo?`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${advNo}`:`https://p2p.binance.com/en/trade/all-payments/${a}?fiat=${f}`;
   if(ex==='bybit')   return advNo?`https://www.bybit.com/en/fiat/trade/otc/profile/${advNo}/${a}/${f}`:`https://www.bybit.com/en/fiat/trade/otc?token=${a}&fiat=${f}`;
-  if(ex==='okx')     return `https://www.okx.com/p2p-markets/${f.toLowerCase()}/buy-${a.toLowerCase()}`;
+  if(ex==='okx')     return `https://www.okx.com/p2p-markets/${(f||'').toLowerCase()}/buy-${a.toLowerCase()}`;
   if(ex==='wallet')  return 'https://t.me/wallet';
   return '';
 }
-function openAdLink(){
-  const url=adLink((__modalAd&&__modalAd.advertiser_no)||''); if(!url) return;
+function adLink(advNo){ return exLink(S.exchange,advNo,S.fiat,S.asset); }
+function openUrl(url){
+  if(!url) return;
   if(url.startsWith('https://t.me')&&tg?.openTelegramLink) return tg.openTelegramLink(url);
   if(tg?.openLink) tg.openLink(url); else window.open(url,'_blank');
 }
+// клик по ноге связки → открыть это объявление/мерчанта на нужной бирже
+let __triLegs=null;
+function openTriLeg(side){
+  if(!__triLegs) return;
+  const l=__triLegs[side]; if(!l) return;
+  const ex=l.exchange||S.exchange;
+  openUrl(exLink(ex, l.advertiser_no||l.ad_no||'', __triLegs.fiat, 'USDT'));
+}
+function openAdLink(){ openUrl(adLink((__modalAd&&__modalAd.advertiser_no)||'')); }
 
 /* ══════════════════════════════════════════════════════════
    CHART
