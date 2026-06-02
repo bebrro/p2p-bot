@@ -1006,6 +1006,15 @@ def test_desc_parser_trap_and_exact_amount():
     assert p("по предварительной заявке")["trap"] is True
     # ложных срабатываний на «заявку» нет
     assert p("заявка на возврат не принимается")["trap"] is False
+    # турецкий: «не принимаю от 3-х лиц» + просят фразу в назначении платежа
+    tr = p('Üçüncü şahıslardan kabul etmiyorum. Ödeme açıklama kısmına "Dijital '
+            'varlık satış ödemesi" yazınız')
+    assert tr["third_party"] is False and tr["trap"] is True
+    assert p("Üçüncü şahıslardan ödeme kabul etmiyorum")["third_party"] is False
+    assert p("I do not accept third party payments")["third_party"] is False
+    assert p("Tidak menerima pihak ketiga")["third_party"] is False
+    # «açıklama yazmayın» (НЕ писать) — не ловушка
+    assert p("Lütfen açıklama yazmayın")["trap"] is False
 
 
 def test_enrich_sets_third_party():

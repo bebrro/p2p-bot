@@ -203,6 +203,42 @@ def _extract_banks(t: str) -> list:
             out.append(name)
     return out
 
+
+def _ml_no_third(low: str) -> bool:
+    """Запрет 3-х лиц на НЕ-русских языках (фолбэк к AI). По со-встречаемости."""
+    # турецкий: «üçüncü şahıs(lardan) ... kabul etmiyorum / kabul edilmez»
+    tr_third = any(k in low for k in (
+        "üçüncü şah", "ucuncu sah", "3.şah", "3 şah", "3.sah", "3 sah",
+        "üçüncü kiş", "ucuncu kis", "3. şah", "3. kiş"))
+    tr_no = any(k in low for k in ("kabul etm", "kabul edilm", "kabul yok"))
+    if tr_third and tr_no:
+        return True
+    # английский: «no third party / not accept third part / third party not accepted»
+    if "third part" in low and any(k in low for k in (
+            "no third", "not accept", "don't accept", "dont accept",
+            "do not accept", "not accepted", "no 3rd", "without third")):
+        return True
+    # индонезийский / вьетнамский
+    if "pihak ketiga" in low and ("tidak" in low or "tdk" in low or "bukan" in low):
+        return True
+    if ("bên thứ ba" in low or "ben thu ba" in low) and ("không" in low or "khong" in low):
+        return True
+    return False
+
+
+def _payment_note_trap(low: str) -> bool:
+    """Просят написать КОНКРЕТНУЮ фразу в назначении/комментарии платежа —
+    это манипуляция для спора/чарджбэка. Мультиязычно."""
+    has_field = any(k in low for k in (
+        "açıklama", "aciklama", "ödeme açıkl", "odeme acikl",          # TR
+        "назначени плат", "в назначени", "комментар", "в описании плат",  # RU
+        "payment description", "payment comment", "payment reference", "payment note"))  # EN
+    has_write = any(k in low for k in (
+        "yazın", "yazınız", "yaziniz", "yazin",                         # TR (пишите)
+        "напиш", "укаж",                                                # RU
+        "write", "indicate", "state ", "put the note"))                # EN
+    return has_field and has_write
+
 # ── Вербовка / скам-схема в описании ─────────────────────────────────────────
 # Мошенники вербуют людей прямо в описании объявления: обещают «лёгкие деньги»
 # и уводят в личку (teleg:/@ник) мимо биржи. Помечаем такие красным флагом.
@@ -273,7 +309,8 @@ def parse_description(text: str) -> dict:
     # ВАЖНО: приоритет у «НЕ принимает». YES-паттерн жадно ловит «принимаю от
     # третьих» даже во фразе «НЕ принимаю от третьих» — поэтому если сработал
     # запрет, считаем что 3-х лиц нет (консервативно, безопасно для фильтра).
-    has_no  = bool(_NO_THIRD.search(t))
+    low_t   = t.lower()
+    has_no  = bool(_NO_THIRD.search(t)) or _ml_no_third(low_t)   # +турецкий/англ./ЮВА
     has_yes = bool(_YES_THIRD.search(t))
 
     if has_no:
@@ -316,8 +353,13 @@ def parse_description(text: str) -> dict:
     if bait:
         flags.insert(0, "📋 цена-приманка: только по заявке")
 
+    # ── Просят написать фразу в назначении платежа (манипуляция для спора) ─────
+    note_trap = _payment_note_trap(low_t)
+    if note_trap:
+        flags.insert(0, "⚠️ просят фразу в назначении платежа")
+
     # ── Ловушка для спора (сильный сигнал) ────────────────────────────────────
-    trap = bool(_TRAP.search(t)) or bait
+    trap = bool(_TRAP.search(t)) or bait or note_trap
     if _TRAP.search(t):
         flags.insert(0, "⚠️ СТРАННЫЕ УСЛОВИЯ — возможна ловушка")
     # Просит чек/квитанцию — мягкий инфо-флаг (не ловушка)
