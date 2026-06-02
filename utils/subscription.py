@@ -46,9 +46,11 @@ PLANS: dict[str, dict] = {
         "emoji":            "⭐",
         "tagline":          "Для трейдера — окупается с одной сделки",
         "price_usdt":       12.99,
-        "price_lifetime":   59.0,
+        "price_lifetime":   79.0,   # базовая цена-анкер; first-touch даёт 59
         "price_stars":      850,    # ≈ +30% к USDT (покрывает комиссию Apple/Google)
-        "price_stars_life": 3800,
+        "price_stars_life": 5100,
+        "ft_lifetime_usdt": 59.0,   # first-touch (первые 48ч после регистрации)
+        "ft_lifetime_stars": 3800,
         "duration_days":    30,
         "repricer_rules":   10,
         "trackers":         20,
@@ -71,8 +73,9 @@ PLANS: dict[str, dict] = {
         "name":             "Max",
         "emoji":            "👑",
         "tagline":          "Для P2P-магазина и мульти-аккаунтов",
+        "no_lifetime":      True,    # Max — только подписка (тяжёлые юзеры → recurring)
         "price_usdt":       24.99,
-        "price_lifetime":   149.0,
+        "price_lifetime":   149.0,   # оставлено для совместимости, в UI не показывается
         "price_stars":      1600,
         "price_stars_life": 9700,
         "duration_days":    30,
@@ -105,10 +108,16 @@ def get_plan_key(user_sub: dict | None) -> str:
     expires_at = _as_aware(user_sub.get("expires_at"))
     if expires_at is None:
         # None = бессрочная (выдана вручную); строка-мусор → _as_aware вернёт None
-        return plan if user_sub.get("expires_at") in (None, "") else "free"
+        return plan if user_sub.get("expires_at") in (None, "") else _fallback(user_sub)
     if expires_at < datetime.now(timezone.utc):
-        return "free"   # истекла
+        return _fallback(user_sub)   # истекла → откат на пожизненный, если есть
     return plan
+
+
+def _fallback(user_sub: dict) -> str:
+    """После истечения подписки — откат на купленный НАВСЕГДА план, иначе free."""
+    lp = (user_sub.get("lifetime_plan") or "").strip().lower()
+    return lp if lp and lp != "free" else "free"
 
 
 def is_pro(user_sub: dict | None) -> bool:
@@ -165,6 +174,10 @@ def format_plan_card(plan_key: str, is_current: bool = False) -> str:
     lines = [f"{p['emoji']} <b>{p['name']}</b> — <i>{p.get('tagline','')}</i>{star}{mark}"]
     if plan_key == "free":
         lines.append("💰 <b>Бесплатно</b>")
+    elif p.get("no_lifetime"):
+        lines.append(f"💰 <b>{p['price_usdt']:.2f} USDT/мес</b>")
+        if p.get("price_stars"):
+            lines.append(f"⭐ можно Telegram Stars — оплата в 1 тап")
     else:
         lines.append(
             f"💰 <b>{p['price_lifetime']:.0f} USDT навсегда</b> 🔥  "

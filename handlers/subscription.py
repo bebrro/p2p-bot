@@ -23,7 +23,34 @@ from aiogram.types import (
 
 import db
 from config import ADMIN_IDS, CRYPTO_WALLET_TRC20, ADMIN_USERNAME
-from utils.subscription import PLANS, get_plan_key, format_plan_card, format_expires
+from utils.subscription import PLANS, get_plan_key, format_plan_card, format_expires, _as_aware
+
+# First-touch: первые N часов после регистрации — Pro навсегда со скидкой ($59 vs $79).
+FIRSTTOUCH_H = 48
+
+
+async def _firsttouch_left_h(uid: int) -> int:
+    """Сколько часов осталось в окне first-touch (0 если истекло/нет данных)."""
+    if not db.ok():
+        return 0
+    fs = _as_aware(await db.user_first_seen(uid))
+    if not fs:
+        return 0
+    left = FIRSTTOUCH_H - (datetime.now(timezone.utc) - fs).total_seconds() / 3600
+    return int(left) if left > 0 else 0
+
+
+async def _eff_amount(uid: int, plan_key: str, lifetime: bool, currency: str):
+    """Эффективная цена с учётом first-touch (только Pro навсегда). currency: usdt|stars."""
+    p = PLANS[plan_key]
+    if currency == "usdt":
+        base = p["price_lifetime"] if lifetime else p["price_usdt"]
+    else:
+        base = p["price_stars_life"] if lifetime else p["price_stars"]
+    if lifetime and plan_key == "pro" and await _firsttouch_left_h(uid) > 0:
+        return p.get("ft_lifetime_usdt", base) if currency == "usdt" \
+            else p.get("ft_lifetime_stars", base)
+    return base
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -139,17 +166,20 @@ def _admin_btn() -> list | None:
     )]
 
 
-def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
+def _sub_kb(current_plan: str, ft_left: int = 0) -> InlineKeyboardMarkup:
     btns = []
+    p = PLANS["pro"]
+    life_usdt = p["ft_lifetime_usdt"] if ft_left > 0 else p["price_lifetime"]
+    life_lbl  = (f"⭐ Pro — {life_usdt:.0f} навсегда🔥"
+                 + (f" ({ft_left}ч)" if ft_left > 0 else ""))
     if current_plan != "pro":
         btns.append([
-            InlineKeyboardButton(text="⭐ Pro — 12.99/мес",     callback_data="sub:pay:pro"),
-            InlineKeyboardButton(text="⭐ Pro — 59 навсегда🔥", callback_data="sub:pay:pro_life"),
+            InlineKeyboardButton(text="⭐ Pro — 12.99/мес",  callback_data="sub:pay:pro"),
+            InlineKeyboardButton(text=life_lbl,              callback_data="sub:pay:pro_life"),
         ])
     if current_plan != "team":
         btns.append([
-            InlineKeyboardButton(text="👑 Max — 24.99/мес",      callback_data="sub:pay:team"),
-            InlineKeyboardButton(text="👑 Max — 149 навсегда🔥",  callback_data="sub:pay:team_life"),
+            InlineKeyboardButton(text="👑 Max — 24.99/мес", callback_data="sub:pay:team"),
         ])
     admin = _admin_btn()
     if admin:
@@ -158,15 +188,26 @@ def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=btns)
 
 
-async def _get_sub_text(uid: int) -> tuple[str, str]:
-    """Возвращает (html_text, plan_key)."""
+async def _get_sub_text(uid: int) -> tuple[str, str, int]:
+    """Возвращает (html_text, plan_key, ft_left_hours)."""
     sub      = await db.subscription_get(uid)
     plan_key = get_plan_key(sub)
     expires  = format_expires(sub) if sub else ""
+    ft_left  = await _firsttouch_left_h(uid)
+
+    ft_banner = ""
+    if ft_left > 0 and plan_key == "free":
+        p = PLANS["pro"]
+        ft_banner = (
+            f"🔥 <b>ТОЛЬКО ДЛЯ ТЕБЯ — первые 48ч</b>\n"
+            f"Pro навсегда за <b>{p['ft_lifetime_usdt']:.0f}$</b> вместо "
+            f"<s>{p['price_lifetime']:.0f}$</s> · осталось <b>{ft_left}ч</b> ⏳\n\n"
+        )
 
     lines = [
         "🚀 <b>P2P Sniper — тарифы</b>",
         "",
+        ft_banner +
         "Один пропущенный кидала или одна связка окупают подписку на месяцы вперёд.",
         "",
         f"Твой план: <b>{PLANS[plan_key]['emoji']} {PLANS[plan_key]['name']}</b>"
@@ -183,9 +224,9 @@ async def _get_sub_text(uid: int) -> tuple[str, str]:
         "",
         "━━━━━━━━━━━━━━━━━",
         "💳 USDT TRC20 (0% комиссии) или ⭐ Telegram Stars (в 1 тап)",
-        "♾ <b>Lifetime</b> = заплатил раз и навсегда. Окупается за ~6 месяцев против помесячной.",
+        "♾ <b>Lifetime</b> = заплатил раз и навсегда. Окупается за ~6 мес против помесячной.",
     ]
-    return "\n".join(lines), plan_key
+    return "\n".join(lines), plan_key, ft_left
 
 
 # ─── /subscribe & sub:list ─────────────────────────────────────────────────────
@@ -194,8 +235,8 @@ async def _get_sub_text(uid: int) -> tuple[str, str]:
 @router.callback_query(lambda c: c.data == "sub:list")
 async def sub_list(event: Message | CallbackQuery):
     uid = event.from_user.id
-    text, plan_key = await _get_sub_text(uid)
-    kb = _sub_kb(plan_key)
+    text, plan_key, ft_left = await _get_sub_text(uid)
+    kb = _sub_kb(plan_key, ft_left)
     if isinstance(event, CallbackQuery):
         await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     else:
@@ -221,8 +262,12 @@ async def sub_pay(callback: CallbackQuery):
         await callback.answer("Ошибка плана", show_alert=True)
         return
 
-    usdt  = plan["price_lifetime"]   if lifetime else plan["price_usdt"]
-    stars = plan["price_stars_life"] if lifetime else plan["price_stars"]
+    uid   = callback.from_user.id
+    # Max — только подписка (на случай старой ссылки на lifetime)
+    if lifetime and plan.get("no_lifetime"):
+        lifetime = False
+    usdt  = await _eff_amount(uid, plan_key, lifetime, "usdt")
+    stars = await _eff_amount(uid, plan_key, lifetime, "stars")
     period = "♾ навсегда" if lifetime else f"📅 {plan['duration_days']} дней"
 
     text = (
@@ -255,7 +300,9 @@ async def sub_pay_usdt(callback: CallbackQuery):
         return
 
     uid    = callback.from_user.id
-    amount = plan["price_lifetime"] if lifetime else plan["price_usdt"]
+    if lifetime and plan.get("no_lifetime"):
+        lifetime = False
+    amount = await _eff_amount(uid, plan_key, lifetime, "usdt")
     wallet = CRYPTO_WALLET_TRC20 or "⚠️ кошелёк не настроен"
 
     # Сохраняем pending-платёж (в БД — переживёт рестарт)
@@ -314,7 +361,9 @@ async def sub_pay_stars(callback: CallbackQuery, bot: Bot):
         await callback.answer("Ошибка плана", show_alert=True)
         return
 
-    stars  = plan["price_stars_life"] if lifetime else plan["price_stars"]
+    if lifetime and plan.get("no_lifetime"):
+        lifetime = False
+    stars  = await _eff_amount(callback.from_user.id, plan_key, lifetime, "stars")
     period = "навсегда" if lifetime else f"на {plan['duration_days']} дней"
     title  = f"{plan['name']} {period}"
     desc   = (

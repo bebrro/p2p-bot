@@ -172,6 +172,10 @@ async def _create_tables() -> None:
         await c.execute(
             "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS pay VARCHAR(30) DEFAULT ''"
         )
+        # План, купленный НАВСЕГДА — для отката после истечения помесячной подписки
+        await c.execute(
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lifetime_plan VARCHAR(20)"
+        )
         # Таблица для дедупликации уведомлений об истечении подписки
         await c.execute("""
         CREATE TABLE IF NOT EXISTS expiry_notifs (
@@ -797,21 +801,46 @@ async def subscription_get(user_id: int) -> dict | None:
         return None
     async with _pool.acquire() as c:
         row = await c.fetchrow(
-            "SELECT plan, expires_at FROM subscriptions WHERE user_id=$1", user_id
+            "SELECT plan, expires_at, lifetime_plan FROM subscriptions WHERE user_id=$1",
+            user_id,
         )
     return dict(row) if row else None
 
 
-async def subscription_set(user_id: int, plan: str, expires_at=None) -> None:
-    """Создаёт или обновляет подписку."""
+async def subscription_set(user_id: int, plan: str, expires_at=None,
+                           lifetime_plan: str | None = None) -> None:
+    """
+    Создаёт/обновляет подписку.
+    lifetime_plan — план, купленный НАВСЕГДА (expires_at=None у платного плана).
+    Если человек купил Pro навсегда, а сверху взял Max помесячно — по истечении
+    Max он откатывается на Pro (lifetime_plan), а НЕ на Free.
+    """
     if not ok():
         return
+    # Покупка навсегда (нет даты, платный план) → это и есть lifetime_plan
+    if expires_at is None and plan != "free" and lifetime_plan is None:
+        lifetime_plan = plan
     async with _pool.acquire() as c:
         await c.execute("""
-            INSERT INTO subscriptions(user_id, plan, expires_at, updated_at)
-            VALUES($1, $2, $3, NOW())
-            ON CONFLICT(user_id) DO UPDATE SET plan=$2, expires_at=$3, updated_at=NOW()
-        """, user_id, plan, expires_at)
+            INSERT INTO subscriptions(user_id, plan, expires_at, lifetime_plan, updated_at)
+            VALUES($1, $2, $3, $4, NOW())
+            ON CONFLICT(user_id) DO UPDATE SET
+                plan=$2, expires_at=$3,
+                lifetime_plan=COALESCE($4, subscriptions.lifetime_plan),
+                updated_at=NOW()
+        """, user_id, plan, expires_at, lifetime_plan)
+
+
+async def user_first_seen(user_id: int):
+    """Когда пользователь впервые зашёл (для first-touch скидки). None если нет."""
+    if not ok():
+        return None
+    try:
+        async with _pool.acquire() as c:
+            return await c.fetchval(
+                "SELECT first_seen FROM users WHERE user_id=$1", user_id)
+    except Exception:
+        return None
 
 
 async def subscription_get_all() -> dict[int, dict]:

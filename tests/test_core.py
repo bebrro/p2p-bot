@@ -107,6 +107,40 @@ def test_pro_plan_active():
     }
     assert get_plan_key(active) == "pro"
 
+def test_lifetime_fallback_after_subscription_expires():
+    """Купил Pro навсегда + взял Max помесячно → после Max откат на Pro, не Free."""
+    from utils.subscription import get_plan_key
+    from datetime import datetime, timezone, timedelta
+    past = datetime.now(timezone.utc) - timedelta(days=1)
+    fut  = datetime.now(timezone.utc) + timedelta(days=5)
+    assert get_plan_key({"plan": "team", "expires_at": past, "lifetime_plan": "pro"}) == "pro"
+    assert get_plan_key({"plan": "team", "expires_at": fut,  "lifetime_plan": "pro"}) == "team"
+    assert get_plan_key({"plan": "pro",  "expires_at": past}) == "free"   # без lifetime
+
+
+def test_max_plan_no_lifetime():
+    """Max — только подписка: в карточке нет 'навсегда'."""
+    from utils.subscription import format_plan_card
+    card = format_plan_card("team")
+    assert "навсегда" not in card and "24.99" in card
+
+
+def test_firsttouch_price(monkeypatch):
+    """First-touch: новичку Pro навсегда за 59, старому — 79."""
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+    import handlers.subscription as sub
+    import db
+    monkeypatch.setattr(db, "ok", lambda: True)
+    async def fresh(uid): return datetime.now(timezone.utc) - timedelta(hours=2)
+    monkeypatch.setattr(db, "user_first_seen", fresh)
+    assert asyncio.run(sub._eff_amount(1, "pro", True, "usdt")) == 59.0
+    async def old(uid): return datetime.now(timezone.utc) - timedelta(days=10)
+    monkeypatch.setattr(db, "user_first_seen", old)
+    assert asyncio.run(sub._eff_amount(1, "pro", True, "usdt")) == 79.0
+    assert asyncio.run(sub._eff_amount(1, "pro", False, "usdt")) == 12.99
+
+
 def test_lifetime_no_expiry():
     """Lifetime подписка: expires_at = None → активна навсегда."""
     lifetime = {"plan": "pro", "expires_at": None}
