@@ -396,7 +396,7 @@ def test_menu_text_free_banner():
     txt = asyncio.run(st.menu_text(123))
     assert "Free" in txt
     assert "Pro" in txt
-    assert "P2P Panel Bot" in txt   # MAIN_TEXT приклеен
+    assert "P2P Sniper" in txt   # MAIN_TEXT приклеен
 
 
 # ─── Реферал в главном меню (task 7) ──────────────────────────────────────────
