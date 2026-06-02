@@ -136,3 +136,84 @@ async def health_cmd(message: Message):
         "<code>DISABLED_EXCHANGES</code> в Railway, чтобы вернуть."
     )
     await wait.edit_text(text, parse_mode="HTML")
+
+
+# ─── /selftest — полная проверка всех подсистем ───────────────────────────────
+
+async def _check_parser() -> str:
+    """Гоняет regex-парсер по эталонным кейсам."""
+    from utils.desc_parser import parse_description as p
+    cases = [
+        ("не принимаю от третьих лиц",            lambda r: r["third_party"] is False),
+        ("3 лица ок",                             lambda r: r["third_party"] is True),
+        ("с любого банка по номеру карты",        lambda r: r["any_bank"] is True),
+        ("Üçüncü şahıslardan kabul etmiyorum",    lambda r: r["third_party"] is False),
+        ("рубим капусту, пиши @x в тг",           lambda r: r["scam_recruit"] is True),
+        ("Ордер строго по заявкам",               lambda r: r["trap"] is True),
+        ("только Т-Банк",                         lambda r: "Tinkoff" in r["banks"]),
+    ]
+    ok = sum(1 for txt, chk in cases if chk(p(txt)))
+    mark = "✅" if ok == len(cases) else "🔴"
+    return f"{mark} Парсер описаний: {ok}/{len(cases)} кейсов"
+
+
+async def _check_ai() -> str:
+    from api import gemini
+    from utils import ai_desc
+    if not ai_desc.enabled():
+        return "⚪ AI-разбор: выключен (нет GEMINI_API_KEY или AI_DESC_PARSE=0)"
+    try:
+        t0 = time.time()
+        ans = await gemini.ask("Ответь одним словом: ок", max_tokens=10)
+        dt = time.time() - t0
+        if ans.startswith("❌") or ans.startswith("⏳"):
+            return f"🔴 AI (Gemini): {ans[:40]}"
+        return f"✅ AI (Gemini): отвечает · {dt:.1f}с"
+    except Exception as e:
+        return f"🔴 AI (Gemini): {type(e).__name__}"
+
+
+async def _check_link() -> str:
+    try:
+        from webapp.server import best_link
+        t0 = time.time()
+        lk = await best_link("RUB", "USDT")
+        dt = time.time() - t0
+        if lk:
+            return f"✅ Связки: считаются · RUB сейчас +{lk['pct']:.2f}% · {dt:.1f}с"
+        return f"✅ Связки: считаются · RUB сейчас нет · {dt:.1f}с"
+    except Exception as e:
+        return f"🔴 Связки: {type(e).__name__}"
+
+
+@router.message(Command("selftest"))
+async def selftest_cmd(message: Message):
+    if not _is_admin(message.from_user.id):
+        return
+    wait = await message.answer("🧪 Полная проверка систем... (~15-20 сек)")
+
+    # биржи
+    ex_results = await asyncio.gather(*[_probe_one(n, fn) for n, fn in _PROBES])
+    # остальное параллельно
+    parser, ai, link = await asyncio.gather(
+        _check_parser(), _check_ai(), _check_link(),
+    )
+
+    from utils import scam_db
+    from api import binance_detail
+    extra = [
+        f"{'✅' if db.ok() else '⚪'} База данных: {'подключена' if db.ok() else 'память (без БД)'}",
+        f"✅ Антискам-ЧС: {scam_db.count():,} кидал Bybit".replace(",", " "),
+        f"{'✅' if binance_detail.enabled() else '⚪'} Binance-условия: "
+        f"{'бёрнер настроен' if binance_detail.enabled() else 'выключено (нет сессии)'}",
+        f"✅ Админов: {len(ADMIN_IDS)}",
+    ]
+
+    text = (
+        "🧪 <b>Селф-тест системы</b>\n\n"
+        "<b>Биржи:</b>\n" + "\n".join(ex_results) + "\n\n"
+        "<b>Логика:</b>\n" + "\n".join([parser, ai, link]) + "\n\n"
+        "<b>Сервисы:</b>\n" + "\n".join(extra) + "\n\n"
+        "<i>✅ ок · 🔴 ошибка · ⚪ выключено/нет данных</i>"
+    )
+    await wait.edit_text(text, parse_mode="HTML")
