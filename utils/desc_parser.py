@@ -161,6 +161,33 @@ _ONLY_BANK = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# Банки, упоминаемые в ОПИСАНИИ (когда в pay_types стоит generic «Bank Transfer»,
+# а реальный банк указан текстом: «только Т-Банк», «строго Каспи»). keyword → имя.
+_DESC_BANK_WORDS = {
+    "т-банк": "Tinkoff", "тбанк": "Tinkoff", "тинькофф": "Tinkoff",
+    "тинёк": "Tinkoff", "тинек": "Tinkoff", "тинк": "Tinkoff", "tinkoff": "Tinkoff", "tbank": "Tinkoff",
+    "сбербанк": "Sber", "сбер": "Sber", "sber": "Sber",
+    "альфа": "Alfa", "alfa": "Alfa", "втб": "VTB", "vtb": "VTB",
+    "райффайзен": "Raiffeisen", "райф": "Raiffeisen", "raiffeisen": "Raiffeisen",
+    "озон": "OzonBank", "ozon": "OzonBank", "сбп": "SBP",
+    "каспи": "Kaspi", "kaspi": "Kaspi", "халык": "Halyk", "halyk": "Halyk", "халик": "Halyk",
+    "freedom": "Freedom", "фридом": "Freedom", "jusan": "Jusan", "жусан": "Jusan",
+    "forte": "Forte", "форте": "Forte", "bcc": "BCC", "центркредит": "BCC", "centercredit": "BCC",
+    "ziraat": "Ziraat", "зираат": "Ziraat", "garanti": "Garanti", "гаранти": "Garanti",
+    "akbank": "Akbank", "papara": "Papara", "папара": "Papara", "enpara": "Enpara",
+    "kuveyt": "KuveytTurk", "vakif": "VakifBank", "yapikredi": "YapiKredi", "yapı": "YapiKredi",
+}
+
+
+def _extract_banks(t: str) -> list:
+    """Какие банки упомянуты в описании (для матчинга связок). Уникальные имена."""
+    low = t.lower()
+    out: list = []
+    for kw, name in _DESC_BANK_WORDS.items():
+        if kw in low and name not in out:
+            out.append(name)
+    return out
+
 # ── Вербовка / скам-схема в описании ─────────────────────────────────────────
 # Мошенники вербуют людей прямо в описании объявления: обещают «лёгкие деньги»
 # и уводят в личку (teleg:/@ник) мимо биржи. Помечаем такие красным флагом.
@@ -217,8 +244,8 @@ def parse_description(text: str) -> dict:
     }
     """
     if not text or not text.strip():
-        return {"third_party": None, "exact_amount": None,
-                "scam_recruit": False, "trap": False, "any_bank": False, "flags": []}
+        return {"third_party": None, "exact_amount": None, "scam_recruit": False,
+                "trap": False, "any_bank": False, "banks": [], "flags": []}
 
     t = text.strip()
     flags: list[str] = []
@@ -294,6 +321,7 @@ def parse_description(text: str) -> dict:
         "scam_recruit": scam_recruit,
         "trap":         trap,
         "any_bank":     any_bank,
+        "banks":        _extract_banks(t),
         "flags":        flags,
     }
 

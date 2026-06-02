@@ -180,14 +180,31 @@ def _norm_bank(name: str) -> str:
     return s2 or s or "?"
 
 
+# Generic-плейсхолдеры метода оплаты — НЕ конкретный банк, для матчинга бесполезны.
+_GENERIC_BANKS = {"transfer", "?", ""}
+
+
+def _bank_names(a: dict) -> list:
+    """Банки объявления для матчинга. Мерчант часто ставит generic «Bank Transfer»,
+    а настоящий банк («только Т-Банк») пишет в описании. Если описание называет
+    конкретные банки — они АВТОРИТЕТНЕЕ, generic-плейсхолдер отбрасываем (иначе
+    «Bank Transfer ↔ Bank Transfer» даёт ложный общий банк при разных реальных)."""
+    pay  = [x for x in (a.get("pay_types") or []) if x]
+    desc = list(a.get("desc_banks") or [])
+    if desc:
+        pay = [x for x in pay if _norm_bank(x) not in _GENERIC_BANKS]
+        return pay + desc
+    return pay
+
+
 def _bank_set(a: dict) -> set:
-    return {_norm_bank(x) for x in (a.get("pay_types") or []) if x}
+    return {_norm_bank(x) for x in _bank_names(a) if x}
 
 
 def _common_bank_labels(a: dict, b: dict) -> list:
     nb = _bank_set(b)
     out, seen = [], set()
-    for x in (a.get("pay_types") or []):
+    for x in _bank_names(a):
         n = _norm_bank(x)
         if x and n in nb and n not in seen:
             seen.add(n)
@@ -366,6 +383,7 @@ def _enrich(ads: list) -> list:
         ad["scam_recruit"] = info.get("scam_recruit", False)
         ad["trap"]         = info.get("trap", False)
         ad["any_bank"]     = info.get("any_bank", False)
+        ad["desc_banks"]   = info.get("banks", [])
         ad["ai_desc"]      = False
     return ads
 
@@ -402,6 +420,8 @@ async def _ai_overlay(ads: list) -> list:
         a["scam_recruit"] = r["scam_recruit"]
         a["trap"]         = r["trap"]
         a["any_bank"]     = r["any_bank"]
+        if r.get("banks"):
+            a["desc_banks"] = r["banks"]      # банки из описания (AI точнее regex)
         a["ai_desc"]      = True
         _apply_third_party_flag(a)
     return ads

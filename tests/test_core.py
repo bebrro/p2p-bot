@@ -642,6 +642,26 @@ def test_triangle_requires_common_bank():
     t = srv._triangle(buy, sell2, "KZT")
     assert t is not None and t["banks"] == ["Kaspi Bank"]
 
+def test_bank_from_description():
+    """Банк из описания («только Т-Банк») участвует в матчинге связки."""
+    from utils.desc_parser import parse_description as p
+    assert "Tinkoff" in p("★Только Т-Банк★ Переводы строго с Т-БАНКА")["banks"]
+    assert p("Sadece Ziraat ve Garanti")["banks"] == ["Ziraat", "Garanti"]
+
+    import webapp.server as srv
+    B = lambda **k: {"price": 74, "third_party": True, "nickname": "A", "min_amount": 1000,
+                     "max_amount": 900000, "available": 5000, **k}
+    S = lambda **k: {"price": 76, "third_party": True, "nickname": "B", "min_amount": 1000,
+                     "max_amount": 900000, "available": 5000, **k}
+    # generic Bank Transfer, но реальный банк (Т-Банк) в описании у обоих → связка есть
+    t = srv._find_link([B(pay_types=["Bank Transfer"], desc_banks=["Tinkoff"])],
+                       [S(pay_types=["Bank Transfer"], desc_banks=["Tinkoff"])], "RUB")
+    assert t is not None and t["banks"] == ["Tinkoff"]
+    # разные банки в описании → generic не должен давать ложный матч
+    assert srv._find_link([B(pay_types=["Bank Transfer"], desc_banks=["Tinkoff"])],
+                          [S(pay_types=["Bank Transfer"], desc_banks=["Sber"])], "RUB") is None
+
+
 def test_any_bank_relaxes_common_bank():
     """Если нога пишет «любой банк» — общий банк не требуется."""
     import webapp.server as srv

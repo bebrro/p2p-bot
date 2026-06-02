@@ -50,11 +50,15 @@ def _key(text: str) -> str:
 def _normalize(d: dict) -> dict:
     tp = str(d.get("third_party", "unknown")).strip().lower()
     third = True if tp in ("yes", "true") else (False if tp == "no" else None)
+    banks = d.get("banks") or []
+    if not isinstance(banks, list):
+        banks = []
     return {
         "third_party":  third,
         "scam_recruit": bool(d.get("scam")),
         "trap":         bool(d.get("trap")),
         "any_bank":     bool(d.get("any_bank")),
+        "banks":        [str(x) for x in banks][:6],
     }
 
 
@@ -109,6 +113,14 @@ _PROMPT = (
     "════════ any_bank ════════\n"
     "true если принимает с ЛЮБОГО банка / любой картой / не важно какой банк. Иначе false.\n\n"
 
+    "════════ banks — какие банки указаны в ОПИСАНИИ ════════\n"
+    "Список банков, которые мерчант называет в тексте («только Т-Банк», «строго "
+    "Каспи», «sadece Ziraat», «only Tinkoff»). Это важно: в способах оплаты часто "
+    "стоит общий «Bank Transfer», а настоящий банк указан словами. Верни массив "
+    "канонических имён: Tinkoff, Sber, Alfa, VTB, Raiffeisen, Kaspi, Halyk, Freedom, "
+    "Jusan, Forte, Ziraat, Garanti, Akbank, Papara, Enpara и т.п. Если банк не "
+    "назван — пустой массив [].\n\n"
+
     "════════ СЛОВАРЬ ════════\n"
     "1л=первое лицо • 3л=третье лицо • дов лицо=доверенное лицо • ЛК=личный кабинет • "
     "СБП=система быстрых платежей • КЗ=Казахстан • Каспи/Halyk/Freedom/Jusan/Forte=банки KZ • "
@@ -135,7 +147,9 @@ _PROMPT = (
     "«Из-за блокировки карт принимаю на доверенное лицо. Не принимаю платежи от 3-х лиц» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
     "«С любого банка КЗ по номеру карты» → {\"third_party\":\"yes\",\"scam\":false,\"trap\":false,\"any_bank\":true}\n"
     "«Оплата только с личных счетов или счетов доверенных лиц» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
-    "«Каспи только, перевод с вашей карты» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
+    "«Каспи только, перевод с вашей карты» → {\"third_party\":\"no\",\"scam\":false,\"trap\":false,\"any_bank\":false,\"banks\":[\"Kaspi\"]}\n"
+    "«★Только Т-Банк★ Переводы строго с Т-БАНКА. Принимаю от 3 лица если есть доступ к ЛК» → {\"third_party\":\"yes\",\"scam\":false,\"trap\":false,\"any_bank\":false,\"banks\":[\"Tinkoff\"]}\n"
+    "«Sadece Ziraat veya Garanti» (TR) → {\"third_party\":\"unknown\",\"scam\":false,\"trap\":false,\"any_bank\":false,\"banks\":[\"Ziraat\",\"Garanti\"]}\n"
     "«Рубим капусту 300%, пиши @bigmoney в тг» → {\"third_party\":\"unknown\",\"scam\":true,\"trap\":false,\"any_bank\":false}\n"
     "«Перед сделкой напишите: со всем согласен» → {\"third_party\":\"unknown\",\"scam\":false,\"trap\":true,\"any_bank\":false}\n"
     "«Оплата картой Каспи» → {\"third_party\":\"unknown\",\"scam\":false,\"trap\":false,\"any_bank\":false}\n"
@@ -148,7 +162,7 @@ _PROMPT = (
     "════════ ФОРМАТ ОТВЕТА ════════\n"
     "Верни СТРОГО JSON-массив РОВНО той же длины и порядка, что список ниже, по одному "
     "объекту на описание, без пояснений:\n"
-    "[{\"third_party\":\"yes|no|unknown\",\"scam\":false,\"trap\":false,\"any_bank\":false}, ...]\n\n"
+    "[{\"third_party\":\"yes|no|unknown\",\"scam\":false,\"trap\":false,\"any_bank\":false,\"banks\":[]}, ...]\n\n"
     "ОПИСАНИЯ:\n"
 )
 
