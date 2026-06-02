@@ -517,8 +517,12 @@ async def api_orderbook(request: web.Request) -> web.Response:
         sell_en = _enrich(sell_ads)
         await _ai_overlay(buy_en + sell_en)     # один батч на обе стороны
 
-        # Связка «без карт» — считаем из всех объявлений (своё условие по 3-м лицам)
-        triangle = _triangle(buy_en, sell_en, fiat)
+        # Связка «без карт» — МЕЖБИРЖЕВАЯ (все 4 биржи), чтобы появлялась в Стакане
+        # для любого фиата и не зависела от выбранной биржи. Кэш 45с — не дёргаем
+        # биржи дважды. Фолбэк на внутрибиржевую, если межбиржевой нет.
+        triangle = await best_link_cached(fiat, asset)
+        if not triangle:
+            triangle = _triangle(buy_en, sell_en, fiat)
 
         buy_ads  = _apply_filters(buy_en)
         sell_ads = _apply_filters(sell_en)
@@ -1401,12 +1405,32 @@ async def best_link(fiat: str, asset: str = "USDT") -> dict | None:
     return _find_link(all_buys, all_sells, fiat)
 
 
+# Короткий кэш связки по (фиат, актив): и Стакан, и Главная берут отсюда —
+# биржи не дёргаются дважды на каждом обновлении. TTL ~45с.
+_LINK_CACHE: dict[tuple, tuple] = {}     # (fiat, asset) -> (ts, link)
+_LINK_TTL = 45.0
+
+
+async def best_link_cached(fiat: str, asset: str = "USDT") -> dict | None:
+    key = (fiat, asset)
+    hit = _LINK_CACHE.get(key)
+    if hit and (_time.time() - hit[0]) < _LINK_TTL:
+        return hit[1]
+    try:
+        link = await best_link(fiat, asset)
+    except Exception as e:
+        logger.warning("best_link_cached %s/%s: %s", fiat, asset, e)
+        return hit[1] if hit else None        # отдадим прошлое, чем ничего
+    _LINK_CACHE[key] = (_time.time(), link)
+    return link
+
+
 async def api_xtriangle(request: web.Request) -> web.Response:
     """GET /api/xtriangle/{fiat}/{asset} — МЕЖБИРЖЕВАЯ связка без карт."""
     fiat  = request.match_info["fiat"]
     asset = request.match_info["asset"]
     try:
-        return web.json_response({"triangle": await best_link(fiat, asset)})
+        return web.json_response({"triangle": await best_link_cached(fiat, asset)})
     except Exception as e:
         logger.error(f"api_xtriangle: {e}")
         return web.json_response({"error": str(e)}, status=500)
