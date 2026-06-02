@@ -938,6 +938,25 @@ def test_norm_bank_aliases():
     assert srv._norm_bank("Tinkoff") == srv._norm_bank("Т-Банк") == "tinkoff"
 
 
+def test_price_bait_flagging():
+    """Нереальные цены (вне ±5% медианы в выгодную сторону) → price_bait."""
+    import webapp.server as srv
+    # продажа: 564.7 слишком дорого при медиане ~521 → приманка, 535/530 — нет
+    sell = [{"price": p} for p in [508, 510, 513, 521, 521, 521, 530, 535, 564.7]]
+    srv._flag_price_baits(sell, "KZT", "USDT", buy_side=False)
+    fb = {a["price"] for a in sell if a.get("price_bait")}
+    assert 564.7 in fb and 535 not in fb and 521 not in fb
+    # покупка: 450 слишком дёшево при медиане ~505 → приманка
+    buy = [{"price": p} for p in [450, 503, 504, 505, 505, 506, 507, 508, 510]]
+    srv._flag_price_baits(buy, "KZT", "USDT", buy_side=True)
+    fbb = {a["price"] for a in buy if a.get("price_bait")}
+    assert 450 in fbb and 503 not in fbb
+    # цена вне разумного диапазона (_USDT_RANGE) → всегда приманка
+    junk = [{"price": 1.0}] + [{"price": p} for p in [503, 504, 505, 505, 506]]
+    srv._flag_price_baits(junk, "KZT", "USDT", buy_side=True)
+    assert any(a["price"] == 1.0 and a.get("price_bait") for a in junk)
+
+
 def test_triangle_none_when_no_spread():
     import webapp.server as srv
     buy  = [{"price": 515, "third_party": True, "nickname": "x", "min_amount": 0, "max_amount": 9e9, "pay_types": []}]

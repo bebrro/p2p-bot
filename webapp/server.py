@@ -33,7 +33,7 @@ from handlers.account_manager import (
 from handlers.auto_reprice import add_rule_memory, remove_rule_memory
 from handlers.pnl import calc_pnl
 from utils.spread import calc_spread
-from utils.pricing import pick_best_price
+from utils.pricing import pick_best_price, sane_price
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
@@ -438,6 +438,36 @@ async def _ai_overlay(ads: list) -> list:
     return ads
 
 
+def _flag_price_baits(ads: list, fiat: str, asset: str, buy_side: bool) -> None:
+    """
+    Помечает price_bait у объявлений с «слишком хорошей» ценой — её на рынке
+    не существует (приманка «продай мне дорого / купи дёшево» + микро-лимит).
+      • покупка (ты покупаешь USDT): цена НИЖЕ ±5%-медианы = приманка
+      • продажа (ты продаёшь USDT): цена ВЫШЕ ±5%-медианы = приманка
+    Цены вне разумного диапазона (_USDT_RANGE) — тоже приманка. Без сноса:
+    только метка, дальше их топит _sink_flagged.
+    """
+    import statistics
+    pr = sorted(a["price"] for a in ads
+                if sane_price(a.get("price", 0), fiat, asset))
+    if len(pr) < 5:
+        # мало данных для медианы — топим только явно невалидные по диапазону
+        for a in ads:
+            if not sane_price(a.get("price", 0), fiat, asset):
+                a["price_bait"] = True
+        return
+    med = statistics.median(pr)
+    lo, hi = med * 0.95, med * 1.05
+    for a in ads:
+        p = a.get("price", 0)
+        if not sane_price(p, fiat, asset):
+            a["price_bait"] = True
+        elif buy_side and p < lo:
+            a["price_bait"] = True          # слишком дёшево купить = фейк
+        elif (not buy_side) and p > hi:
+            a["price_bait"] = True          # слишком дорого продать = фейк
+
+
 def _tradeable_at(ad: dict, amount: float) -> bool:
     """
     True если сумму `amount` (в фиате) реально можно сделать в этом объявлении:
@@ -556,9 +586,16 @@ async def api_orderbook(request: web.Request) -> web.Response:
         buy_ads  = _apply_filters(buy_en)
         sell_ads = _apply_filters(sell_en)
 
-        # Помеченные (скам/ловушка) — вниз списка, чтобы не ломали топ-цену стакана
+        # Ценовые приманки: цена «слишком хорошая» (вне ±5% медианы) — её НЕ
+        # существует, это «продай мне дорого / купи дёшево». Помечаем и топим,
+        # чтобы сверху людям показывались только реальные цены.
+        _flag_price_baits(buy_ads,  fiat, asset, buy_side=True)
+        _flag_price_baits(sell_ads, fiat, asset, buy_side=False)
+
+        # Помеченные (скам/ловушка/ценовая приманка) — вниз списка
         def _sink_flagged(ads):
-            return sorted(ads, key=lambda a: 1 if (a.get("scam_recruit") or a.get("trap")) else 0)
+            return sorted(ads, key=lambda a: 1 if (a.get("scam_recruit") or a.get("trap")
+                                                   or a.get("price_bait")) else 0)
         buy_ads  = _sink_flagged(buy_ads)
         sell_ads = _sink_flagged(sell_ads)
 

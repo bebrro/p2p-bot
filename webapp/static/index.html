@@ -139,6 +139,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .sel-opt:active{opacity:.8}
 .ad-modal-scam{background:rgba(240,71,71,.14);border:1px solid rgba(240,71,71,.4);border-radius:8px;padding:9px 11px;font-size:11.5px;line-height:1.4;color:var(--text);margin-bottom:10px}
 .ad-card.scam{border-left-color:var(--red)!important;background:linear-gradient(90deg,rgba(240,71,71,.10),var(--bg2))}
+.ad-card.bait{border-left-color:var(--gold)!important;background:linear-gradient(90deg,rgba(250,166,26,.12),var(--bg2));opacity:.85}
+.ad-card.bait .ad-price{text-decoration:line-through;text-decoration-color:rgba(250,166,26,.6)}
 .ad-card.scam-hard{border:1.5px solid var(--red)!important;background:rgba(240,71,71,.14);opacity:.7}
 .ad-card.scam-hard .ad-price,.ad-card.scam-hard .ad-nick{text-decoration:line-through;text-decoration-color:rgba(240,71,71,.6)}
 .scam-stamp{display:inline-block;background:var(--red);color:#fff;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:5px;margin-bottom:4px;letter-spacing:.4px;text-transform:uppercase}
@@ -1355,8 +1357,9 @@ function renderAdList(ads,showRisk=true,side='buy'){
     const tp=ad.third_party===true?' 🤝':(ad.third_party===false?' 🚫':'');
     const scam=ad.trap&&!ad.scam_recruit&&!ad.known_scammer?'<span style="color:var(--gold)"> ⚠️</span>':'';
     const stamp=ad.known_scammer?`<div class="scam-stamp">🚨 СКАМ · ЧС BlackListBybit</div>`
-               :ad.scam_recruit?`<div class="scam-stamp">🚨 СКАМ · вербовка/развод</div>`:'';
-    const cls=(ad.known_scammer||ad.scam_recruit)?' scam-hard':(ad.trap?' scam':'');
+               :ad.scam_recruit?`<div class="scam-stamp">🚨 СКАМ · вербовка/развод</div>`
+               :ad.price_bait?`<div class="scam-stamp" style="background:var(--gold);color:#000">⚠️ ЦЕНА-ПРИМАНКА · нереальный курс</div>`:'';
+    const cls=(ad.known_scammer||ad.scam_recruit)?' scam-hard':(ad.price_bait?' bait':(ad.trap?' scam':''));
     return `<div class="ad-card${cls}" style="cursor:pointer" onclick="showAd('${side}',${i})">${stamp}<div class="ad-price">${fmt(ad.price)}${tp}${scam}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.eff_max||ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
   }).join('');
 }
