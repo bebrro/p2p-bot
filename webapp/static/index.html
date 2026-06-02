@@ -1353,9 +1353,10 @@ function renderAdList(ads,showRisk=true,side='buy'){
     const pay=(ad.pay_types||[]).slice(0,2).map(p=>`<span class="pay-pill">${esc(p)}</span>`).join('')||'—';
     const risk=(showRisk&&ad.risk_badge)?`<span class="risk-badge">${esc(ad.risk_badge)}</span>`:'';
     const tp=ad.third_party===true?' 🤝':(ad.third_party===false?' 🚫':'');
-    const scam=ad.scam_recruit?'<span style="color:var(--red)"> 🚩</span>':(ad.trap?'<span style="color:var(--gold)"> ⚠️</span>':'');
-    const stamp=ad.known_scammer?`<div class="scam-stamp">🚨 СКАМ · ЧС BlackListBybit</div>`:'';
-    const cls=ad.known_scammer?' scam-hard':(ad.scam_recruit?' scam':'');
+    const scam=ad.trap&&!ad.scam_recruit&&!ad.known_scammer?'<span style="color:var(--gold)"> ⚠️</span>':'';
+    const stamp=ad.known_scammer?`<div class="scam-stamp">🚨 СКАМ · ЧС BlackListBybit</div>`
+               :ad.scam_recruit?`<div class="scam-stamp">🚨 СКАМ · вербовка/развод</div>`:'';
+    const cls=(ad.known_scammer||ad.scam_recruit)?' scam-hard':(ad.trap?' scam':'');
     return `<div class="ad-card${cls}" style="cursor:pointer" onclick="showAd('${side}',${i})">${stamp}<div class="ad-price">${fmt(ad.price)}${tp}${scam}</div><div class="ad-nick">${esc(ad.nickname||'—')} ›</div><div class="ad-meta">${fmtK(ad.available||0)} · ${fmtK(ad.min_amount||0)}–${fmtK(ad.eff_max||ad.max_amount||0)}<br>${ad.orders||0}сд · ${ad.completion||0}% ${risk}<br>${pay}</div></div>`;
   }).join('');
 }
