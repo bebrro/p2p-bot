@@ -1,5 +1,5 @@
 """
-Монетизация: планы Free / Pro / Team.
+Монетизация: планы Free / Pro / Max.
 Оплата через USDT TRC20 (0% комиссия).
 Автоматическая верификация через TronScan API.
 
@@ -148,8 +148,8 @@ def _sub_kb(current_plan: str) -> InlineKeyboardMarkup:
         ])
     if current_plan != "team":
         btns.append([
-            InlineKeyboardButton(text="👑 Team — 24.99/мес",      callback_data="sub:pay:team"),
-            InlineKeyboardButton(text="👑 Team — 149 навсегда🔥",  callback_data="sub:pay:team_life"),
+            InlineKeyboardButton(text="👑 Max — 24.99/мес",      callback_data="sub:pay:team"),
+            InlineKeyboardButton(text="👑 Max — 149 навсегда🔥",  callback_data="sub:pay:team_life"),
         ])
     admin = _admin_btn()
     if admin:

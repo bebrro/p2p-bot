@@ -841,7 +841,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <span id="subPlanBadge" class="sub-plan-badge free">—</span>
       </div>
     </div>
-    <!-- P&L Stats (видны только Pro/Team) -->
+    <!-- P&L Stats (видны только Pro/Max) -->
     <div id="subPnlSection" style="display:none;margin-top:8px">
       <div class="settings-section-title" style="margin-bottom:6px">📊 P&L (последние 20 сделок)</div>
       <div class="pnl-grid">
@@ -858,10 +858,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <!-- Заглушка для Free -->
     <div id="subLockedHint" class="pnl-locked" style="display:none">
       <span class="star-icon">⭐</span>
-      P&L трекер, расширенные лимиты и Smart Арбитраж доступны в Pro / Team.
+      P&L трекер, расширенные лимиты и Smart Арбитраж доступны в Pro / Max.
     </div>
     <button class="sub-upgrade-btn" id="subUpgradeBtn" onclick="openSubscribeInBot()" style="display:none">
-      💳 Подписка Pro/Team — оплата USDT
+      💳 Подписка Pro/Max — оплата USDT
     </button>
   </div>
   <div class="settings-section">
@@ -2273,7 +2273,7 @@ async function loadDashPlan(uid){
   try{
     const r=await fetch(`/api/user/subscription?uid=${uid}`);
     const data=await r.json(); if(data.error)return;
-    const names={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Team'};
+    const names={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Max'};
     const badge=document.getElementById('dashPlanBadge');
     badge.textContent=names[data.plan]||data.plan;
     badge.className='sub-plan-badge '+(data.plan||'free');
@@ -2297,7 +2297,7 @@ async function loadSubscription(){
     const upgradeBtn=document.getElementById('subUpgradeBtn');
     if(!badge)return;
 
-    const planNames={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Team'};
+    const planNames={free:'🆓 Free',pro:'⭐ Pro',team:'👑 Max'};
     badge.textContent=planNames[data.plan]||data.plan;
     badge.className='sub-plan-badge '+(data.plan||'free');
 

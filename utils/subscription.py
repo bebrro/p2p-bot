@@ -1,6 +1,6 @@
 """
 Планы подписки, лимиты и вспомогательные утилиты.
-Free → Pro → Team.
+Free → Pro → Max.
 """
 from datetime import datetime, timezone
 from typing import Literal
@@ -68,7 +68,7 @@ PLANS: dict[str, dict] = {
         ],
     },
     "team": {
-        "name":             "Team",
+        "name":             "Max",
         "emoji":            "👑",
         "tagline":          "Для P2P-магазина и мульти-аккаунтов",
         "price_usdt":       24.99,
