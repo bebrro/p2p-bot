@@ -1307,13 +1307,15 @@ function renderTriangle(t,elId){
   const warn=t.suspicious;
   __triLegs={buy:t.buy,sell:t.sell,fiat:t.fiat};
   const exTag=l=>l.ex_name?`<div style="font-size:9px;color:var(--hint)">${esc(l.ex_icon||'')} ${esc(l.ex_name)}</div>`:'';
+  const tp3=l=>l.unknown3p?'<span class="tri-leg-3p maybe">❓ 3 лица: уточни</span>':'<span class="tri-leg-3p ok">✅ 3-е лица</span>';
   const leg=(l,lbl,side)=>`<div class="tri-leg tri-leg-clk" onclick="openTriLeg('${side}')">
       <div class="tri-leg-lbl">${lbl}</div>
       ${exTag(l)}
       <div class="tri-leg-price">${fmt(l.price)}</div>
       <div class="tri-leg-nick">${esc(l.nickname)} ›</div>
-      <span class="tri-leg-3p ok">✅ 3-е лица</span>
+      ${tp3(l)}
     </div>`;
+  const needCheck=(t.buy&&t.buy.unknown3p)||(t.sell&&t.sell.unknown3p);
   const banks=(t.banks&&t.banks.length)?`<div class="tri-profit" style="font-size:10px;color:var(--gold)">🏦 Общий банк: ${t.banks.map(esc).join(', ')}</div>`:'';
   const title=t.cross?'🔺 Связка без карт · МЕЖБИРЖА':'🔺 Связка без карт';
   el.innerHTML=`
@@ -1329,6 +1331,7 @@ function renderTriangle(t,elId){
     <div class="tri-profit">💵 Чистыми на обороте ${fmtK(t.amount)} ${t.fiat} → <b style="color:var(--green)">+${fmt(t.profit_net!=null?t.profit_net:t.profit)} ${t.fiat}</b>${(t.pct_net!=null)?` <span style="color:var(--hint)">(${t.pct_net>=0?'+':''}${t.pct_net}%)</span>`:''}</div>
     <div class="tri-profit" style="font-size:10px;color:var(--hint)">Грязными +${fmt(t.profit)} · издержки −${fmt(t.fee_fiat||0)} ${t.fiat}${t.cross?` (перевод ${t.fee_usdt} USDT)`:''}</div>
     <div class="tri-profit" style="font-size:10px;color:var(--hint)">✅ Исполнимый объём: ${fmtK(t.lo)}${t.hi?'–'+fmtK(t.hi):'+'} ${t.fiat}</div>
+    ${needCheck?'<div class="tri-warn" style="color:var(--gold)">❓ 3 лица не указаны — спроси у мерчанта «принимаешь с другого счёта?» перед сделкой</div>':''}
     ${warn?'<div class="tri-warn">⚠️ проверь ликвидность — возможны приманки</div>':''}
   `;
 }

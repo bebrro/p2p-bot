@@ -123,6 +123,10 @@ P2P_FEE_PCT      = float(os.getenv("P2P_FEE_PCT", "0.0"))
 # Минимальная ЧИСТАЯ доходность связки, ниже которой её не показываем —
 # +0.02% это шум/убыток после комиссий, не возможность.
 MIN_LINK_PCT     = float(os.getenv("MIN_LINK_PCT", "0.6"))
+# Строгий режим связок: True = только мерчанты с ЯВНЫМ «3 лица ок».
+# False (деф) = включаем и неуказанных (помечаем «❓ уточни»), т.к. многие
+# мерчанты, которые треуголят, ничего про 3 лица не пишут.
+LINK_STRICT_3P   = os.getenv("LINK_STRICT_3P", "0").strip().lower() in ("1", "true", "yes")
 
 
 # Референсный оборот по фиатам (≈ $1000) — для демо «сколько бы заработал».
@@ -229,9 +233,18 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
       • есть ОБЩИЙ банк (иначе платёж контрагент→контрагенту не провести)
     """
     def ok(a):
-        if a.get("third_party") is not True:
+        tp = a.get("third_party")
+        if tp is False:                      # явный запрет 3-х лиц — исключаем
             return False
-        if a.get("scam_recruit") or a.get("trap"):
+        if tp is not True:                   # None / не указано
+            if LINK_STRICT_3P:
+                return False                 # строгий режим: только подтверждённые
+            # мягкий режим: включаем «неизвестных» ТОЛЬКО если есть хоть какое-то
+            # описание (они что-то написали). Пустое описание (напр. Binance —
+            # условия скрыты) слишком неизвестно → мимо.
+            if not (a.get("description") or "").strip():
+                return False
+        if a.get("scam_recruit") or a.get("trap") or a.get("price_bait"):
             return False
         return (a.get("price") or 0) > 0
 
@@ -287,6 +300,7 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
             "max":       a.get("eff_max") or a.get("max_amount", 0),
             "pay":       (a.get("pay_types") or [])[:3],
             "confirm3p": a.get("third_party") is True,
+            "unknown3p": a.get("third_party") is None,   # не указано → «уточни»
             "ex_name":   a.get("ex_name"),
             "ex_icon":   a.get("ex_icon"),
             # для прямой ссылки на объявление/мерчанта на бирже

@@ -595,26 +595,35 @@ def test_earn_demo_none_when_no_arb():
 
 # ─── Связка «без карт» (треугольник посредника) ───────────────────────────────
 
-def test_triangle_requires_explicit_third_party():
-    """Связка берёт только ЯВНО подтвердивших 3-х лиц (None/False — мимо)."""
+def test_triangle_excludes_explicit_no_third_party():
+    """Явный запрет 3-х лиц (False) исключается; None (не указано) — включается
+    с пометкой unknown3p; True — подтверждён."""
     import webapp.server as srv
     buy = [
-        {"price": 500, "third_party": False, "nickname": "no3p", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
-        {"price": 503, "third_party": None,  "nickname": "unk",  "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
-        {"price": 505, "third_party": True,  "nickname": "ok3p", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
+        {"price": 500, "third_party": False, "nickname": "no3p", "description": "IBAN", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
+        {"price": 503, "third_party": None,  "nickname": "unk",  "description": "IBAN", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
     sell = [
-        {"price": 515, "third_party": None, "nickname": "may", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
+        {"price": 515, "third_party": True,  "nickname": "yes", "description": "3 лица ок", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]},
     ]
-    # все sell-ноги «не указано» → связки нет (None недостаточно)
-    assert srv._triangle(buy, sell, "KZT") is None
-    # добавим явно подтверждённую sell-ногу → связка появляется
-    sell.append({"price": 514, "third_party": True, "nickname": "yes3p",
-                 "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]})
     t = srv._triangle(buy, sell, "KZT")
     assert t is not None
-    assert t["buy"]["price"] == 505 and t["buy"]["confirm3p"] is True   # только ok3p
-    assert t["sell"]["price"] == 514 and t["sell"]["confirm3p"] is True # только yes3p
+    # buy-нога — НЕ запрещённый no3p (он False), а unk (None) с пометкой «уточни»
+    assert t["buy"]["price"] == 503
+    assert t["buy"]["unknown3p"] is True and t["buy"]["confirm3p"] is False
+    assert t["sell"]["confirm3p"] is True
+    # объявление БЕЗ описания (напр. Binance) с None — в связку НЕ берём
+    buy2 = [{"price": 503, "third_party": None, "nickname": "nodesc", "description": "", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]}]
+    assert srv._triangle(buy2, sell, "KZT") is None
+
+
+def test_triangle_strict_mode_requires_explicit(monkeypatch):
+    """В строгом режиме (LINK_STRICT_3P) None не проходит — только явное True."""
+    import webapp.server as srv
+    monkeypatch.setattr(srv, "LINK_STRICT_3P", True)
+    buy  = [{"price": 503, "third_party": None, "nickname": "unk", "description": "IBAN", "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]}]
+    sell = [{"price": 515, "third_party": True, "nickname": "yes", "description": "ok",   "min_amount": 0, "max_amount": 9e9, "pay_types": ["Kaspi"]}]
+    assert srv._triangle(buy, sell, "KZT") is None   # buy «не указано» → мимо в строгом
 
 def test_triangle_excludes_scammers():
     """Помеченные скамеры/ловушки не предлагаются в связке, даже с лучшей ценой."""
