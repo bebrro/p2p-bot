@@ -459,6 +459,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .dash-tool-cnt{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-bottom:2px}
 .dash-tool-lbl{font-size:9px;color:var(--hint);text-transform:uppercase;letter-spacing:.3px}
 .dash-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.dash-tools-cta{background:var(--bg2);border:1px dashed rgba(255,255,255,.14);border-radius:10px;padding:12px;text-align:center;font-size:12.5px;cursor:pointer;line-height:1.5}
+.dash-tools-cta:active{background:rgba(255,255,255,.05)}
 .dash-act{padding:10px 8px;background:var(--bg2);color:var(--text);border:none;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:4px;transition:background .12s;text-align:center;line-height:1.35}
 .dash-act:active{background:rgba(255,255,255,.08)}
 .dash-act.cta{background:var(--btn);color:var(--btnt);grid-column:1/-1;font-size:13px;padding:11px 8px}
@@ -588,10 +590,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div style="grid-column:1/-1;text-align:center;padding:18px;color:var(--hint);font-size:12px">⏳ Загрузка...</div>
   </div>
 
+  <!-- Главный CTA: поиск арбитража (всё остальное — в нижнем нав-баре) -->
+  <button class="dash-act cta" style="width:100%;margin-bottom:9px" onclick="switchTab('spread',navBtn('spread'))">🔍 Найти лучший арбитраж</button>
+
   <!-- Tools summary (shown when uid available) -->
   <div id="dashToolsSec" style="display:none">
     <div class="dash-sec">🛠 Ваши инструменты</div>
-    <div class="dash-tools-grid">
+    <div class="dash-tools-grid" id="dashToolsGrid">
       <div class="dash-tool" onclick="gotoMonitor('alerts')">
         <div class="dash-tool-cnt" id="dashAlertsCnt">0</div>
         <div class="dash-tool-lbl">🔔 Алерты</div>
@@ -605,17 +610,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div class="dash-tool-lbl">🔄 Авто-цена</div>
       </div>
     </div>
-  </div>
-
-  <!-- Quick actions -->
-  <div class="dash-sec" style="margin-top:14px">⚡ Действия</div>
-  <div class="dash-actions">
-    <button class="dash-act cta" onclick="switchTab('spread',navBtn('spread'))">🔍 Найти лучший арбитраж</button>
-    <button class="dash-act" onclick="switchTab('book',navBtn('book'))">📊 Стакан</button>
-    <button class="dash-act" onclick="switchTab('maker',navBtn('maker'))">🎯 Мейкер</button>
-    <button class="dash-act" onclick="switchTab('monitor',navBtn('monitor'))">🔔 Монитор</button>
-    <button class="dash-act" onclick="switchTab('ai',navBtn('ai'))">🤖 AI Советник</button>
-    <button class="dash-act" onclick="switchTab('settings',navBtn('settings'))">⭐ Подписка</button>
+    <div class="dash-tools-cta" id="dashToolsCta" style="display:none" onclick="gotoMonitor('alerts')">
+      ⚙️ <b>Настрой первый алерт</b><br>
+      <span style="color:var(--hint);font-size:11px">Бот разбудит тебя, когда курс станет выгодным</span>
+    </div>
   </div>
 </div>
 
@@ -2198,12 +2196,16 @@ async function loadDashboard(){
     fetch(`/api/xtriangle/${dashFiat}/${dashAsset}`).then(r=>r.json())
       .then(x=>renderTriangle(x.triangle||null,'xtriBanner')).catch(()=>{});
 
-    // Tools
+    // Tools: при наличии настроек — счётчики, если пусто — мотивирующий призыв
     if(data.tools&&uid){
       document.getElementById('dashToolsSec').style.display='block';
-      document.getElementById('dashAlertsCnt').textContent=data.tools.alerts||0;
-      document.getElementById('dashTrackersCnt').textContent=data.tools.trackers||0;
-      document.getElementById('dashRepricerCnt').textContent=data.tools.repricer||0;
+      const al=data.tools.alerts||0, tr=data.tools.trackers||0, rp=data.tools.repricer||0;
+      const empty=(al+tr+rp)===0;
+      document.getElementById('dashToolsGrid').style.display=empty?'none':'';
+      document.getElementById('dashToolsCta').style.display=empty?'block':'none';
+      document.getElementById('dashAlertsCnt').textContent=al;
+      document.getElementById('dashTrackersCnt').textContent=tr;
+      document.getElementById('dashRepricerCnt').textContent=rp;
     }
 
     // Plan badge (async, non-blocking)
