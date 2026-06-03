@@ -637,8 +637,11 @@ async def api_orderbook(request: web.Request) -> web.Response:
         if best_buy and best_sell:
             spread = calc_spread(best_buy, best_sell)
 
+        # Отдаём топ-15 (а не 10): связка «без карт» строится из 15 объяв,
+        # и её нога должна гарантированно попасть в список стакана — чтобы тап
+        # по ноге доскролливал к объявлению, а не отправлял на биржу.
         return web.json_response({
-            "buy": buy_ads[:10], "sell": sell_ads[:10],
+            "buy": buy_ads[:15], "sell": sell_ads[:15],
             "spread": spread, "triangle": triangle,
             "best_buy": best_buy, "best_sell": best_sell,
         })

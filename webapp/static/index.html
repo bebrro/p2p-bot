@@ -162,6 +162,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ad-card.bait{border-left-color:var(--gold)!important;background:linear-gradient(90deg,rgba(250,166,26,.12),var(--bg2));opacity:.85}
 @keyframes hlPulse{0%{box-shadow:0 0 0 0 rgba(124,77,255,.55)}70%{box-shadow:0 0 0 8px rgba(124,77,255,0)}100%{box-shadow:0 0 0 0 rgba(124,77,255,0)}}
 .ad-card.hl-pulse{animation:hlPulse 1.1s ease-out 2;outline:2px solid var(--btn);outline-offset:1px}
+.mini-toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(12px);background:rgba(20,22,30,.96);color:#fff;font-size:12px;padding:9px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.4);z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:86%;text-align:center}
+.mini-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .ad-card.bait .ad-price{text-decoration:line-through;text-decoration-color:rgba(250,166,26,.6)}
 .ad-card.scam-hard{border:1.5px solid var(--red)!important;background:rgba(240,71,71,.14);opacity:.7}
 .ad-card.scam-hard .ad-price,.ad-card.scam-hard .ad-nick{text-decoration:line-through;text-decoration-color:rgba(240,71,71,.6)}
@@ -1404,8 +1406,7 @@ function openTriLeg(side){
   const ex=l.exchange||S.exchange;
   // настраиваем стакан на биржу/валюту ноги и просим подсветить это объявление
   S.exchange=ex; S.fiat=__triLegs.fiat||S.fiat; S.asset='USDT'; S.pay='';
-  __pendingHi={nick:(l.nickname||''), ad_no:(l.ad_no||''),
-               ex:ex, link:exLink(ex,l.advertiser_no||l.ad_no||'',__triLegs.fiat,'USDT')};
+  __pendingHi={nick:(l.nickname||''), ad_no:(l.ad_no||''), price:(l.price||0), ex:ex};
   try{ updateHeaderPair(); }catch{}
   try{ updateSelLabels(); }catch{}
   switchTab('book', navBtn('book'));   // загрузит стакан → подсветка в renderOrderbook
@@ -1415,25 +1416,40 @@ function _applyPendingHighlight(){
   if(!__pendingHi) return;
   const want=__pendingHi; __pendingHi=null;
   const nl=(want.nick||'').trim().toLowerCase();
-  let found=null;
+  const wp=want.price||0;
+  let found=null, byPrice=null, bestDp=Infinity;
   for(const side of ['buy','sell']){
     const arr=__book[side]||[];
     for(let i=0;i<arr.length;i++){
       const a=arr[i];
+      // 1) точный матч по номеру объявления или нику
       if((want.ad_no && a.ad_no===want.ad_no) ||
          (nl && (a.nickname||'').trim().toLowerCase()===nl)){
         found={side,i}; break;
       }
+      // 2) запоминаем ближайшее по цене (запасной матч)
+      if(wp && a.price){ const dp=Math.abs(a.price-wp); if(dp<bestDp){bestDp=dp; byPrice={side,i};} }
     }
     if(found) break;
   }
+  // если точного нет — берём ближайшее по цене (в пределах 0.5%)
+  if(!found && byPrice && wp && bestDp/wp<=0.005) found=byPrice;
   if(found){
     const el=document.getElementById(`ad-${found.side}-${found.i}`);
     if(el){ el.scrollIntoView({behavior:'smooth',block:'center'});
+            try{ tg?.HapticFeedback?.impactOccurred?.('light'); }catch{}
             el.classList.add('hl-pulse'); setTimeout(()=>el.classList.remove('hl-pulse'),2200); return; }
   }
-  // Не нашли в топе стакана (объявление ниже видимых) → открываем на бирже
-  openUrl(want.link);
+  // НЕ нашли в стакане — НЕ перекидываем на биржу (это бесило). Подсказываем.
+  toast(`Объявление ${want.nick||'мерчанта'} — ниже топа стакана`);
+}
+// Лёгкий самоудаляющийся тост (без модалок)
+let __toastT=null;
+function toast(msg){
+  let t=document.getElementById('miniToast');
+  if(!t){ t=document.createElement('div'); t.id='miniToast'; t.className='mini-toast'; document.body.appendChild(t); }
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(__toastT); __toastT=setTimeout(()=>t.classList.remove('show'),2600);
 }
 function openAdLink(){ openUrl(adLink((__modalAd&&__modalAd.advertiser_no)||'')); }
 // Открыть инструкции в чате бота (deep-link /start help)
