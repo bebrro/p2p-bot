@@ -708,17 +708,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ════════════════════ TAB: СПРЕД ══════════════════════════ -->
 <div class="tab-panel hidden" id="tab-spread">
-  <div class="tab-pickers" id="cmpFiatRow">
-    <button class="pill active" data-val="KZT">🇰🇿 KZT</button>
-    <button class="pill"        data-val="RUB">🇷🇺 RUB</button>
-    <button class="pill"        data-val="TRY">🇹🇷 TRY</button>
-    <button class="pill"        data-val="USD">🇺🇸 USD</button>
-  </div>
-  <div class="tab-pickers" id="cmpAssetRow">
-    <button class="pill active" data-val="USDT">USDT</button>
-    <button class="pill"        data-val="BTC">BTC</button>
-    <button class="pill"        data-val="ETH">ETH</button>
-  </div>
+  <!-- Валюта/крипта берутся из общих селекторов сверху (без дублей) -->
   <div id="cmpContent"><div class="spinner"></div></div>
 </div>
 
@@ -1065,8 +1055,6 @@ function applyStateToUI(){
   if(typeof updateSelLabels==='function') updateSelLabels();
 }
 wireGroup('exRow','exchange',onMainStateChange);
-wireLocalGroup('cmpFiatRow',CM,'fiat',loadCompare);
-wireLocalGroup('cmpAssetRow',CM,'asset',loadCompare);
 
 function onMainStateChange(){
   S.pay=''; MK.pay=''; __payMethods=[];
@@ -1076,6 +1064,7 @@ function onMainStateChange(){
   restartBookTimer();
   if(S.tab==='chart') loadChart();
   if(S.tab==='maker') loadMakerSpread();
+  if(S.tab==='spread') loadCompare();
   if(S.tab==='monitor'&&currentSub==='pairs') loadMulti();
   resetChat();
 }
@@ -1176,10 +1165,12 @@ function switchTab(tab,btn){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active'); S.tab=tab;
   try{ localStorage.setItem('lastTab', tab); }catch{}   // запомнить вкладку
-  // Home tab: hide header selectors and spread bar
+  // Селекторы сверху: скрыты на Главной; биржевые пиллы скрыты ещё и на Спреде
+  // (он сравнивает ВСЕ биржи — выбирать одну незачем). Валюта/крипта остаются.
   const isHome=tab==='home';
-  ['exRow','selRow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden',isHome); });
-  const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=isHome?'none':'';
+  const exEl=document.getElementById('exRow'); if(exEl) exEl.classList.toggle('hidden', isHome||tab==='spread');
+  const selEl=document.getElementById('selRow'); if(selEl) selEl.classList.toggle('hidden', isHome);
+  const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=(isHome||tab==='spread')?'none':'';
   const mpr=document.getElementById('makerPayRow'); if(mpr) mpr.classList.toggle('hidden',tab!=='maker');
   if(tab==='home')     loadDashboard();
   if(tab==='maker')    loadMakerSpread();
@@ -1522,7 +1513,7 @@ function renderChart(points){
 ══════════════════════════════════════════════════════════ */
 async function loadCompare(){
   const box=document.getElementById('cmpContent'); box.innerHTML='<div class="spinner"></div>';
-  try{ const r=await fetch(`/api/spread_compare/${CM.fiat}/${CM.asset}`); const data=await r.json(); if(data.error)throw new Error(data.error); renderCompare(data); }
+  try{ const r=await fetch(`/api/spread_compare/${S.fiat}/${S.asset}`); const data=await r.json(); if(data.error)throw new Error(data.error); renderCompare(data); }
   catch(e){ box.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
 }
 function renderCompare({exchanges,arbitrage}){
@@ -1533,7 +1524,7 @@ function renderCompare({exchanges,arbitrage}){
     html+=`<div class="compare-row${isBest?' best-row':''}"><span class="compare-ex">${esc(ex.icon)} ${esc(ex.name)}</span><span class="compare-price compare-buy">${ex.buy?fmt(ex.buy):'—'}</span><span class="compare-price compare-sell">${ex.sell?fmt(ex.sell):'—'}</span><span class="compare-spread">${ex.spread_pct!=null?`<span class="spread-badge${isBest?' best':ex.spread_pct>=0.3?' good':''}">${ex.spread_pct}%</span>`:'—'}</span></div>`;
   });
   html+='</div>';
-  if(arbitrage?.length){ html+=`<div class="section-title">⚡ Арбитраж</div>`; arbitrage.forEach(a=>{html+=`<div class="arb-card"><div><div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div><div class="arb-abs">${fmt(a.abs)} ${CM.fiat}</div></div><div class="arb-pct">+${a.pct}%</div></div>`;}); }
+  if(arbitrage?.length){ html+=`<div class="section-title">⚡ Арбитраж</div>`; arbitrage.forEach(a=>{html+=`<div class="arb-card"><div><div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div><div class="arb-abs">${fmt(a.abs)} ${S.fiat}</div></div><div class="arb-pct">+${a.pct}%</div></div>`;}); }
   else html+=`<div class="empty-hint">⚡ Арбитражных возможностей нет</div>`;
   document.getElementById('cmpContent').innerHTML=html;
 }
