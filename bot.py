@@ -203,23 +203,28 @@ async def main():
     dp.message.middleware(_rl)
     dp.callback_query.middleware(RateLimitMiddleware(rate=20, period=3.0))
 
-    # ── Команды в меню «/» — чистый набор, только нужное пользователю ──────
-    await bot.set_my_commands([
-        BotCommand(command="menu",      description="📊 Открыть P2P Sniper"),
-        BotCommand(command="antiscam",  description="🛡 Проверить контрагента и чек на скам"),
-        BotCommand(command="alerts",    description="🔔 Алерты на курс и арбитраж"),
-        BotCommand(command="pnl",       description="📈 Моя статистика P&L"),
-        BotCommand(command="help",      description="❓ Инструкции (API-ключи и др.)"),
-        BotCommand(command="subscribe", description="⭐ Подписка Pro"),
-        BotCommand(command="ref",       description="🎁 Пригласить друга"),
-    ])
-    # Кнопка меню рядом с полем ввода: открывает САМ мини-апп (а не список команд).
-    if WEBAPP_URL:
-        await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="📊 P2P Sniper",
-                                         web_app=WebAppInfo(url=WEBAPP_URL)))
-    else:
-        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    # ── Команды в меню «/» + кнопка меню — НЕ критично для запуска ──────────
+    # Сетевая икота Telegram тут не должна ронять весь старт бота, поэтому
+    # оборачиваем: при таймауте просто логируем и продолжаем (обновятся позже).
+    try:
+        await bot.set_my_commands([
+            BotCommand(command="menu",      description="📊 Открыть P2P Sniper"),
+            BotCommand(command="antiscam",  description="🛡 Проверить контрагента и чек на скам"),
+            BotCommand(command="alerts",    description="🔔 Алерты на курс и арбитраж"),
+            BotCommand(command="pnl",       description="📈 Моя статистика P&L"),
+            BotCommand(command="help",      description="❓ Инструкции (API-ключи и др.)"),
+            BotCommand(command="subscribe", description="⭐ Подписка Pro"),
+            BotCommand(command="ref",       description="🎁 Пригласить друга"),
+        ])
+        # Кнопка меню рядом с полем ввода: открывает САМ мини-апп.
+        if WEBAPP_URL:
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(text="📊 P2P Sniper",
+                                             web_app=WebAppInfo(url=WEBAPP_URL)))
+        else:
+            await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    except Exception as e:
+        logger.warning(f"set_my_commands/menu_button пропущены (не критично): {e}")
 
     for r in [
         admin.router, channel.router, antiscam.router,  # админ + антискам
