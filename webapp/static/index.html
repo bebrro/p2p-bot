@@ -1934,6 +1934,10 @@ function renderAutoPanel(accounts, rules, uid, box){
       <button class="pill ${RP.accEx==='bybit'?'active':''}" onclick="rpSetAccEx('bybit',this)">🟠 Bybit</button>
       <button class="pill ${RP.accEx==='okx'?'active':''}"   onclick="rpSetAccEx('okx',this)">🔵 OKX</button>
     </div>
+    <div style="font-size:10px;color:var(--hint);margin-top:4px;line-height:1.35">
+      Только Bybit и OKX дают API для управления своими объявлениями (загрузка + авто-перецена).
+      У Binance P2P такого API нет (есть только история сделок для P&amp;L), у TG Wallet — тоже.
+    </div>
   </div>
   <div class="rp-form-grid">
     <div class="rp-form-field rp-full">
