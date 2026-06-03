@@ -54,15 +54,21 @@ _MEDIAN_BAND = 0.05
 
 
 def pick_best_price(ads: list[dict], *, buy_side: bool,
-                    fiat: str, asset: str = "USDT") -> Optional[float]:
+                    fiat: str, asset: str = "USDT",
+                    ref: Optional[float] = None) -> Optional[float]:
     """
     Возвращает лучшую РЕАЛИСТИЧНУЮ цену из стакана.
 
     Защита от двух проблем:
       1. Битая сортировка биржи — считаем сами (не верим ads[0]).
       2. Объявления-приманки на хвостах — оставляем только цены в пределах
-         ±5% от медианы («реальный рынок») и уже среди них берём лучшую.
+         ±5% от опорной цены («реальный рынок») и уже среди них берём лучшую.
          Иначе единственная скам-цена даёт фейковый спред 15-20%.
+
+    ref — внешняя опорная цена. Если передана (напр. медиана ОБЕИХ сторон
+    стакана), полоса считается от неё. Это критично для приманок-бидов:
+    «куплю USDT по 51,54» при рынке 45 раздувает СВОЮ медиану и проходит
+    односторонний фильтр; общая медиана рынка её отсекает.
     """
     prices = sorted(
         a["price"] for a in ads
@@ -71,12 +77,16 @@ def pick_best_price(ads: list[dict], *, buy_side: bool,
     n = len(prices)
     if n == 0:
         return None
-    if n <= 3:
-        return prices[0] if buy_side else prices[-1]
+    # Без внешнего референса — прежнее поведение (одна сторона).
+    if ref is None:
+        if n <= 3:
+            return prices[0] if buy_side else prices[-1]
+        ref = statistics.median(prices)
 
-    med  = statistics.median(prices)
     band = [p for p in prices
-            if med * (1 - _MEDIAN_BAND) <= p <= med * (1 + _MEDIAN_BAND)]
-    if not band:
-        band = prices
-    return min(band) if buy_side else max(band)
+            if ref * (1 - _MEDIAN_BAND) <= p <= ref * (1 + _MEDIAN_BAND)]
+    if band:
+        return min(band) if buy_side else max(band)
+    # Ничего в полосе (вся сторона — приманки) → берём БЛИЖАЙШУЮ к рынку,
+    # а не экстремум-приманку.
+    return min(prices, key=lambda p: abs(p - ref))

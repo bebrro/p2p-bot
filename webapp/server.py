@@ -33,7 +33,17 @@ from handlers.account_manager import (
 from handlers.auto_reprice import add_rule_memory, remove_rule_memory
 from handlers.pnl import calc_pnl
 from utils.spread import calc_spread
+import statistics as _stats
 from utils.pricing import pick_best_price, sane_price
+
+
+def _market_ref(buy_ads: list, sell_ads: list, fiat: str, asset: str = "USDT"):
+    """Опорная цена рынка = медиана ВАЛИДНЫХ цен ОБЕИХ сторон стакана.
+    Привязка полосы де-байтинга к ней отсекает приманки-биды («куплю дорого»),
+    которые раздувают собственную медиану и проходят односторонний фильтр."""
+    prices = [a["price"] for a in (buy_ads + sell_ads)
+              if sane_price(a.get("price", 0), fiat, asset)]
+    return _stats.median(prices) if prices else None
 from utils.scam_detector import risk_score, risk_badge, risk_tooltip
 from utils.encryption import encrypt
 from utils.subscription import get_plan_key, get_limits, format_expires
@@ -636,8 +646,11 @@ async def api_orderbook(request: web.Request) -> web.Response:
 
         # Топ-цена и спред — по ДЕ-БАЙТЕНЫМ ценам (без приманок-выбросов),
         # чтобы заголовок стакана не ломался одиночным фейк-объявлением.
-        best_buy  = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset)
-        best_sell = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset)
+        # Опора — медиана ОБЕИХ сторон: иначе приманка-бид «куплю по 51,54»
+        # при рынке 45 даёт фейковый спред 14%.
+        _ref = _market_ref(buy_ads, sell_ads, fiat, asset)
+        best_buy  = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset, ref=_ref)
+        best_sell = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset, ref=_ref)
         spread = {}
         if best_buy and best_sell:
             spread = calc_spread(best_buy, best_sell)
@@ -926,8 +939,10 @@ async def api_maker_spread(request: web.Request) -> web.Response:
         )
         # best_ask = дешевле всего КУПИТЬ USDT (сторона «покупка», минимум).
         # best_bid = дороже всего ПРОДАТЬ USDT (сторона «продажа», максимум).
-        best_ask = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset)
-        best_bid = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset)
+        # Опора на медиану обеих сторон — против приманок-бидов (фейк-спред).
+        _ref = _market_ref(buy_ads, sell_ads, fiat, asset)
+        best_ask = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset, ref=_ref)
+        best_bid = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset, ref=_ref)
         if not best_ask or not best_bid:
             return web.json_response({"ok": False, "reason": "no_data"})
 

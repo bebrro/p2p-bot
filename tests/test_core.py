@@ -539,6 +539,22 @@ def test_pricing_all_garbage_returns_none():
     ads = _ads(0, -1, 9999)   # всё вне диапазона KZT
     assert pick_best_price(ads, buy_side=True, fiat="KZT") is None
 
+def test_pricing_cross_ref_kills_bait_bids():
+    """Правый стакан забит приманками-бидами «куплю дорого» → его СВОЯ медиана
+    высокая и фильтр одной стороны их пропускает. Общая медиана обеих сторон
+    (ref) отсекает: иначе фейковый спред 15-16%."""
+    import statistics
+    buy  = _ads(45.0, 45.1, 45.2, 45.3, 45.4, 45.5)        # реальные аски ~45
+    sell = _ads(45.0, 50.5, 51.0, 51.54, 51.8, 52.0, 52.2)  # биды-приманки 50+
+    ref  = statistics.median([a["price"] for a in buy + sell])
+    # без ref — приманка проходит (старое поведение)
+    assert pick_best_price(sell, buy_side=False, fiat="TRY") >= 52
+    # с ref (медиана обеих сторон) — приманки отброшены
+    best_buy  = pick_best_price(buy,  buy_side=True,  fiat="TRY", ref=ref)
+    best_sell = pick_best_price(sell, buy_side=False, fiat="TRY", ref=ref)
+    assert best_sell <= 46            # бид-приманка 52 отброшена
+    assert (best_sell - best_buy) / best_buy * 100 < 3   # спред реалистичный
+
 
 # ─── Отключённые биржи + флаг подозрительного спреда ──────────────────────────
 
