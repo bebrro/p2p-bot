@@ -720,7 +720,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="side-btn active-buy" id="makerBuyBtn"  onclick="setMakerSide('buy')">📗 Покупка</button>
     <button class="side-btn"           id="makerSellBtn" onclick="setMakerSide('sell')">📕 Продажа</button>
   </div>
-  <div class="pill-row hidden" id="makerPayRow"></div>
   <button class="maker-load-btn" id="makerLoadBtn" onclick="loadMaker()">🎯 Рассчитать оптимальную цену</button>
   <div id="makerContent"></div>
 </div>
@@ -983,43 +982,13 @@ const S  = { exchange: _cfg.default_exchange||'bybit', fiat: _cfg.default_fiat||
 const CM = { fiat:'RUB', asset:'USDT' };
 const WH = { fiat:'RUB', threshold:50000 };
 let   _toolsInited=false, _calcCur='KZT';
-const MK = { side:'buy', pay:'' };
+const MK = { side:'buy' };
 const BF = { min_amount:0, third_party:'', min_orders:0, min_comp:0 };
 
 let bookTimer=null, multiTimer=null, chartInst=null;
 let bookMode=localStorage.getItem("bookMode")||"maker";
 let chatHistory=[], chatLoading=false, chatInited=false;
 let currentSub = 'pairs';
-
-/* ══════════════════════════════════════════════════════════
-   PAY METHODS
-══════════════════════════════════════════════════════════ */
-const PAY_METHODS = {
-  binance:{
-    KZT:[{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},{v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'},{v:'FreedomBank',lbl:'Freedom'}],
-    RUB:[{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'FPSBANK',lbl:'СБП'}],
-    TRY:[{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},{v:'Akbank',lbl:'Akbank'},{v:'VakifBank',lbl:'Vakif'},{v:'Papara',lbl:'Papara'}],
-    USD:[{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
-  },
-  bybit:{
-    KZT:[{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'},{v:'HalykBank',lbl:'Halyk'},{v:'FreedomBank',lbl:'Freedom'},{v:'Jusan',lbl:'Jusan'},{v:'ForteBank',lbl:'Forte'}],
-    RUB:[{v:'',lbl:'Все'},{v:'Tinkoff',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'RaiffeisenBank',lbl:'Raiffeisen'},{v:'SBP',lbl:'СБП'}],
-    TRY:[{v:'',lbl:'Все'},{v:'ZiraatBank',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},{v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
-    USD:[{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
-  },
-  okx:{
-    // OKX returns human-readable names ("Kaspi Bank", "Freedom Finance") — use root keywords
-    KZT:[{v:'',lbl:'Все'},{v:'Kaspi',lbl:'Kaspi'},{v:'Halyk',lbl:'Halyk'},{v:'Jusan',lbl:'Jusan'},{v:'Forte',lbl:'Forte'},{v:'Freedom',lbl:'Freedom'}],
-    RUB:[{v:'',lbl:'Все'},{v:'Tinkoff',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'Raiffeisen',lbl:'Raiffeisen'},{v:'СБП',lbl:'СБП'}],
-    TRY:[{v:'',lbl:'Все'},{v:'Ziraat',lbl:'Ziraat'},{v:'Garanti',lbl:'Garanti'},{v:'Akbank',lbl:'Akbank'},{v:'Papara',lbl:'Papara'}],
-    USD:[{v:'',lbl:'Все'},{v:'Bank',lbl:'Bank Transfer'}],
-  },
-  wallet:{
-    KZT:[{v:'',lbl:'Все'},{v:'KaspiBank',lbl:'Kaspi'}],
-    RUB:[{v:'',lbl:'Все'},{v:'TinkoffNew',lbl:'Tinkoff'},{v:'Sberbank',lbl:'Сбер'},{v:'FPSBANK',lbl:'СБП'}],
-    USD:[{v:'',lbl:'Все'},{v:'BankTransfer',lbl:'Bank Transfer'}],
-  },
-};
 
 /* ══════════════════════════════════════════════════════════
    FORMATTING
@@ -1057,8 +1026,7 @@ function applyStateToUI(){
 wireGroup('exRow','exchange',onMainStateChange);
 
 function onMainStateChange(){
-  S.pay=''; MK.pay=''; __payMethods=[];
-  updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
+  S.pay=''; __payMethods=[];
   updateSelLabels();
   updateHeaderPair();
   restartBookTimer();
@@ -1071,15 +1039,6 @@ function onMainStateChange(){
 function updateHeaderPair(){
   const EX={binance:'Binance',bybit:'Bybit',okx:'OKX',wallet:'TG Wallet'};
   document.getElementById('headerPair').textContent=`${EX[S.exchange]||S.exchange} · ${S.fiat} · ${S.asset}`;
-}
-function updatePayRow(rowId,exchange,fiat,onSelect){
-  const row=document.getElementById(rowId); if(!row)return;
-  const banks=(PAY_METHODS[exchange]||{})[fiat]||[{v:'',lbl:'Все'}];
-  row.innerHTML=banks.map(b=>`<button class="pill${b.v===''?' active':''}" data-val="${esc(b.v)}">${esc(b.lbl)}</button>`).join('');
-  row.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click',()=>{
-    row.querySelectorAll('.pill').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active'); onSelect(btn.dataset.val);
-  }));
 }
 
 // Динамически строит методы оплаты из РЕАЛЬНЫХ объявлений (все биржи/валюты).
@@ -1171,7 +1130,6 @@ function switchTab(tab,btn){
   const exEl=document.getElementById('exRow'); if(exEl) exEl.classList.toggle('hidden', isHome||tab==='spread');
   const selEl=document.getElementById('selRow'); if(selEl) selEl.classList.toggle('hidden', isHome);
   const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=(isHome||tab==='spread')?'none':'';
-  const mpr=document.getElementById('makerPayRow'); if(mpr) mpr.classList.toggle('hidden',tab!=='maker');
   if(tab==='home')     loadDashboard();
   if(tab==='maker')    loadMakerSpread();
   if(tab==='book')     { updateBookModeUI(); restartBookTimer(); }
@@ -1576,7 +1534,7 @@ function renderMakerSpread(d){
 async function loadMaker(){
   const btn=document.getElementById('makerLoadBtn'),box=document.getElementById('makerContent');
   btn.disabled=true; btn.textContent='⏳ Загружаю...'; box.innerHTML='<div class="spinner"></div>';
-  const q=MK.pay?`?pay=${encodeURIComponent(MK.pay)}`:'';
+  const q=S.pay?`?pay=${encodeURIComponent(S.pay)}`:'';
   try{ const r=await fetch(`/api/maker/${S.exchange}/${S.fiat}/${S.asset}/${MK.side}${q}`); const data=await r.json(); if(data.error)throw new Error(data.error); renderMaker(data,S.fiat,S.asset,MK.side); }
   catch(e){ box.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
   finally{ btn.disabled=false; btn.textContent='🎯 Рассчитать оптимальную цену'; }
@@ -2420,8 +2378,6 @@ applyStateToUI();
 updateHeaderPair();
 updateFilterBadge();
 renderPresets();
-updatePayRow('makerPayRow',S.exchange,S.fiat,v=>{MK.pay=v;});
-document.getElementById('makerPayRow').classList.add('hidden');
 updateSelLabels();   // подписи кнопок-селекторов
 updateDashSelLabels();
 // Init book mode toggle from localStorage
