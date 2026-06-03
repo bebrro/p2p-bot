@@ -521,7 +521,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div class="header">
   <div class="header-title">
     <span>📊 P2P Sniper</span>
-    <span class="header-pair" id="headerPair">Binance · KZT · USDT</span>
+    <span class="header-pair" id="headerPair">Binance · RUB · USDT</span>
   </div>
   <div class="pill-row" id="exRow">
     <button class="pill active" data-val="binance">🟡 Binance</button>
@@ -530,7 +530,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="pill"        data-val="wallet">💎 TG Wallet</button>
   </div>
   <div class="sel-row" id="selRow">
-    <button class="sel-btn" id="selFiat"  onclick="openSelector('fiat')"><span id="selFiatTxt">🇰🇿 KZT</span> <span class="sel-caret">▾</span></button>
+    <button class="sel-btn" id="selFiat"  onclick="openSelector('fiat')"><span id="selFiatTxt">🇷🇺 RUB</span> <span class="sel-caret">▾</span></button>
     <button class="sel-btn" id="selAsset" onclick="openSelector('asset')"><span id="selAssetTxt">USDT</span> <span class="sel-caret">▾</span></button>
     <button class="sel-btn" id="selPay"   onclick="openSelector('pay')"><span id="selPayTxt">💳 Все</span> <span class="sel-caret">▾</span></button>
   </div>
@@ -555,7 +555,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div class="tab-panel" id="tab-home">
   <!-- Fiat pills -->
   <div class="sel-row" style="margin-bottom:9px">
-    <button class="sel-btn" id="dSelFiat"  onclick="openSelector('dfiat')"><span id="dSelFiatTxt">🇰🇿 KZT</span> <span class="sel-caret">▾</span></button>
+    <button class="sel-btn" id="dSelFiat"  onclick="openSelector('dfiat')"><span id="dSelFiatTxt">🇷🇺 RUB</span> <span class="sel-caret">▾</span></button>
     <button class="sel-btn" id="dSelAsset" onclick="openSelector('dasset')"><span id="dSelAssetTxt">USDT</span> <span class="sel-caret">▾</span></button>
   </div>
 
@@ -585,7 +585,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="tri-card" id="xtriBanner" style="display:none"></div>
 
   <!-- Exchange overview -->
-  <div class="dash-sec">📊 Биржи — <span id="dashPairLbl" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">KZT / USDT</span></div>
+  <div class="dash-sec">📊 Биржи — <span id="dashPairLbl" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">RUB / USDT</span></div>
   <div class="dash-ex-grid" id="dashExGrid">
     <div style="grid-column:1/-1;text-align:center;padding:18px;color:var(--hint);font-size:12px">⏳ Загрузка...</div>
   </div>
@@ -746,7 +746,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- Пары (бывшая вкладка Мульти) -->
   <div class="mon-panel" id="monPairs" style="overflow-y:auto">
     <div class="multi-header">
-      <span class="multi-ex-badge" id="multiExBadge">🟡 Binance · KZT</span>
+      <span class="multi-ex-badge" id="multiExBadge">🟡 Binance · RUB</span>
       <button class="multi-refresh-btn" onclick="loadMulti()">↻ Обновить</button>
     </div>
     <div id="multiContent"><div class="spinner"></div></div>
@@ -775,7 +775,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- 🐋 Киты -->
   <div class="mon-panel hidden" id="monWhales" style="overflow-y:auto">
     <div class="whale-bar">
-      <div class="whale-sel" id="whaleFiatSel" onclick="openWhaleFiat()">🇰🇿 KZT ▾</div>
+      <div class="whale-sel" id="whaleFiatSel" onclick="openWhaleFiat()">🇷🇺 RUB ▾</div>
       <div class="whale-thr">
         <span>Порог</span>
         <button class="whale-thr-pill" data-thr="30000"  onclick="setWhaleThr(30000,this)">30k</button>
@@ -985,9 +985,9 @@ let REFRESH_MS = (_cfg.refresh_speed || 10) * 1000;
 /* ══════════════════════════════════════════════════════════
    STATE
 ══════════════════════════════════════════════════════════ */
-const S  = { exchange: _cfg.default_exchange||'binance', fiat: _cfg.default_fiat||'KZT', asset:'USDT', tab:'book', pay:'' };
-const CM = { fiat:'KZT', asset:'USDT' };
-const WH = { fiat:'KZT', threshold:50000 };
+const S  = { exchange: _cfg.default_exchange||'binance', fiat: _cfg.default_fiat||'RUB', asset:'USDT', tab:'book', pay:'' };
+const CM = { fiat:'RUB', asset:'USDT' };
+const WH = { fiat:'RUB', threshold:50000 };
 let   _toolsInited=false, _calcCur='KZT';
 const MK = { side:'buy', pay:'' };
 const BF = { min_amount:0, third_party:'', min_orders:0, min_comp:0 };
@@ -1170,6 +1170,7 @@ function switchTab(tab,btn){
   const panel=document.getElementById(`tab-${tab}`); if(panel) panel.classList.remove('hidden');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active'); S.tab=tab;
+  try{ localStorage.setItem('lastTab', tab); }catch{}   // запомнить вкладку
   // Home tab: hide header selectors and spread bar
   const isHome=tab==='home';
   ['exRow','selRow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hidden',isHome); });
@@ -1585,7 +1586,7 @@ function selectPair(asset){
 }
 
 /* ── Trackers ─────────────────────────────────────────────── */
-const TR={exchange:'binance',fiat:'KZT',asset:'USDT'};
+const TR={exchange:'binance',fiat:'RUB',asset:'USDT'};
 const EX_ICONS={binance:'🟡',bybit:'🟠',okx:'🔵',wallet:'💎'};
 
 async function loadTrackers(){
@@ -1665,7 +1666,7 @@ async function deleteTracker(id){
 }
 
 /* ── Alerts ───────────────────────────────────────────────── */
-const AL={exchange:'binance',fiat:'KZT',asset:'USDT',direction:'above'};
+const AL={exchange:'binance',fiat:'RUB',asset:'USDT',direction:'above'};
 
 async function loadAlerts(){
   const uid=getUID(),box=document.getElementById('alertsContent');
@@ -2154,7 +2155,7 @@ document.getElementById('chatInput').addEventListener('keydown',function(e){if(e
 /* ══════════════════════════════════════════════════════════
    DASHBOARD (home tab)
 ══════════════════════════════════════════════════════════ */
-let dashFiat='KZT', dashAsset='USDT', dashLoading=false, dashArbData=null;
+let dashFiat='RUB', dashAsset='USDT', dashLoading=false, dashArbData=null;
 
 // Wire fiat pills inside dashboard
 document.querySelectorAll('#dashFiatRow .pill').forEach(btn=>{
@@ -2483,7 +2484,13 @@ function runCalc(){
     </div>`;
 }
 
-switchTab('home', document.querySelector('.nav-btn[data-tab="home"]'));
+// Восстанавливаем последнюю открытую вкладку (мини-апп не сбрасывает на Главную)
+(function(){
+  let start='home';
+  try{ const t=localStorage.getItem('lastTab');
+    if(t && document.querySelector(`.nav-btn[data-tab="${t}"]`)) start=t; }catch{}
+  switchTab(start, document.querySelector(`.nav-btn[data-tab="${start}"]`));
+})();
 </script>
 <!-- Модалка деталей объявления -->
 <div class="ad-modal-bg" id="adModalBg" onclick="if(event.target===this)closeAdModal()">
