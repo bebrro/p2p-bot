@@ -362,9 +362,6 @@ def parse_description(text: str) -> dict:
     trap = bool(_TRAP.search(t)) or bait or note_trap
     if _TRAP.search(t):
         flags.insert(0, "⚠️ СТРАННЫЕ УСЛОВИЯ — возможна ловушка")
-    # Просит чек/квитанцию — мягкий инфо-флаг (не ловушка)
-    if _RECEIPT_REQ.search(t):
-        flags.append("📧 просит чек — проверь поступление денег сам")
 
     # ── Развод с отложенной оплатой ───────────────────────────────────────────
     defer_pay = bool(_DEFER_PAY.search(t))
