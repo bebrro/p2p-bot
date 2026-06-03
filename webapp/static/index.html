@@ -1535,7 +1535,7 @@ async function loadMaker(){
   const btn=document.getElementById('makerLoadBtn'),box=document.getElementById('makerContent');
   btn.disabled=true; btn.textContent='⏳ Загружаю...'; box.innerHTML='<div class="spinner"></div>';
   const q=S.pay?`?pay=${encodeURIComponent(S.pay)}`:'';
-  try{ const r=await fetch(`/api/maker/${S.exchange}/${S.fiat}/${S.asset}/${MK.side}${q}`); const data=await r.json(); if(data.error)throw new Error(data.error); renderMaker(data,S.fiat,S.asset,MK.side); }
+  try{ const r=await fetch(`/api/maker/${S.exchange}/${S.fiat}/${S.asset}/${MK.side}${q}`); const data=await r.json(); if(data.error)throw new Error(data.error); mergePayMethods(data.ads); renderMaker(data,S.fiat,S.asset,MK.side); }
   catch(e){ box.innerHTML=`<div class="err-box">❌ ${esc(e.message)}</div>`; }
   finally{ btn.disabled=false; btn.textContent='🎯 Рассчитать оптимальную цену'; }
 }
