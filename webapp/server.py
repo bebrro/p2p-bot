@@ -123,6 +123,9 @@ P2P_FEE_PCT      = float(os.getenv("P2P_FEE_PCT", "0.0"))
 # Минимальная ЧИСТАЯ доходность связки, ниже которой её не показываем —
 # +0.02% это шум/убыток после комиссий, не возможность.
 MIN_LINK_PCT     = float(os.getenv("MIN_LINK_PCT", "0.6"))
+# Связки выше этого % — почти всегда приманка/фейк-цена (реальные 1-5%).
+# Не показываем, чтобы не предлагать людям мусор вроде «+50%».
+MAX_LINK_PCT     = float(os.getenv("MAX_LINK_PCT", "15"))
 # Строгий режим связок: True = только мерчанты с ЯВНЫМ «3 лица ок».
 # False (деф) = включаем и неуказанных (помечаем «❓ уточни»), т.к. многие
 # мерчанты, которые треуголят, ничего про 3 лица не пишут.
@@ -233,6 +236,10 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
       • есть ОБЩИЙ банк (иначе платёж контрагент→контрагенту не провести)
     """
     def ok(a):
+        # Нереальная цена (вне разумного диапазона фиата) — это фейк/чужая валюта
+        # (напр. рублёвый трейдер в USD-рынке «0.80»). В связку НЕ берём.
+        if not sane_price(a.get("price", 0), fiat, "USDT"):
+            return False
         tp = a.get("third_party")
         if tp is False:                      # явный запрет 3-х лиц — исключаем
             return False
@@ -323,7 +330,8 @@ def _find_link(buys: list, sells: list, fiat: str) -> dict | None:
     net        = gross - fee_fiat
     net_pct    = (net / vol * 100) if vol else 0
 
-    if net_pct < MIN_LINK_PCT:           # связка слишком тонкая → не показываем
+    # Слишком тонкая (шум) ИЛИ абсурдно высокая (приманка/фейк-цена) → не показываем
+    if net_pct < MIN_LINK_PCT or best["pct"] > MAX_LINK_PCT:
         return None
 
     return {

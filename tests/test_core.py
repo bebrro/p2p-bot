@@ -1007,6 +1007,32 @@ def test_maker_spread_normal_vs_crossed(monkeypatch):
     assert d2["ok"] and d2["maker_ok"] is False and d2["crossed"] is True and d2["net_pct"] < 0
 
 
+def test_payment_note_trap_not_review():
+    """«Оставьте отзыв/комментарий» — НЕ ловушка; «впиши в назначение платежа» — да."""
+    from utils.desc_parser import parse_description as p
+    assert p("оставьте приятный комментарий, write a nice comment")["trap"] is False
+    assert p("güzel yorumlar bırakın lütfen")["trap"] is False
+    assert p("в назначении платежа напишите перевод другу")["trap"] is True
+    assert p('ödeme açıklama kısmına "Dijital varlık" yazınız')["trap"] is True
+
+
+def test_link_max_and_insane_price():
+    """Связка не показывается при абсурдном спреде (>15%) и нереальной цене."""
+    import webapp.server as srv
+    # 0.80 USD — вне разумного диапазона (рублёвый трейдер в USD-рынке) → нет связки
+    buy  = [{"price": 0.80, "third_party": True, "nickname": "Y", "description": "руб",
+             "min_amount": 100, "max_amount": 2700, "available": 1000, "pay_types": ["Bank Transfer"]}]
+    sell = [{"price": 1.20, "third_party": True, "nickname": "A", "description": "x",
+             "min_amount": 100, "max_amount": 2700, "available": 1000, "pay_types": ["Bank Transfer"]}]
+    assert srv._find_link(buy, sell, "USD") is None
+    # абсурдный спред в валидном диапазоне (RUB 80 → 110 = +37%) → тоже прячем
+    b2 = [{"price": 80, "third_party": True, "nickname": "A", "description": "x",
+           "min_amount": 1000, "max_amount": 90000, "available": 5000, "pay_types": ["Kaspi"]}]
+    s2 = [{"price": 110, "third_party": True, "nickname": "B", "description": "x",
+           "min_amount": 1000, "max_amount": 90000, "available": 5000, "pay_types": ["Kaspi"]}]
+    assert srv._find_link(b2, s2, "RUB") is None
+
+
 def test_link_min_profit_threshold():
     """Связка с мизерной чистой прибылью (< MIN_LINK_PCT) не показывается."""
     import webapp.server as srv

@@ -232,17 +232,26 @@ def _ml_no_third(low: str) -> bool:
 
 
 def _payment_note_trap(low: str) -> bool:
-    """Просят написать КОНКРЕТНУЮ фразу в назначении/комментарии платежа —
-    это манипуляция для спора/чарджбэка. Мультиязычно."""
-    has_field = any(k in low for k in (
-        "açıklama", "aciklama", "ödeme açıkl", "odeme acikl",          # TR
-        "назначени плат", "в назначени", "комментар", "в описании плат",  # RU
-        "payment description", "payment comment", "payment reference", "payment note"))  # EN
+    """Просят написать КОНКРЕТНУЮ фразу в НАЗНАЧЕНИИ/описании ПЛАТЕЖА — манипуляция
+    для спора/чарджбэка. ВАЖНО: «оставьте комментарий/отзыв», «güzel yorum»,
+    «write a nice comment» — это ПРОСЬБА ОБ ОТЗЫВЕ, не ловушка."""
     has_write = any(k in low for k in (
-        "yazın", "yazınız", "yaziniz", "yazin",                         # TR (пишите)
-        "напиш", "укаж",                                                # RU
-        "write", "indicate", "state ", "put the note"))                # EN
-    return has_field and has_write
+        "yazın", "yazınız", "yaziniz", "yazin", "напиш", "укаж",
+        "write", "indicate", "state ", "put the note"))
+    if not has_write:
+        return False
+    # TR: «(ödeme) açıklama kısmına ... yazın»
+    if ("açıklama" in low or "aciklama" in low):
+        return True
+    # RU: «в назначении платежа …», «в комментарии К ПЛАТЕЖУ/ПЕРЕВОДУ …»
+    if "назначен" in low and "платеж" in low:
+        return True
+    if "коммент" in low and any(k in low for k in ("к платеж", "к перевод", "к оплат")):
+        return True
+    # EN: «write ... in payment description/reference/note»
+    if any(k in low for k in ("payment description", "payment reference", "payment note")):
+        return True
+    return False
 
 # ── Вербовка / скам-схема в описании ─────────────────────────────────────────
 # Мошенники вербуют людей прямо в описании объявления: обещают «лёгкие деньги»
