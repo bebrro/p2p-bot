@@ -834,6 +834,15 @@ async def api_spread_compare(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# Шаг цены по фиатам (минимальный реалистичный «перебить на копейку»).
+_FIAT_STEP = {
+    "KZT": 0.50, "RUB": 0.05, "TRY": 0.05, "USD": 0.001,
+    "THB": 0.01, "IDR": 1, "VND": 1, "INR": 0.01, "AED": 0.001,
+    "NGN": 0.1, "BRL": 0.001, "GEL": 0.001, "AMD": 0.1, "AZN": 0.001,
+    "UZS": 1, "KGS": 0.01,
+}
+
+
 async def api_maker(request: web.Request) -> web.Response:
     """GET /api/maker/{exchange}/{fiat}/{asset}/{side}?pay="""
     exchange = request.match_info["exchange"]
@@ -841,14 +850,7 @@ async def api_maker(request: web.Request) -> web.Response:
     asset    = request.match_info["asset"]
     side     = request.match_info["side"]
     pay      = request.rel_url.query.get("pay", "")
-
-    FIAT_STEP = {
-        "KZT": 0.50, "RUB": 0.05, "TRY": 0.05, "USD": 0.001,
-        "THB": 0.01, "IDR": 1, "VND": 1, "INR": 0.01, "AED": 0.001,
-        "NGN": 0.1, "BRL": 0.001, "GEL": 0.001, "AMD": 0.1, "AZN": 0.001,
-        "UZS": 1, "KGS": 0.01,
-    }
-    step = FIAT_STEP.get(fiat, 0.01)
+    step = _FIAT_STEP.get(fiat, 0.01)
 
     try:
         ads = await _fetch(exchange, fiat, asset, side, rows=10, pay=pay)
@@ -873,6 +875,55 @@ async def api_maker(request: web.Request) -> web.Response:
 
         return web.json_response({"ads": ads[:5], "recommendations": recs, "step": step})
     except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_maker_spread(request: web.Request) -> web.Response:
+    """
+    GET /api/maker_spread/{exchange}/{fiat}/{asset} — МЕЙКЕР-треугольник «по белому».
+    Ставишь свою покупку (#1 в бидах) и продажу (#1 в асках), ловишь спред.
+    Выгоден когда рынок НЕ перекошен (лучший аск > лучшего бида). Если перекошен —
+    честно говорим: сейчас момент для ТЕЙКЕР-связки, мейкинг в минус.
+    """
+    ex    = request.match_info["exchange"]
+    fiat  = request.match_info["fiat"]
+    asset = request.match_info["asset"]
+    step  = _FIAT_STEP.get(fiat, 0.01)
+    try:
+        buy_ads, sell_ads = await asyncio.gather(
+            _fetch(ex, fiat, asset, "buy",  15),
+            _fetch(ex, fiat, asset, "sell", 15),
+        )
+        # best_ask = дешевле всего КУПИТЬ USDT (сторона «покупка», минимум).
+        # best_bid = дороже всего ПРОДАТЬ USDT (сторона «продажа», максимум).
+        best_ask = pick_best_price(buy_ads,  buy_side=True,  fiat=fiat, asset=asset)
+        best_bid = pick_best_price(sell_ads, buy_side=False, fiat=fiat, asset=asset)
+        if not best_ask or not best_bid:
+            return web.json_response({"ok": False, "reason": "no_data"})
+
+        # Мейкер: продаёт USDT по best_ask−step (#1 аск), покупает по best_bid+step (#1 бид).
+        your_sell = round(best_ask - step, 6)
+        your_buy  = round(best_bid + step, 6)
+        gross     = your_sell - your_buy
+        fee       = (your_sell + your_buy) * (P2P_FEE_PCT / 100)
+        net       = gross - fee
+        net_pct   = round(net / your_buy * 100, 2) if your_buy else 0
+        vol       = _REF_VOLUME.get(fiat, 1_000)
+
+        return web.json_response({
+            "ok":        True,
+            "exchange":  ex, "fiat": fiat,
+            "best_ask":  best_ask, "best_bid": best_bid,
+            "your_buy":  your_buy, "your_sell": your_sell,
+            "net_pct":   net_pct,
+            "profit":    round(vol * net_pct / 100),
+            "amount":    vol,
+            "step":      step,
+            "maker_ok":  net > 0,          # мейкинг в плюс
+            "crossed":   best_bid >= best_ask,   # рынок перекошен → тейкер-связка
+        })
+    except Exception as e:
+        logger.error(f"api_maker_spread: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 
@@ -1620,6 +1671,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/history/{exchange}/{fiat}/{asset}",        api_history)
     app.router.add_get("/api/spread_compare/{fiat}/{asset}",            api_spread_compare)
     app.router.add_get("/api/maker/{exchange}/{fiat}/{asset}/{side}",   api_maker)
+    app.router.add_get("/api/maker_spread/{exchange}/{fiat}/{asset}",   api_maker_spread)
     app.router.add_get("/api/multi/{exchange}/{fiat}",                  api_multi)
     app.router.add_get("/api/status/{fiat}",                            api_status)
     # User data (trackers / alerts / blacklist)

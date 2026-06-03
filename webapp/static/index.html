@@ -724,6 +724,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ════════════════════ TAB: МЕЙКЕР ═════════════════════════ -->
 <div class="tab-panel hidden" id="tab-maker">
+  <!-- Мейкер-треугольник: ставишь свои покупку+продажу, ловишь спред -->
+  <div class="tri-card" id="makerSpreadCard" style="display:none;margin:8px 8px 4px"></div>
   <div class="side-toggle">
     <button class="side-btn active-buy" id="makerBuyBtn"  onclick="setMakerSide('buy')">📗 Покупка</button>
     <button class="side-btn"           id="makerSellBtn" onclick="setMakerSide('sell')">📕 Продажа</button>
@@ -1073,6 +1075,7 @@ function onMainStateChange(){
   updateHeaderPair();
   restartBookTimer();
   if(S.tab==='chart') loadChart();
+  if(S.tab==='maker') loadMakerSpread();
   if(S.tab==='monitor'&&currentSub==='pairs') loadMulti();
   resetChat();
 }
@@ -1179,6 +1182,7 @@ function switchTab(tab,btn){
   const sb=document.querySelector('.spread-bar'); if(sb) sb.style.display=isHome?'none':'';
   const mpr=document.getElementById('makerPayRow'); if(mpr) mpr.classList.toggle('hidden',tab!=='maker');
   if(tab==='home')     loadDashboard();
+  if(tab==='maker')    loadMakerSpread();
   if(tab==='book')     { updateBookModeUI(); restartBookTimer(); }
   if(tab==='chart')    loadChart();
   if(tab==='spread')   loadCompare();
@@ -1538,6 +1542,39 @@ function setMakerSide(side){
   MK.side=side;
   document.getElementById('makerBuyBtn').className='side-btn'+(side==='buy'?' active-buy':'');
   document.getElementById('makerSellBtn').className='side-btn'+(side==='sell'?' active-sell':'');
+}
+async function loadMakerSpread(){
+  const el=document.getElementById('makerSpreadCard'); if(!el) return;
+  el.style.display='none';
+  try{
+    const r=await fetch(`/api/maker_spread/${S.exchange}/${S.fiat}/${S.asset}`);
+    const d=await r.json();
+    if(!d||!d.ok){ return; }
+    renderMakerSpread(d);
+  }catch(e){}
+}
+function renderMakerSpread(d){
+  const el=document.getElementById('makerSpreadCard'); if(!el) return;
+  el.style.display='block';
+  const exIcon={binance:'🟡',bybit:'🟠',okx:'🔵',wallet:'💎'}[d.exchange]||'';
+  const head=`<div class="tri-head"><span class="tri-title">🔺 Мейкер-треугольник · ${exIcon} ${esc(d.exchange[0].toUpperCase()+d.exchange.slice(1))} ${d.fiat}</span></div>`;
+  if(d.maker_ok){
+    el.style.opacity='1';
+    el.innerHTML=head+`
+      <div class="tri-legs">
+        <div class="tri-leg"><div class="tri-leg-lbl">📥 Поставь ПОКУПКУ</div><div class="tri-leg-price">${fmt(d.your_buy)}</div><div class="tri-leg-nick">будешь #1 в бидах</div></div>
+        <div class="tri-leg"><div class="tri-leg-lbl">📤 Поставь ПРОДАЖУ</div><div class="tri-leg-price">${fmt(d.your_sell)}</div><div class="tri-leg-nick">будешь #1 в асках</div></div>
+      </div>
+      <div class="tri-profit">💵 Спред мейкера: <b style="color:var(--green)">+${d.net_pct}%</b> чистыми · на обороте ${fmtK(d.amount)} ${d.fiat} → <b>+${fmt(d.profit)} ${d.fiat}</b></div>
+      <div class="tri-profit" style="font-size:10px;color:var(--hint)">⚠️ держи объём в лимитах и следи, чтобы тебя не перебили на ${fmt(d.step)}</div>`;
+  } else {
+    // Мейкинг в минус — рынок перекошен, это момент для тейкер-связки
+    el.style.opacity='.95';
+    el.innerHTML=head+`
+      <div class="tri-profit" style="color:var(--gold)">⚠️ Сейчас мейкинг <b>в минус</b>${d.crossed?` (рынок перекошен: бид ${fmt(d.best_bid)} ≥ аск ${fmt(d.best_ask)})`:''}.</div>
+      <div class="tri-profit" style="font-size:11px">Твой спред был бы ${d.net_pct}%. Это момент для <b>ТЕЙКЕР-связки</b> 👉</div>
+      <button class="dash-act cta" style="width:100%;margin-top:6px" onclick="switchTab('book',navBtn('book'))">🔺 Смотреть связку в стакане</button>`;
+  }
 }
 async function loadMaker(){
   const btn=document.getElementById('makerLoadBtn'),box=document.getElementById('makerContent');

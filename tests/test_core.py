@@ -971,6 +971,33 @@ def test_norm_bank_aliases():
     assert srv._norm_bank("Tinkoff") == srv._norm_bank("Т-Банк") == "tinkoff"
 
 
+def test_maker_spread_normal_vs_crossed(monkeypatch):
+    """Мейкер-треугольник: выгоден когда аск>бид, в минус при перекосе (связка)."""
+    import asyncio, json
+    import webapp.server as srv
+
+    class Req:
+        def __init__(self, ex, f, a): self.match_info = {"exchange": ex, "fiat": f, "asset": a}
+
+    def mk(prices):  # объявления с заданными ценами
+        return [{"price": p, "min_amount": 0, "max_amount": 9e9, "available": 100,
+                 "pay_types": []} for p in prices]
+
+    # Нормальный рынок: аски (покупка USDT) ~80, биды (продажа) ~78 → мейкер в плюс
+    async def fetch_normal(ex, fiat, asset, side, rows=10, pay="", amount=0):
+        return mk([80, 80.1, 80.2, 80.3, 80.4]) if side == "buy" else mk([78, 77.9, 77.8, 77.7, 77.6])
+    monkeypatch.setattr(srv, "_fetch", fetch_normal)
+    d = json.loads(asyncio.run(srv.api_maker_spread(Req("bybit", "RUB", "USDT"))).body)
+    assert d["ok"] and d["maker_ok"] is True and d["crossed"] is False and d["net_pct"] > 0
+
+    # Перекошенный: аски ~78, биды ~84 (бид>аск) → мейкер в минус, это тейкер-связка
+    async def fetch_crossed(ex, fiat, asset, side, rows=10, pay="", amount=0):
+        return mk([78, 78.1, 78.2, 78.3, 78.4]) if side == "buy" else mk([84, 83.9, 83.8, 83.7, 83.6])
+    monkeypatch.setattr(srv, "_fetch", fetch_crossed)
+    d2 = json.loads(asyncio.run(srv.api_maker_spread(Req("bybit", "RUB", "USDT"))).body)
+    assert d2["ok"] and d2["maker_ok"] is False and d2["crossed"] is True and d2["net_pct"] < 0
+
+
 def test_link_min_profit_threshold():
     """Связка с мизерной чистой прибылью (< MIN_LINK_PCT) не показывается."""
     import webapp.server as srv
