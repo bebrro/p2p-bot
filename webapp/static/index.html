@@ -1524,8 +1524,11 @@ function renderCompare({exchanges,arbitrage}){
     html+=`<div class="compare-row${isBest?' best-row':''}"><span class="compare-ex">${esc(ex.icon)} ${esc(ex.name)}</span><span class="compare-price compare-buy">${ex.buy?fmt(ex.buy):'—'}</span><span class="compare-price compare-sell">${ex.sell?fmt(ex.sell):'—'}</span><span class="compare-spread">${ex.spread_pct!=null?`<span class="spread-badge${isBest?' best':ex.spread_pct>=0.3?' good':''}">${ex.spread_pct}%</span>`:'—'}</span></div>`;
   });
   html+='</div>';
-  if(arbitrage?.length){ html+=`<div class="section-title">⚡ Арбитраж</div>`; arbitrage.forEach(a=>{html+=`<div class="arb-card"><div><div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div><div class="arb-abs">${fmt(a.abs)} ${S.fiat}</div></div><div class="arb-pct">+${a.pct}%</div></div>`;}); }
-  else html+=`<div class="empty-hint">⚡ Арбитражных возможностей нет</div>`;
+  // Прячем подозрительный арбитраж (>порога) — почти всегда приманка/тонкий рынок
+  const arbClean=(arbitrage||[]).filter(a=>!a.suspicious && a.pct>0);
+  const hidden=(arbitrage||[]).length-arbClean.length;
+  if(arbClean.length){ html+=`<div class="section-title">⚡ Арбитраж</div>`; arbClean.forEach(a=>{html+=`<div class="arb-card"><div><div class="arb-route">${esc(a.from)} → ${esc(a.to)}</div><div class="arb-abs">${fmt(a.abs)} ${S.fiat}</div></div><div class="arb-pct">+${a.pct}%</div></div>`;}); }
+  else html+=`<div class="empty-hint">⚡ Реальных арбитражных возможностей нет${hidden?'<br><span style="font-size:10px">'+hidden+' подозрительных скрыто (приманки/тонкий рынок)</span>':''}</div>`;
   document.getElementById('cmpContent').innerHTML=html;
 }
 
