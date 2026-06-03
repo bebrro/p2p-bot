@@ -211,19 +211,31 @@ def _extract_banks(t: str) -> list:
 
 def _ml_no_third(low: str) -> bool:
     """Запрет 3-х лиц на НЕ-русских языках (фолбэк к AI). По со-встречаемости."""
-    # турецкий: «üçüncü şahıs(lardan) ... kabul etmiyorum / kabul edilmez»
+    # ── Турецкий ──────────────────────────────────────────────────────────────
+    # «третье лицо»: üçüncü şahıs/kişi · 3. şahıs · 3 kişi · 3.kişi
     tr_third = any(k in low for k in (
-        "üçüncü şah", "ucuncu sah", "3.şah", "3 şah", "3.sah", "3 sah",
-        "üçüncü kiş", "ucuncu kis", "3. şah", "3. kiş"))
-    tr_no = any(k in low for k in ("kabul etm", "kabul edilm", "kabul yok"))
+        "üçüncü şah", "ucuncu sah", "üçüncü kiş", "ucuncu kis", "üçüncü ki",
+        "3.şah", "3. şah", "3 şah", "3.sah", "3. sah", "3 sah",
+        "3.kiş", "3. kiş", "3 kiş", "3.kis", "3. kis", "3 kis", "3kiş", "3kis"))
+    # отказ: kabul etmiyorum/edilmez/yok  ИЛИ  «… ile çalışmıyorum/çalışmam»
+    # (Python .lower() даёт разные формы: calismiy / çalışmıy / çalişmiy)
+    tr_no = any(k in low for k in (
+        "kabul etm", "kabul edilm", "kabul yok", "kabul değil", "kabul etmem",
+        "calismiy", "çalismiy", "calişmiy", "çalişmiy", "çalışmıy", "çalışmiy",
+        "calismam", "çalışmam", "çalişmam", "calişmam", "çalismam",
+        "ile calism", "ile çalışm", "ile çalism"))
     if tr_third and tr_no:
         return True
-    # английский: «no third party / not accept third part / third party not accepted»
-    if "third part" in low and any(k in low for k in (
-            "no third", "not accept", "don't accept", "dont accept",
-            "do not accept", "not accepted", "no 3rd", "without third")):
+    # ── Английский ────────────────────────────────────────────────────────────
+    en_third = any(k in low for k in (
+        "third part", "third person", "3rd part", "3rd person", "3 rd part"))
+    en_no = any(k in low for k in (
+        "no third", "no 3rd", "not accept", "don't accept", "dont accept",
+        "do not accept", "not accepted", "won't accept", "wont accept",
+        "don't work", "dont work", "do not work", "without third", "without 3rd"))
+    if en_third and en_no:
         return True
-    # индонезийский / вьетнамский
+    # ── Индонезийский / Вьетнамский ───────────────────────────────────────────
     if "pihak ketiga" in low and ("tidak" in low or "tdk" in low or "bukan" in low):
         return True
     if ("bên thứ ba" in low or "ben thu ba" in low) and ("không" in low or "khong" in low):

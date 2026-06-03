@@ -135,9 +135,11 @@ _PROMPT = (
     "Тинёк/Сбер/Альфа/Райф=банки RU • терминал/банкомат=внесение наличными.\n\n"
 
     "════════ КЛЮЧЕВЫЕ ФРАЗЫ (мультиязык) ════════\n"
-    "NO 3-х лиц: TR «3.şahıs/üçüncü kişi kabul edilmez/etmiyorum», «sadece kendi "
-    "hesabınızdan»; EN «no third party / own account only / sender must match»; "
-    "ID «tidak menerima pihak ketiga»; VI «không nhận bên thứ ba»; PT «não aceito terceiros».\n"
+    "NO 3-х лиц: TR «3.şahıs/üçüncü kişi/3 kişi kabul edilmez/etmiyorum», «… ile "
+    "çalışmıyorum/çalışmam» (не работаю с …), «sadece kendi hesabınızdan»; "
+    "EN «no third party / don't accept from 3rd part(y) / own account only / "
+    "sender must match»; ID «tidak menerima pihak ketiga»; VI «không nhận bên thứ "
+    "ba»; PT «não aceito terceiros».\n"
     "YES 3-х лиц / any_bank: TR «3.şahıs kabul / her bankadan»; EN «third party ok / "
     "any bank»; ID «pihak ketiga boleh / bank apa saja»; VI «nhận bên thứ ba».\n\n"
 

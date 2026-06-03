@@ -45,16 +45,18 @@ async def get_ads(
     # API: side "BUY" = merchants selling USDT (taker buys), "SELL" = merchants buying USDT
     wallet_side = "BUY" if side in ("buy", "BUY") else "SELL"
 
+    # При фильтре по банку тянем БОЛЬШЕ объявлений и фильтруем на клиенте
+    # (ниже, по реальным именам методов). API-параметр paymentMethod НЕ шлём:
+    # он ждёт внутренний код, а у нас отображаемое имя («Garanti») — иначе
+    # биржа вернёт пусто и фильтр будет «не работать».
+    fetch_rows = max(rows * 5, 60) if pay_types else rows
     payload = {
         "cryptoCurrency": asset,
         "fiatCurrency":   fiat,
         "side":           wallet_side,
         "page":           1,
-        "pageSize":       rows,
+        "pageSize":       fetch_rows,
     }
-    if pay_types:
-        # API принимает один метод оплаты
-        payload["paymentMethod"] = pay_types[0]
 
     data = await post_json(WALLET_URL, json=payload, headers=headers)
     logger.info(f"Wallet raw response type={type(data).__name__} keys={list(data.keys()) if isinstance(data, dict) else f'list[{len(data)}]' if isinstance(data, list) else data}")

@@ -457,7 +457,12 @@ async def _ai_overlay(ads: list) -> list:
         r = res.get((a.get("description") or "").strip())
         if not r:
             continue                       # нет описания / AI не классифицировал — regex
-        a["third_party"]  = r["third_party"]
+        # third_party: None = «не знаю». Уверенный вердикт ЛЮБОГО слоя бьёт «не
+        # знаю» другого — поэтому AI-None НЕ затирает явный regex-True/False
+        # (иначе «I don't accept 3rd part» снова стало бы «уточни»).
+        ai_tp = r["third_party"]
+        if ai_tp is not None or a.get("third_party") is None:
+            a["third_party"] = ai_tp
         a["scam_recruit"] = r["scam_recruit"] or a.get("known_scammer", False)
         a["trap"]         = r["trap"]
         a["any_bank"]     = r["any_bank"]

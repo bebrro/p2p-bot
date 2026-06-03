@@ -1132,6 +1132,15 @@ def test_desc_parser_third_party():
                 # «отправляю со своего личного счёта» = первое лицо
                 "Отправляю со своего личного счета"):
         assert p(txt)["third_party"] is False, txt
+    # Мультиязычные явные запреты (TR/EN/ID/VI) — реальные объявления
+    for txt in ("3 kişi ve OZAN ILE CALISMIYORUM",       # TR: не работаю с 3-м лицом
+                "üçüncü şahıslarla çalışmıyorum",         # TR: с третьими не работаю
+                "üçüncü şahıs kabul etmiyorum",           # TR: 3-х не принимаю
+                "I don't accept from 3rd part",           # EN: 3rd part
+                "no third party accepted",                # EN
+                "tidak menerima pihak ketiga",            # ID
+                "không nhận bên thứ ba"):                 # VI
+        assert p(txt)["third_party"] is False, txt
     # «за 3 дня» / «с 3 до 18» / «от 1 000» / «от 1 года» — НЕ про третьих лиц
     for txt in ("за 3 дня отвечу", "работаю с 3 до 18 не ночью",
                 "от 1 000 тенге", "от 1 года на рынке"):
