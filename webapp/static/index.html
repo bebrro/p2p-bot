@@ -526,10 +526,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <span class="header-pair" id="headerPair">Binance · RUB · USDT</span>
   </div>
   <div class="pill-row" id="exRow">
-    <button class="pill active" data-val="binance">🟡 Binance</button>
-    <button class="pill"        data-val="bybit">🟠 Bybit</button>
+    <button class="pill active" data-val="bybit">🟠 Bybit</button>
     <button class="pill"        data-val="okx">🔵 OKX</button>
     <button class="pill"        data-val="wallet">💎 TG Wallet</button>
+    <button class="pill"        data-val="binance">🟡 Binance</button>
   </div>
   <div class="sel-row" id="selRow">
     <button class="sel-btn" id="selFiat"  onclick="openSelector('fiat')"><span id="selFiatTxt">🇷🇺 RUB</span> <span class="sel-caret">▾</span></button>
@@ -987,7 +987,7 @@ let REFRESH_MS = (_cfg.refresh_speed || 10) * 1000;
 /* ══════════════════════════════════════════════════════════
    STATE
 ══════════════════════════════════════════════════════════ */
-const S  = { exchange: _cfg.default_exchange||'binance', fiat: _cfg.default_fiat||'RUB', asset:'USDT', tab:'book', pay:'' };
+const S  = { exchange: _cfg.default_exchange||'bybit', fiat: _cfg.default_fiat||'RUB', asset:'USDT', tab:'book', pay:'' };
 const CM = { fiat:'RUB', asset:'USDT' };
 const WH = { fiat:'RUB', threshold:50000 };
 let   _toolsInited=false, _calcCur='KZT';
@@ -1620,7 +1620,7 @@ function selectPair(asset){
 }
 
 /* ── Trackers ─────────────────────────────────────────────── */
-const TR={exchange:'binance',fiat:'RUB',asset:'USDT'};
+const TR={exchange:'bybit',fiat:'RUB',asset:'USDT'};
 const EX_ICONS={binance:'🟡',bybit:'🟠',okx:'🔵',wallet:'💎'};
 
 async function loadTrackers(){
@@ -1700,7 +1700,7 @@ async function deleteTracker(id){
 }
 
 /* ── Alerts ───────────────────────────────────────────────── */
-const AL={exchange:'binance',fiat:'RUB',asset:'USDT',direction:'above'};
+const AL={exchange:'bybit',fiat:'RUB',asset:'USDT',direction:'above'};
 
 async function loadAlerts(){
   const uid=getUID(),box=document.getElementById('alertsContent');

@@ -50,10 +50,9 @@ STATIC_DIR = Path(__file__).parent / "static"
 # ─── Биржи: единый сбор цен со статусами ──────────────────────────────────────
 
 # id → (имя, иконка, fn_buy(asset,fiat), fn_sell(asset,fiat))
+# Порядок = порядок отображения (сетка бирж на Главной). Bybit первым (лучшая
+# ликвидность), Binance последним (для RUB у него нет P2P-рынка).
 _EX_META = [
-    ("binance", "Binance",   "🟡",
-     lambda a, f: binance_p2p.get_best_price(a, f, "BUY"),
-     lambda a, f: binance_p2p.get_best_price(a, f, "SELL")),
     ("bybit",   "Bybit",     "🟠",
      lambda a, f: bybit_p2p.get_best_price(a, f, "1"),
      lambda a, f: bybit_p2p.get_best_price(a, f, "0")),
@@ -63,6 +62,9 @@ _EX_META = [
     ("wallet",  "TG Wallet", "💎",
      lambda a, f: wallet_p2p.get_best_price(a, f, "buy"),
      lambda a, f: wallet_p2p.get_best_price(a, f, "sell")),
+    ("binance", "Binance",   "🟡",
+     lambda a, f: binance_p2p.get_best_price(a, f, "BUY"),
+     lambda a, f: binance_p2p.get_best_price(a, f, "SELL")),
 ]
 
 
