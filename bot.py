@@ -48,13 +48,42 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
+# Транзиентные сбои БД/сети (Postgres моргнул, коннект не открылся) — не повод
+# будить владельца на каждый чих. Алертим только если повторяется подряд.
+_TRANSIENT_DB = (
+    TimeoutError, asyncio.TimeoutError,
+    ConnectionError, OSError,
+)
+_loop_fails: dict[str, int] = {}      # label -> сколько транзиентных сбоев подряд
+_TRANSIENT_ALERT_AFTER = 3            # алерт только с 3-го подряд
+
+
+def _is_transient(e: Exception) -> bool:
+    if isinstance(e, _TRANSIENT_DB):
+        return True
+    name = type(e).__name__.lower()
+    return "timeout" in name or "connection" in name
+
+
 async def _loop(coro_fn, interval: int, label: str):
-    """Универсальный фоновый цикл с Telegram-алертом при ошибке."""
+    """Универсальный фоновый цикл с Telegram-алертом при ошибке.
+
+    Разовые транзиентные сбои БД/сети не алертятся (логируются), чтобы не
+    спамить владельца — 🚨 уходит только если задача падает 3 раза подряд."""
     while True:
         await asyncio.sleep(interval)
         try:
             await coro_fn()
+            _loop_fails[label] = 0
         except Exception as e:
+            if _is_transient(e):
+                n = _loop_fails.get(label, 0) + 1
+                _loop_fails[label] = n
+                logger.warning(f"background:{label} транзиентный сбой #{n}: {type(e).__name__}")
+                if n < _TRANSIENT_ALERT_AFTER:
+                    continue            # не будим владельца на разовый блип
+            else:
+                _loop_fails[label] = 0
             await report_error(f"background:{label}", e)
 
 

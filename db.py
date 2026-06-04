@@ -22,7 +22,13 @@ async def init() -> None:
     if dsn.startswith("postgres://"):
         dsn = dsn.replace("postgres://", "postgresql://", 1)
     try:
-        _pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        _pool = await asyncpg.create_pool(
+            dsn,
+            min_size=1, max_size=5,
+            timeout=20,                          # ждать коннект из пула макс 20с (не виснуть)
+            command_timeout=30,                  # один запрос не дольше 30с
+            max_inactive_connection_lifetime=180,  # переоткрывать idle-коннекты (облако рвёт их)
+        )
         await _create_tables()
         logger.info("✅ PostgreSQL подключён")
     except Exception as e:
